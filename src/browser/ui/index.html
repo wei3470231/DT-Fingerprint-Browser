@@ -1,0 +1,1618 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <title>Browser Shell</title>
+  <style>
+    /* ===================================================================== */
+    /* 0. 默认兜底基础变量 (默认经典深色) */
+    /* ===================================================================== */
+    :root {
+      --bg-body: #0f172a;
+      --bg-tabbar: #1e293b;
+      --bg-tab: #334155;
+      --bg-tab-hover: #475569;
+      --bg-tab-active: #0f172a;
+      --text-main: #f8fafc;
+      --text-tab: #94a3b8;
+      --text-tab-active: #f8fafc;
+      --border-color: #334155;
+      --bg-address: #1e293b;
+      --bg-address-focus: #0f172a;
+      --text-address: #f8fafc;
+      --btn-hover: #334155;
+      --btn-color: #f8fafc;
+      --accent: #3b82f6;
+      --accent-rgb: 59, 130, 246;
+      --badge-bg: #334155;
+    }
+
+    /* ===================================================================== */
+    /* 1. 经典双色 (深色 · 曜石极夜黑 / 浅色 · 极简象牙白) */
+    /* ===================================================================== */
+    html[data-theme="dark"], html[data-theme="midnight"] {
+      --bg-body: #0f172a;
+      --bg-tabbar: #1e293b;
+      --bg-tab: #334155;
+      --bg-tab-hover: #475569;
+      --bg-tab-active: #0f172a;
+      --text-main: #f8fafc;
+      --text-tab: #94a3b8;
+      --text-tab-active: #f8fafc;
+      --border-color: #334155;
+      --bg-address: #1e293b;
+      --bg-address-focus: #0f172a;
+      --text-address: #f8fafc;
+      --btn-hover: #334155;
+      --btn-color: #f8fafc;
+      --accent: #3b82f6;
+      --accent-rgb: 59, 130, 246;
+      --badge-bg: #334155;
+    }
+
+    html[data-theme="light"] {
+      --bg-body: #f1f5f9;
+      --bg-tabbar: #e2e8f0;
+      --bg-tab: #cbd5e1;
+      --bg-tab-hover: #e2e8f0;
+      --bg-tab-active: #ffffff;
+      --text-main: #0f172a;
+      --text-tab: #475569;
+      --text-tab-active: #0f172a;
+      --border-color: #cbd5e1;
+      --bg-address: #ffffff;
+      --bg-address-focus: #ffffff;
+      --text-address: #0f172a;
+      --btn-hover: #e2e8f0;
+      --btn-color: #0f172a;
+      --accent: #2563eb;
+      --accent-rgb: 37, 99, 235;
+      --badge-bg: #e2e8f0;
+    }
+
+    /* ===================================================================== */
+    /* 2. 7 种舒缓温润浅底色体系 (赤橙黄绿青蓝紫) */
+    /* ===================================================================== */
+    html[data-theme="red"] {
+      --bg-body: #fff1f2;
+      --bg-tabbar: #ffe4e6;
+      --bg-tab: #fecdd3;
+      --bg-tab-hover: #fda4af;
+      --bg-tab-active: #fff1f2;
+      --text-main: #1c0a10;
+      --text-tab: #4c1421;
+      --text-tab-active: #1c0a10;
+      --border-color: #fda4af;
+      --bg-address: #ffffff;
+      --bg-address-focus: #ffffff;
+      --text-address: #1c0a10;
+      --btn-hover: #fecdd3;
+      --btn-color: #4c1421;
+      --accent: #e11d48;
+      --accent-rgb: 225, 29, 72;
+      --badge-bg: #ffe4e6;
+    }
+
+    html[data-theme="orange"] {
+      --bg-body: #fff7ed;
+      --bg-tabbar: #ffedd5;
+      --bg-tab: #fed7aa;
+      --bg-tab-hover: #fdba74;
+      --bg-tab-active: #fff7ed;
+      --text-main: #1c0a02;
+      --text-tab: #431407;
+      --text-tab-active: #1c0a02;
+      --border-color: #fdba74;
+      --bg-address: #ffffff;
+      --bg-address-focus: #ffffff;
+      --text-address: #1c0a02;
+      --btn-hover: #fed7aa;
+      --btn-color: #431407;
+      --accent: #ea580c;
+      --accent-rgb: 234, 88, 12;
+      --badge-bg: #ffedd5;
+    }
+
+    html[data-theme="yellow"] {
+      --bg-body: #fefce8;
+      --bg-tabbar: #fef9c3;
+      --bg-tab: #fef08a;
+      --bg-tab-hover: #fde047;
+      --bg-tab-active: #fefce8;
+      --text-main: #1c1602;
+      --text-tab: #422006;
+      --text-tab-active: #1c1602;
+      --border-color: #fde047;
+      --bg-address: #ffffff;
+      --bg-address-focus: #ffffff;
+      --text-address: #1c1602;
+      --btn-hover: #fef08a;
+      --btn-color: #422006;
+      --accent: #d97706;
+      --accent-rgb: 217, 119, 6;
+      --badge-bg: #fef9c3;
+    }
+
+    html[data-theme="green"] {
+      --bg-body: #f0fdf4;
+      --bg-tabbar: #dcfce7;
+      --bg-tab: #bbf7d0;
+      --bg-tab-hover: #86efac;
+      --bg-tab-active: #f0fdf4;
+      --text-main: #021a0d;
+      --text-tab: #064e3b;
+      --text-tab-active: #021a0d;
+      --border-color: #86efac;
+      --bg-address: #ffffff;
+      --bg-address-focus: #ffffff;
+      --text-address: #021a0d;
+      --btn-hover: #bbf7d0;
+      --btn-color: #064e3b;
+      --accent: #059669;
+      --accent-rgb: 5, 150, 105;
+      --badge-bg: #dcfce7;
+    }
+
+    html[data-theme="cyan"] {
+      --bg-body: #ecfeff;
+      --bg-tabbar: #cffafe;
+      --bg-tab: #a5f3fc;
+      --bg-tab-hover: #67e8f9;
+      --bg-tab-active: #ecfeff;
+      --text-main: #02161b;
+      --text-tab: #164e63;
+      --text-tab-active: #02161b;
+      --border-color: #67e8f9;
+      --bg-address: #ffffff;
+      --bg-address-focus: #ffffff;
+      --text-address: #02161b;
+      --btn-hover: #a5f3fc;
+      --btn-color: #164e63;
+      --accent: #0891b2;
+      --accent-rgb: 8, 145, 178;
+      --badge-bg: #cffafe;
+    }
+
+    html[data-theme="blue"] {
+      --bg-body: #eff6ff;
+      --bg-tabbar: #dbeafe;
+      --bg-tab: #bfdbfe;
+      --bg-tab-hover: #93c5fd;
+      --bg-tab-active: #eff6ff;
+      --text-main: #031024;
+      --text-tab: #1e3a8a;
+      --text-tab-active: #031024;
+      --border-color: #93c5fd;
+      --bg-address: #ffffff;
+      --bg-address-focus: #ffffff;
+      --text-address: #031024;
+      --btn-hover: #bfdbfe;
+      --btn-color: #1e3a8a;
+      --accent: #2563eb;
+      --accent-rgb: 37, 99, 235;
+      --badge-bg: #dbeafe;
+    }
+
+    html[data-theme="purple"] {
+      --bg-body: #faf5ff;
+      --bg-tabbar: #f3e8ff;
+      --bg-tab: #e9d5ff;
+      --bg-tab-hover: #d8b4fe;
+      --bg-tab-active: #faf5ff;
+      --text-main: #160424;
+      --text-tab: #3b0764;
+      --text-tab-active: #160424;
+      --border-color: #d8b4fe;
+      --bg-address: #ffffff;
+      --bg-address-focus: #ffffff;
+      --text-address: #160424;
+      --btn-hover: #e9d5ff;
+      --btn-color: #3b0764;
+      --accent: #9333ea;
+      --accent-rgb: 147, 51, 234;
+      --badge-bg: #f3e8ff;
+    }
+
+    /* ===================================================================== */
+    /* 3. 7 种醇厚深沉深彩体系 (赤橙黄绿青蓝紫) */
+    /* ===================================================================== */
+    html[data-theme="red-dark"] {
+      --bg-body: #2e0c15;
+      --bg-tabbar: #23080f;
+      --bg-tab: #3d101c;
+      --bg-tab-hover: #541728;
+      --bg-tab-active: #2e0c15;
+      --text-main: #ffffff;
+      --text-tab: #fda4af;
+      --text-tab-active: #ffffff;
+      --border-color: #691d33;
+      --bg-address: #3d101c;
+      --bg-address-focus: #20070e;
+      --text-address: #ffffff;
+      --btn-hover: #541728;
+      --btn-color: #ffffff;
+      --accent: #fb7185;
+      --accent-rgb: 251, 113, 133;
+      --badge-bg: #4f1626;
+    }
+
+    html[data-theme="orange-dark"] {
+      --bg-body: #2d1405;
+      --bg-tabbar: #200d02;
+      --bg-tab: #3d1b07;
+      --bg-tab-hover: #59280d;
+      --bg-tab-active: #2d1405;
+      --text-main: #ffffff;
+      --text-tab: #fdba74;
+      --text-tab-active: #ffffff;
+      --border-color: #6e320f;
+      --bg-address: #3d1b07;
+      --bg-address-focus: #200e03;
+      --text-address: #ffffff;
+      --btn-hover: #59280d;
+      --btn-color: #ffffff;
+      --accent: #fb923c;
+      --accent-rgb: 251, 146, 60;
+      --badge-bg: #4d230b;
+    }
+
+    html[data-theme="yellow-dark"] {
+      --bg-body: #292004;
+      --bg-tabbar: #1e1702;
+      --bg-tab: #382c06;
+      --bg-tab-hover: #4f3f0a;
+      --bg-tab-active: #292004;
+      --text-main: #ffffff;
+      --text-tab: #fde047;
+      --text-tab-active: #ffffff;
+      --border-color: #634f0d;
+      --bg-address: #382c06;
+      --bg-address-focus: #1d1602;
+      --text-address: #ffffff;
+      --btn-hover: #4f3f0a;
+      --btn-color: #ffffff;
+      --accent: #facc15;
+      --accent-rgb: 250, 204, 21;
+      --badge-bg: #453708;
+    }
+
+    html[data-theme="green-dark"] {
+      --bg-body: #0b2416;
+      --bg-tabbar: #06180e;
+      --bg-tab: #103320;
+      --bg-tab-hover: #1b5233;
+      --bg-tab-active: #0b2416;
+      --text-main: #ffffff;
+      --text-tab: #86efac;
+      --text-tab-active: #ffffff;
+      --border-color: #236942;
+      --bg-address: #103320;
+      --bg-address-focus: #07190f;
+      --text-address: #ffffff;
+      --btn-hover: #1b5233;
+      --btn-color: #ffffff;
+      --accent: #34d399;
+      --accent-rgb: 52, 211, 153;
+      --badge-bg: #17452b;
+    }
+
+    html[data-theme="cyan-dark"], html[data-theme="slate"] {
+      --bg-body: #082329;
+      --bg-tabbar: #04171c;
+      --bg-tab: #0d343d;
+      --bg-tab-hover: #175464;
+      --bg-tab-active: #082329;
+      --text-main: #ffffff;
+      --text-tab: #67e8f9;
+      --text-tab-active: #ffffff;
+      --border-color: #1f6d80;
+      --bg-address: #0d343d;
+      --bg-address-focus: #05181c;
+      --text-address: #ffffff;
+      --btn-hover: #175464;
+      --btn-color: #ffffff;
+      --accent: #22d3ee;
+      --accent-rgb: 34, 211, 238;
+      --badge-bg: #134653;
+    }
+
+    html[data-theme="blue-dark"] {
+      --bg-body: #0f1e3d;
+      --bg-tabbar: #0a1429;
+      --bg-tab: #152952;
+      --bg-tab-hover: #214182;
+      --bg-tab-active: #0f1e3d;
+      --text-main: #ffffff;
+      --text-tab: #93c5fd;
+      --text-tab-active: #ffffff;
+      --border-color: #284e9b;
+      --bg-address: #152952;
+      --bg-address-focus: #0a1429;
+      --text-address: #ffffff;
+      --btn-hover: #214182;
+      --btn-color: #ffffff;
+      --accent: #60a5fa;
+      --accent-rgb: 96, 165, 250;
+      --badge-bg: #1b356a;
+    }
+
+    html[data-theme="purple-dark"] {
+      --bg-body: #220d33;
+      --bg-tabbar: #160822;
+      --bg-tab: #2f1246;
+      --bg-tab-hover: #4b1e70;
+      --bg-tab-active: #220d33;
+      --text-main: #ffffff;
+      --text-tab: #d8b4fe;
+      --text-tab-active: #ffffff;
+      --border-color: #592484;
+      --bg-address: #2f1246;
+      --bg-address-focus: #160822;
+      --text-address: #ffffff;
+      --btn-hover: #4b1e70;
+      --btn-color: #ffffff;
+      --accent: #c084fc;
+      --accent-rgb: 192, 132, 252;
+      --badge-bg: #3d185b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: var(--bg-body);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      height: 106px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--border-color);
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    /* Tab Bar */
+    .tab-bar {
+      height: 38px;
+      background: var(--bg-tabbar);
+      display: flex;
+      align-items: flex-end;
+      padding: 0 0 0 8px;
+      gap: 4px;
+      -webkit-app-region: drag;
+    }
+    /* Window Controls (Frameless Integrated Titlebar) */
+    .window-controls {
+      display: flex;
+      align-items: center;
+      height: 100%;
+      margin-left: auto;
+      align-self: stretch;
+      -webkit-app-region: no-drag;
+    }
+    .win-btn {
+      width: 46px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-tab);
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+      padding: 0;
+    }
+    .win-btn:hover {
+      background: var(--bg-tab-hover);
+      color: var(--text-main);
+    }
+    .win-btn.win-close:hover {
+      background: #e81123 !important;
+      color: #ffffff !important;
+    }
+    .win-btn.win-close:active {
+      background: #bf101f !important;
+      color: #ffffff !important;
+    }
+    .tabs-container {
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      flex: 1;
+      scrollbar-width: none;
+    }
+    .tabs-container::-webkit-scrollbar { display: none; }
+    .tab {
+      height: 32px;
+      padding: 0 10px;
+      background: var(--bg-tab);
+      border-radius: 6px 6px 0 0;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--text-tab);
+      cursor: pointer;
+      max-width: 190px;
+      min-width: 110px;
+      position: relative;
+      -webkit-app-region: no-drag;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tab:hover { background: var(--bg-tab-hover); }
+    .tab.active { background: var(--bg-tab-active); color: var(--text-tab-active); font-weight: 500; }
+
+    /* 动态加载旋转指示器 (Spinner) */
+    .tab-icon {
+      width: 14px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .tab-spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(var(--accent-rgb), 0.25);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: tab-spin 0.75s linear infinite;
+    }
+    @keyframes tab-spin {
+      to { transform: rotate(360deg); }
+    }
+    .tab-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+      opacity: 0.7;
+    }
+
+    .tab .title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .tab .close-btn {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: var(--text-tab);
+    }
+    .tab .close-btn:hover { background: rgba(148, 163, 184, 0.25); color: #fff; }
+    .new-tab-btn {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      color: var(--text-tab);
+      cursor: pointer;
+      border-radius: 4px;
+      margin-bottom: 2px;
+      -webkit-app-region: no-drag;
+    }
+    .new-tab-btn:hover { background: var(--bg-tab-hover); color: var(--text-main); }
+
+    /* Window metadata tags */
+    .env-tag {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--badge-bg);
+      color: var(--accent);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 4px;
+      border: 1px solid var(--border-color);
+      -webkit-app-region: no-drag;
+    }
+
+    /* Toolbar */
+    .toolbar {
+      height: 38px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 8px;
+      background: var(--bg-body);
+    }
+    .nav-btn {
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--btn-color);
+      background: transparent;
+      border: none;
+      outline: none;
+      transition: all 0.15s;
+    }
+    .nav-btn:hover:not(:disabled) { background: var(--btn-hover); color: var(--text-main); }
+    .nav-btn:disabled { opacity: 0.35; cursor: default; }
+
+    /* 刷新按钮加载态旋转动画 */
+    .nav-btn.loading-spin {
+      color: #ef4444;
+      font-weight: bold;
+    }
+
+    .address-bar-box {
+      flex: 1;
+      height: 28px;
+      background: var(--bg-address);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 6px;
+      border: 1px solid var(--border-color);
+      position: relative;
+      overflow: hidden;
+      transition: border 0.15s, background 0.15s;
+    }
+    .address-bar-box:focus-within {
+      border-color: var(--accent);
+      background: var(--bg-address-focus);
+    }
+    .address-bar {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-address);
+      font-size: 13px;
+    }
+
+    /* 页面加载进度条 (动态流动) */
+    .address-loading-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 2.5px;
+      background: linear-gradient(90deg, #3b82f6, #10b981, #8b5cf6);
+      width: 100%;
+      border-radius: 0 0 14px 14px;
+      display: none;
+      animation: progress-flow 1.4s infinite ease-in-out;
+    }
+    @keyframes progress-flow {
+      0% { transform: translateX(-100%); }
+      50% { transform: translateX(0); }
+      100% { transform: translateX(100%); }
+    }
+
+    /* Badges */
+    .badges {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: var(--badge-bg);
+      color: var(--text-tab);
+      border: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .badge.green { color: #10b981; border-color: rgba(16, 185, 129, 0.25); }
+    .badge.purple { color: #ec4899; border-color: rgba(236, 72, 153, 0.25); }
+    .badge.blue { color: var(--accent); border-color: rgba(var(--accent-rgb), 0.25); }
+    .badge.orange { color: #f59e0b; border-color: rgba(245, 158, 11, 0.25); }
+
+    /* 皮肤切换下拉框 */
+    .theme-select {
+      height: 24px;
+      background: var(--badge-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-tab);
+      border-radius: 4px;
+      font-size: 11px;
+      padding: 0 4px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* ===================================================================== */
+    /* 4. 收藏夹书签栏与星标按钮 */
+    /* ===================================================================== */
+    .bookmark-star-btn {
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      border: none;
+      background: transparent;
+      color: var(--text-tab);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      transition: transform 0.15s, color 0.15s, background 0.12s;
+      flex-shrink: 0;
+      outline: none;
+      user-select: none;
+    }
+    .bookmark-star-btn:hover {
+      background: var(--btn-hover);
+      color: #f59e0b;
+      transform: scale(1.12);
+    }
+    .bookmark-star-btn.bookmarked {
+      color: #f59e0b;
+      text-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+    }
+
+    .bookmarks-bar {
+      height: 30px;
+      min-height: 30px;
+      max-height: 30px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 4px;
+      background: var(--bg-body);
+      border-bottom: 1px solid var(--border-color);
+      position: relative;
+      -webkit-app-region: no-drag;
+      box-sizing: border-box;
+      overflow: hidden;
+      z-index: 10;
+    }
+    .bookmarks-list {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      flex: 1;
+      height: 100%;
+      scrollbar-width: none;
+    }
+    .bookmarks-list::-webkit-scrollbar { display: none; }
+    .bookmark-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      color: var(--text-main);
+      background: transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      max-width: 170px;
+      user-select: none;
+      transition: background 0.12s, color 0.12s, transform 0.08s;
+      flex-shrink: 0;
+    }
+    .bookmark-item:hover {
+      background: var(--btn-hover);
+      color: var(--text-main);
+    }
+    .bookmark-item:active {
+      background: var(--bg-tab);
+      transform: scale(0.98);
+    }
+    .bm-favicon {
+      width: 13px;
+      height: 13px;
+      border-radius: 2px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    .bm-icon {
+      width: 13px;
+      height: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-tab);
+      flex-shrink: 0;
+    }
+    .bm-icon svg {
+      width: 12px;
+      height: 12px;
+    }
+    .bm-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .bookmark-empty-hint {
+      font-size: 11px;
+      color: var(--text-tab);
+      opacity: 0.75;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .bookmark-add-btn {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      border: none;
+      background: transparent;
+      color: var(--text-tab);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      transition: background 0.12s, color 0.12s;
+      flex-shrink: 0;
+      margin-left: 2px;
+      outline: none;
+    }
+    .bookmark-add-btn:hover {
+      background: var(--btn-hover);
+      color: var(--text-main);
+    }
+
+    .bm-icon-wrap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    /* 内嵌式书签快速编辑/添加栏 (紧凑适应 30px 收藏栏，绝无视图遮挡裁切) */
+    .bookmark-inline-editor {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      left: 0;
+      top: 0;
+      padding: 0 8px;
+      background: var(--bg-body);
+      z-index: 20;
+      box-sizing: border-box;
+      animation: editorFadeIn 0.12s ease-out;
+    }
+    @keyframes editorFadeIn {
+      from { opacity: 0; transform: translateY(-2px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .editor-badge {
+      font-size: 11px;
+      font-weight: 600;
+      color: #f59e0b;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex-shrink: 0;
+    }
+    .editor-input {
+      height: 22px;
+      background: var(--bg-address);
+      border: 1px solid var(--border-color);
+      color: var(--text-address);
+      border-radius: 4px;
+      padding: 0 7px;
+      font-size: 11.5px;
+      outline: none;
+      transition: border-color 0.12s, box-shadow 0.12s;
+    }
+    .editor-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.35);
+      background: var(--bg-address-focus);
+    }
+    .editor-input.editor-name {
+      width: 180px;
+      max-width: 25%;
+    }
+    .editor-input.editor-url {
+      flex: 1;
+      min-width: 140px;
+    }
+    .editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .editor-btn {
+      height: 22px;
+      padding: 0 9px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      border: 1px solid var(--border-color);
+      background: var(--badge-bg);
+      color: var(--text-tab);
+      cursor: pointer;
+      outline: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      transition: all 0.12s;
+    }
+    .editor-btn:hover {
+      background: var(--btn-hover);
+      color: var(--text-main);
+    }
+    .editor-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .editor-btn.primary:hover {
+      filter: brightness(1.1);
+    }
+    .editor-btn.danger {
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.08);
+    }
+    .editor-btn.danger:hover {
+      background: #ef4444;
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <!-- Tab Bar -->
+  <div class="tab-bar" id="tabBar">
+    <div class="env-tag" id="envBadge"></div>
+    <div class="tabs-container" id="tabsList">
+      <!-- Tabs injected by JS -->
+    </div>
+    <div class="new-tab-btn" id="newTabBtn" title="新建标签页 (Ctrl+T)">+</div>
+
+    <!-- 窗口控制区 (无边框一体化控制按钮) -->
+    <div class="window-controls">
+      <button class="win-btn win-min" id="winMinBtn" title="最小化">
+        <svg width="11" height="1" viewBox="0 0 11 1"><rect width="11" height="1" fill="currentColor"/></svg>
+      </button>
+      <button class="win-btn win-max" id="winMaxBtn" title="最大化">
+        <svg id="maxIcon" width="11" height="11" viewBox="0 0 11 11"><rect width="9" height="9" x="1" y="1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+      <button class="win-btn win-close" id="winCloseBtn" title="关闭窗口">
+        <svg width="11" height="11" viewBox="0 0 11 11"><path d="M1.5 1.5L9.5 9.5M9.5 1.5L1.5 9.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button class="nav-btn" id="backBtn" title="后退"></button>
+    <button class="nav-btn" id="forwardBtn" title="前进"></button>
+    <button class="nav-btn" id="reloadBtn" title="刷新 (F5)"></button>
+
+    <div class="address-bar-box">
+      <span id="addressLockIcon" style="display: inline-flex; align-items: center; opacity: 0.6;"></span>
+      <input type="text" class="address-bar" id="addressInput" placeholder="输入网址并回车跳转...">
+      <button class="bookmark-star-btn" id="bookmarkStarBtn" title="收藏当前网页 (Ctrl+D)"></button>
+      <div class="address-loading-bar" id="addressLoadingBar"></div>
+    </div>
+
+    <!-- Right Side Badges -->
+    <div class="badges">
+      <button class="nav-btn" id="extensionsBtn" title="查看已加载插件及配置页面" style="width: auto; padding: 0 8px; gap: 4px; font-size: 12px; background: var(--badge-bg); border: 1px solid var(--border-color);">
+        <span id="extBtnLabel" style="display: inline-flex; align-items: center; gap: 4px;"></span><span id="extBadgeCount" style="color: var(--accent); font-weight: bold;">0</span>
+      </button>
+
+      <!-- 皮肤切换 (深浅双色 + 赤橙黄绿青蓝紫) -->
+      <select class="theme-select" id="themeSelect" title="切换浏览器皮肤外观 (深浅双色 + 赤橙黄绿青蓝紫)">
+        <optgroup label="经典双色 (深色 / 浅色)">
+          <option value="dark">● 经典深色 · 曜石极夜</option>
+          <option value="light">● 极简浅色 · 象牙素雅</option>
+        </optgroup>
+        <optgroup label="舒缓柔和彩色 (赤橙黄绿青蓝紫)">
+          <option value="red">● 赤 · 绯霞柔粉</option>
+          <option value="orange">● 橙 · 暖阳杏橙</option>
+          <option value="yellow">● 黄 · 暖玉麦金</option>
+          <option value="green">● 绿 · 翠竹松影</option>
+          <option value="cyan">● 青 · 碧水青瓷</option>
+          <option value="blue">● 蓝 · 极光霁蓝</option>
+          <option value="purple">● 紫 · 幽夜紫罗</option>
+        </optgroup>
+        <optgroup label="醇厚深沉深彩 (赤橙黄绿青蓝紫)">
+          <option value="red-dark">● 赤 · 沉稳红木 (深)</option>
+          <option value="orange-dark">● 橙 · 焦糖琥珀 (深)</option>
+          <option value="yellow-dark">● 黄 · 曜石麦金 (深)</option>
+          <option value="green-dark">● 绿 · 深林松柏 (深)</option>
+          <option value="cyan-dark">● 青 · 黛色青瓷 (深)</option>
+          <option value="blue-dark">● 蓝 · 深海群青 (深)</option>
+          <option value="purple-dark">● 紫 · 幽夜紫晶 (深)</option>
+        </optgroup>
+      </select>
+
+      <div class="badge green" id="portBadge" title="远程调试端口">CDP: -</div>
+      <div class="badge purple" id="hwBadge" title="硬件指纹概况">HW: -</div>
+      <div class="badge blue" id="proxyBadge" title="代理信息">代理: 直连</div>
+      <button class="nav-btn" id="devtoolsBtn" title="开发者工具 (F12)"></button>
+    </div>
+  </div>
+
+  <!-- Bookmarks Bar (横着的收藏夹) -->
+  <div class="bookmarks-bar" id="bookmarksBar">
+    <div class="bookmarks-list" id="bookmarksList">
+      <!-- 书签列表项由 JS 注入 -->
+    </div>
+    <button class="bookmark-add-btn" id="bookmarkAddBtn" title="添加新书签"></button>
+
+    <!-- 内嵌式书签编辑/添加条 (完全自适应收藏夹栏 30px 高度，绝无视图遮挡裁切) -->
+    <div class="bookmark-inline-editor" id="bookmarkInlineEditor" style="display: none;">
+      <span class="editor-badge" id="editorBadgeText"></span>
+      <input type="text" id="editorNameInput" class="editor-input editor-name" placeholder="书签名称">
+      <input type="text" id="editorUrlInput" class="editor-input editor-url" placeholder="https://...">
+      <div class="editor-actions">
+        <button class="editor-btn primary" id="editorSaveBtn" title="保存书签 (Enter)"></button>
+        <button class="editor-btn danger" id="editorDeleteBtn" title="移除书签"></button>
+        <button class="editor-btn" id="editorCancelBtn" title="取消 (Esc)"></button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    const { getIconSvg } = require('../../shared/icon-loader');
+
+    function icon(name, opts = {}) {
+      return getIconSvg(name, opts);
+    }
+
+    const tabsList = document.getElementById('tabsList');
+    const newTabBtn = document.getElementById('newTabBtn');
+    const backBtn = document.getElementById('backBtn');
+    const forwardBtn = document.getElementById('forwardBtn');
+    const reloadBtn = document.getElementById('reloadBtn');
+    const addressInput = document.getElementById('addressInput');
+    const addressLoadingBar = document.getElementById('addressLoadingBar');
+    const devtoolsBtn = document.getElementById('devtoolsBtn');
+    const extensionsBtn = document.getElementById('extensionsBtn');
+    const extBtnLabel = document.getElementById('extBtnLabel');
+    const extBadgeCount = document.getElementById('extBadgeCount');
+    const envBadge = document.getElementById('envBadge');
+    const portBadge = document.getElementById('portBadge');
+    const hwBadge = document.getElementById('hwBadge');
+    const proxyBadge = document.getElementById('proxyBadge');
+    const themeSelect = document.getElementById('themeSelect');
+    const winMinBtn = document.getElementById('winMinBtn');
+    const winMaxBtn = document.getElementById('winMaxBtn');
+    const winCloseBtn = document.getElementById('winCloseBtn');
+    const maxIcon = document.getElementById('maxIcon');
+    const tabBar = document.getElementById('tabBar');
+    const bookmarkStarBtn = document.getElementById('bookmarkStarBtn');
+    const bookmarksBar = document.getElementById('bookmarksBar');
+    const bookmarksList = document.getElementById('bookmarksList');
+    const bookmarkAddBtn = document.getElementById('bookmarkAddBtn');
+    const bookmarkInlineEditor = document.getElementById('bookmarkInlineEditor');
+    const editorBadgeText = document.getElementById('editorBadgeText');
+    const editorNameInput = document.getElementById('editorNameInput');
+    const editorUrlInput = document.getElementById('editorUrlInput');
+    const editorSaveBtn = document.getElementById('editorSaveBtn');
+    const editorDeleteBtn = document.getElementById('editorDeleteBtn');
+    const editorCancelBtn = document.getElementById('editorCancelBtn');
+
+    // 预加载并初始化矢量图标
+    if (extBtnLabel) extBtnLabel.innerHTML = `${icon('puzzle', { size: 14 })} 插件`;
+    if (newTabBtn) newTabBtn.innerHTML = icon('plus', { size: 14 });
+    if (bookmarkAddBtn) bookmarkAddBtn.innerHTML = icon('plus', { size: 12 });
+    if (devtoolsBtn) devtoolsBtn.innerHTML = icon('settings', { size: 14 });
+    if (bookmarkStarBtn) bookmarkStarBtn.innerHTML = icon('star', { size: 14 });
+    if (backBtn) backBtn.innerHTML = icon('arrow-left', { size: 14 });
+    if (forwardBtn) forwardBtn.innerHTML = icon('arrow-right', { size: 14 });
+    if (reloadBtn) reloadBtn.innerHTML = icon('refresh', { size: 14 });
+    const addressLockIcon = document.getElementById('addressLockIcon');
+    if (addressLockIcon) addressLockIcon.innerHTML = icon('lock', { size: 12 });
+    if (editorSaveBtn) editorSaveBtn.innerHTML = `${icon('check', { size: 12 })} 完成`;
+    if (editorCancelBtn) editorCancelBtn.innerHTML = icon('x', { size: 12 });
+
+    let currentTabs = [];
+    let currentActiveId = null;
+    let lastActiveId = null;
+    let isCurrentActiveLoading = false;
+    let isUserEditingAddress = false;
+    let pendingNavUrl = null;
+    let currentBookmarks = [];
+    let editingBookmarkId = null;
+
+    // 主题皮肤持久化与切换 (深浅双色 + 赤橙黄绿青蓝紫)
+    const ALL_THEME_KEYS = [
+      'dark', 'light',
+      'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple',
+      'red-dark', 'orange-dark', 'yellow-dark', 'green-dark', 'cyan-dark', 'blue-dark', 'purple-dark'
+    ];
+
+    function normalizeThemeName(th) {
+      if (!th) return 'dark';
+      if (th === 'midnight') return 'dark';
+      if (th === 'slate') return 'cyan-dark';
+      if (ALL_THEME_KEYS.includes(th)) return th;
+      return 'dark';
+    }
+
+    let savedTheme = normalizeThemeName(localStorage.getItem('dt_browser_theme'));
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    themeSelect.value = savedTheme;
+
+    themeSelect.addEventListener('change', () => {
+      const selected = themeSelect.value;
+      document.documentElement.setAttribute('data-theme', selected);
+      localStorage.setItem('dt_browser_theme', selected);
+    });
+
+    // 窗口控制事件 (最小化、最大化/还原、关闭、双击顶栏)
+    winMinBtn.addEventListener('click', () => ipcRenderer.send('action-window-minimize'));
+    winMaxBtn.addEventListener('click', () => ipcRenderer.send('action-window-maximize'));
+    winCloseBtn.addEventListener('click', () => ipcRenderer.send('action-window-close'));
+
+    tabBar.addEventListener('dblclick', (e) => {
+      if (e.target.closest('.tab') || e.target.closest('.win-btn') || e.target.closest('.new-tab-btn') || e.target.closest('.env-tag')) {
+        return;
+      }
+      ipcRenderer.send('action-window-maximize');
+    });
+
+    newTabBtn.addEventListener('click', () => {
+      isUserEditingAddress = false;
+      pendingNavUrl = null;
+      ipcRenderer.send('action-new-tab');
+    });
+    backBtn.addEventListener('click', () => {
+      isUserEditingAddress = false;
+      pendingNavUrl = null;
+      ipcRenderer.send('action-nav-back');
+    });
+    forwardBtn.addEventListener('click', () => {
+      isUserEditingAddress = false;
+      pendingNavUrl = null;
+      ipcRenderer.send('action-nav-forward');
+    });
+    
+    // 刷新/停止按钮智能双态
+    reloadBtn.addEventListener('click', () => {
+      if (isCurrentActiveLoading) {
+        ipcRenderer.send('action-nav-stop');
+      } else {
+        isUserEditingAddress = false;
+        pendingNavUrl = null;
+        ipcRenderer.send('action-nav-reload');
+      }
+    });
+
+    devtoolsBtn.addEventListener('click', () => ipcRenderer.send('action-toggle-devtools'));
+    extensionsBtn.addEventListener('click', () => ipcRenderer.send('action-show-extensions-menu'));
+
+    // 地址栏焦点与输入保护：防止加载中或突发刷新时覆盖用户正在输入的地址
+    addressInput.addEventListener('focus', () => {
+      isUserEditingAddress = true;
+      addressInput.select();
+    });
+
+    addressInput.addEventListener('input', () => {
+      isUserEditingAddress = true;
+    });
+
+    addressInput.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (document.activeElement !== addressInput) {
+          isUserEditingAddress = false;
+          // 若没有正在发起的导航未完成，且未按 Enter 提交，则恢复当前标签页的真实网址
+          const currentTab = currentTabs.find(t => t.id === currentActiveId);
+          if (currentTab) {
+            const displayUrl = pendingNavUrl || currentTab.url;
+            addressInput.value = displayUrl === 'about:blank' ? '' : displayUrl;
+          }
+        }
+      }, 150);
+    });
+
+    addressInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        // 用户按 Esc 取消编辑，恢复当前活跃标签页的地址
+        isUserEditingAddress = false;
+        pendingNavUrl = null;
+        const currentTab = currentTabs.find(t => t.id === currentActiveId);
+        if (currentTab) {
+          addressInput.value = currentTab.url === 'about:blank' ? '' : currentTab.url;
+        }
+        addressInput.blur();
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        let url = addressInput.value.trim();
+        if (url) {
+          if (url === 'dt://fingerprint-test' || url === 'dt://test' || url === 'about:fingerprint') {
+            // keep internal dt URL
+          } else if (!/^(https?|about|chrome-extension|file|dt):\/\//i.test(url)) {
+            url = 'https://' + url;
+          }
+          isUserEditingAddress = false;
+          pendingNavUrl = url;
+          addressInput.value = url;
+          addressInput.blur();
+          ipcRenderer.send('action-navigate', url);
+        }
+      }
+    });
+
+    function urlsMatch(u1, u2) {
+      if (!u1 || !u2) return false;
+      if (u1 === u2) return true;
+      if ((u1 === 'dt://fingerprint-test' || u1.includes('testing/index.html')) &&
+          (u2 === 'dt://fingerprint-test' || u2.includes('testing/index.html'))) {
+        return true;
+      }
+      const clean = s => s.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '').toLowerCase();
+      return clean(u1) === clean(u2);
+    }
+
+    // 动态加载并应用与管理器统一的字体 (支持本地 Fonts/ 目录字体)
+    function applyCustomFont(fontInfo) {
+      let styleEl = document.getElementById('dt-custom-font-style');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'dt-custom-font-style';
+        document.head.appendChild(styleEl);
+      }
+
+      if (!fontInfo || !fontInfo.filePath || fontInfo.id === 'system-default') {
+        styleEl.textContent = `
+          body, button, input, select, textarea {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Microsoft YaHei", "PingFang SC", sans-serif !important;
+          }
+        `;
+        return;
+      }
+
+      const safeUrl = 'file:///' + fontInfo.filePath.replace(/\\/g, '/');
+      styleEl.textContent = `
+        @font-face {
+          font-family: 'DT-Custom-Font';
+          src: url('${safeUrl}') format('${fontInfo.format || 'truetype'}');
+          font-display: swap;
+        }
+        body, button, input, select, textarea, .tab, .address-bar, .badge, .nav-btn, .theme-select {
+          font-family: 'DT-Custom-Font', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Microsoft YaHei", sans-serif !important;
+        }
+      `;
+    }
+
+    try {
+      const store = require('../../manager/store');
+      applyCustomFont(store.getActiveFontInfo());
+    } catch (_) {}
+
+    // 接收状态推送
+    ipcRenderer.on('update-state', (event, data) => {
+      const { env, tabs, activeId, port, extensions, defaultTheme, fontInfo, bookmarks } = data;
+      currentTabs = tabs;
+      currentActiveId = activeId;
+
+      if (Array.isArray(bookmarks)) {
+        currentBookmarks = bookmarks;
+        renderBookmarks();
+      }
+
+      if (fontInfo) {
+        applyCustomFont(fontInfo);
+      }
+
+      // 若未手动偏好锁定且主进程传递了默认主题，则跟随默认主题
+      if (defaultTheme && !localStorage.getItem('dt_browser_theme')) {
+        const norm = normalizeThemeName(defaultTheme);
+        document.documentElement.setAttribute('data-theme', norm);
+        themeSelect.value = norm;
+      }
+
+      // 顶部信息
+      envBadge.innerHTML = `${icon('bolt', { size: 12, color: '#38bdf8' })} ${env.name}`;
+      portBadge.textContent = port ? `CDP: ${port}` : 'CDP: 关闭';
+      
+      const extCount = (extensions && extensions.length) || 0;
+      extBadgeCount.textContent = extCount;
+      if (extCount > 0) {
+        extensionsBtn.style.borderColor = 'var(--accent)';
+        extensionsBtn.title = `已加载 ${extCount} 个扩展插件 (点击查看并打开设置)`;
+      } else {
+        extensionsBtn.style.borderColor = 'var(--border-color)';
+        extensionsBtn.title = '未加载扩展插件';
+      }
+      
+      if (env.fp) {
+        const cores = env.fp.navigator?.hardwareConcurrency || '?';
+        const mem = env.fp.navigator?.deviceMemory || '?';
+        const lang = env.language || 'en-US';
+        const tz = env.timezone || env.fp?.timezone || 'America/New_York';
+        hwBadge.textContent = `${cores}C/${mem}G · ${tz} · ${lang}`;
+        hwBadge.title = `硬件与环境指纹: ${cores}核心 / ${mem}GB | 时区: ${tz} | 语言: ${lang}`;
+      }
+
+      if (env.proxy && env.proxy.enabled && env.proxy.host) {
+        proxyBadge.textContent = `${env.proxy.type.toUpperCase()}: ${env.proxy.host}:${env.proxy.port}`;
+        proxyBadge.className = 'badge orange';
+      } else {
+        proxyBadge.textContent = '直连';
+        proxyBadge.className = 'badge blue';
+      }
+
+      // 渲染标签与动态加载状态
+      tabsList.innerHTML = '';
+      tabs.forEach(tab => {
+        const tabEl = document.createElement('div');
+        tabEl.className = 'tab' + (tab.id === activeId ? ' active' : '');
+
+        // 加载中视觉指示器 (转圈 Spinner / 完成小圆点)
+        const iconContainer = document.createElement('div');
+        iconContainer.className = 'tab-icon';
+        if (tab.isLoading) {
+          const spinner = document.createElement('div');
+          spinner.className = 'tab-spinner';
+          spinner.title = '页面正在加载中...';
+          iconContainer.appendChild(spinner);
+        } else {
+          const dot = document.createElement('div');
+          dot.className = 'tab-dot';
+          dot.title = '页面已就绪';
+          iconContainer.appendChild(dot);
+        }
+        tabEl.appendChild(iconContainer);
+        
+        const titleEl = document.createElement('span');
+        titleEl.className = 'title';
+        titleEl.textContent = tab.title || (tab.isLoading ? '加载中...' : '新标签页');
+        titleEl.title = tab.url || '';
+
+        const closeBtn = document.createElement('div');
+        closeBtn.className = 'close-btn';
+        closeBtn.innerHTML = icon('x', { size: 10 });
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          ipcRenderer.send('action-close-tab', tab.id);
+        });
+
+        tabEl.appendChild(titleEl);
+        tabEl.appendChild(closeBtn);
+        tabEl.addEventListener('click', () => {
+          ipcRenderer.send('action-switch-tab', tab.id);
+        });
+
+        tabsList.appendChild(tabEl);
+      });
+
+      // 更新地址栏、导航按钮与主加载条状态
+      const activeTab = tabs.find(t => t.id === activeId);
+      if (activeTab) {
+        const isInputFocused = (document.activeElement === addressInput);
+        const tabChanged = (lastActiveId !== activeId);
+        lastActiveId = activeId;
+
+        // 如果用户切换了标签页，强制同步新标签页地址并重置编辑状态
+        if (tabChanged) {
+          isUserEditingAddress = false;
+          pendingNavUrl = null;
+          addressInput.value = activeTab.url === 'about:blank' ? '' : activeTab.url;
+        } else if (!isUserEditingAddress && !isInputFocused) {
+          // 仅在用户未处于输入/编辑地址状态时更新地址栏，防止加载中或突发刷新时覆盖用户输入
+          if (pendingNavUrl) {
+            // 如果主进程的有效 URL 或 pendingUrl 已经包含了此导航，或者当前地址已匹配目标，才解除本地 pendingNavUrl
+            if (activeTab.pendingUrl === pendingNavUrl || urlsMatch(activeTab.url, pendingNavUrl)) {
+              pendingNavUrl = null;
+              addressInput.value = activeTab.url === 'about:blank' ? '' : activeTab.url;
+            } else {
+              // 关键修复：绝不回退到旧网址！保持显示用户刚提交的待加载地址
+              addressInput.value = pendingNavUrl;
+            }
+          } else {
+            addressInput.value = activeTab.url === 'about:blank' ? '' : activeTab.url;
+          }
+        }
+
+        backBtn.disabled = !activeTab.canGoBack;
+        forwardBtn.disabled = !activeTab.canGoForward;
+        
+        isCurrentActiveLoading = Boolean(activeTab.isLoading);
+        if (isCurrentActiveLoading) {
+          reloadBtn.innerHTML = icon('x', { size: 14 });
+          reloadBtn.title = '停止加载 (Esc)';
+          reloadBtn.classList.add('loading-spin');
+          addressLoadingBar.style.display = 'block';
+        } else {
+          reloadBtn.innerHTML = icon('refresh', { size: 14 });
+          reloadBtn.title = '刷新 (F5)';
+          reloadBtn.classList.remove('loading-spin');
+          addressLoadingBar.style.display = 'none';
+        }
+      }
+
+      // 窗口最大化/向下还原图标状态同步
+      if (data.isMaximized) {
+        winMaxBtn.title = '向下还原';
+        maxIcon.innerHTML = '<path d="M3.5 3.5V1.5h6v6H7.5 M1.5 3.5h6v6h-6z" fill="none" stroke="currentColor" stroke-width="1.1"/>';
+      } else {
+        winMaxBtn.title = '最大化';
+        maxIcon.innerHTML = '<rect width="9" height="9" x="1" y="1" fill="none" stroke="currentColor" stroke-width="1.2"/>';
+      }
+
+      // 同步当前活跃标签页的收藏状态
+      updateBookmarkStarState(activeTab);
+    });
+
+    // =====================================================================
+    // 5. 收藏夹核心业务逻辑与交互
+    // =====================================================================
+    function createGlobeIcon() {
+      const icon = document.createElement('span');
+      icon.className = 'bm-icon';
+      icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+      return icon;
+    }
+
+    function renderBookmarks() {
+      bookmarksList.innerHTML = '';
+      if (!currentBookmarks || currentBookmarks.length === 0) {
+        const emptyHint = document.createElement('div');
+        emptyHint.className = 'bookmark-empty-hint';
+        emptyHint.innerHTML = `<span>${icon('star', { size: 12 })} 暂无书签，点击地址栏右侧 ⭐ 或按 Ctrl+D 快速收藏</span>`;
+        bookmarksList.appendChild(emptyHint);
+        return;
+      }
+
+      currentBookmarks.forEach((bm, index) => {
+        const item = document.createElement('div');
+        item.className = 'bookmark-item';
+        item.title = `${bm.title || '书签'}\n${bm.url || ''}`;
+
+        const iconWrap = document.createElement('span');
+        iconWrap.className = 'bm-icon-wrap';
+
+        const defaultSvg = createGlobeIcon();
+        iconWrap.appendChild(defaultSvg);
+
+        if (bm.url && bm.url.startsWith('http')) {
+          try {
+            const u = new URL(bm.url);
+            const img = document.createElement('img');
+            img.className = 'bm-favicon';
+            img.style.display = 'none';
+            img.onload = () => {
+              img.style.display = 'block';
+              defaultSvg.style.display = 'none';
+            };
+            img.onerror = () => {
+              img.remove();
+            };
+            img.src = `https://www.google.com/s2/favicons?sz=32&domain=${u.hostname}`;
+            iconWrap.appendChild(img);
+          } catch (_) {}
+        }
+
+        const titleSpan = document.createElement('span');
+        titleSpan.className = 'bm-title';
+        titleSpan.textContent = bm.title || bm.url || '未命名书签';
+
+        item.appendChild(iconWrap);
+        item.appendChild(titleSpan);
+
+        item.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (e.ctrlKey || e.metaKey) {
+            ipcRenderer.send('action-new-tab-url', bm.url);
+          } else {
+            isUserEditingAddress = false;
+            pendingNavUrl = bm.url;
+            addressInput.value = bm.url;
+            ipcRenderer.send('action-navigate', bm.url);
+          }
+        });
+
+        item.addEventListener('auxclick', (e) => {
+          if (e.button === 1) {
+            e.preventDefault();
+            e.stopPropagation();
+            ipcRenderer.send('action-new-tab-url', bm.url);
+          }
+        });
+
+        item.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          ipcRenderer.send('action-bookmark-context-menu', { index, bookmark: bm });
+        });
+
+        bookmarksList.appendChild(item);
+      });
+    }
+
+    function updateBookmarkStarState(activeTab) {
+      if (!bookmarkStarBtn) return;
+      const curUrl = (activeTab && (activeTab.pendingUrl || activeTab.url)) || addressInput.value.trim();
+      const isBookmarked = Boolean(curUrl && !curUrl.startsWith('about:') && currentBookmarks.some(b => urlsMatch(b.url, curUrl)));
+
+      if (isBookmarked) {
+        bookmarkStarBtn.innerHTML = icon('star-fill', { size: 14, color: '#f59e0b' });
+        bookmarkStarBtn.classList.add('bookmarked');
+        bookmarkStarBtn.title = '已收藏此网页 (点击编辑或移除)';
+      } else {
+        bookmarkStarBtn.innerHTML = icon('star', { size: 14 });
+        bookmarkStarBtn.classList.remove('bookmarked');
+        bookmarkStarBtn.title = '收藏当前网页 (Ctrl+D)';
+      }
+    }
+
+    function showInlineEditor(mode, initialTitle, initialUrl, bookmarkId = null) {
+      editingBookmarkId = bookmarkId;
+      editorNameInput.value = initialTitle || '';
+      editorUrlInput.value = initialUrl || '';
+
+      if (mode === 'added') {
+        editorBadgeText.innerHTML = `${icon('star-fill', { size: 13, color: '#f59e0b' })} 已添加到书签栏`;
+        editorDeleteBtn.style.display = 'inline-flex';
+        editorDeleteBtn.innerHTML = `${icon('trash', { size: 12 })} 移除`;
+      } else if (mode === 'edit') {
+        editorBadgeText.innerHTML = `${icon('edit', { size: 13 })} 编辑书签`;
+        editorDeleteBtn.style.display = 'inline-flex';
+        editorDeleteBtn.innerHTML = `${icon('trash', { size: 12 })} 删除`;
+      } else {
+        editorBadgeText.innerHTML = `${icon('plus', { size: 13 })} 添加新书签`;
+        editorDeleteBtn.style.display = 'none';
+      }
+
+      bookmarkInlineEditor.style.display = 'flex';
+      setTimeout(() => editorNameInput.focus(), 50);
+    }
+
+    function hideInlineEditor() {
+      bookmarkInlineEditor.style.display = 'none';
+      editingBookmarkId = null;
+    }
+
+    function triggerBookmarkCurrent() {
+      const activeTab = currentTabs.find(t => t.id === currentActiveId);
+      const curUrl = (activeTab && (activeTab.pendingUrl || activeTab.url)) || addressInput.value.trim();
+      if (!curUrl || curUrl.startsWith('about:')) return;
+      const curTitle = (activeTab && activeTab.title && activeTab.title !== '新标签页') ? activeTab.title : curUrl;
+
+      const existingIdx = currentBookmarks.findIndex(b => urlsMatch(b.url, curUrl));
+      if (existingIdx >= 0) {
+        showInlineEditor('edit', currentBookmarks[existingIdx].title, currentBookmarks[existingIdx].url, currentBookmarks[existingIdx].id);
+      } else {
+        const newBm = {
+          id: 'bm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+          title: curTitle,
+          url: curUrl,
+          createdAt: Date.now()
+        };
+        currentBookmarks.push(newBm);
+        ipcRenderer.send('action-save-bookmarks', currentBookmarks);
+        renderBookmarks();
+        updateBookmarkStarState(activeTab);
+        showInlineEditor('added', newBm.title, newBm.url, newBm.id);
+      }
+    }
+
+    bookmarkStarBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      triggerBookmarkCurrent();
+    });
+
+    bookmarkAddBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const activeTab = currentTabs.find(t => t.id === currentActiveId);
+      const curUrl = (activeTab && (activeTab.pendingUrl || activeTab.url)) || '';
+      const curTitle = (activeTab && activeTab.title && activeTab.title !== '新标签页') ? activeTab.title : '';
+      showInlineEditor('new', curTitle, curUrl || 'https://');
+    });
+
+    editorSaveBtn.addEventListener('click', () => {
+      const name = editorNameInput.value.trim() || '未命名书签';
+      let url = editorUrlInput.value.trim();
+      if (url && !/^(https?|about|chrome-extension):\/\//i.test(url)) {
+        url = 'https://' + url;
+      }
+      if (!url) return;
+
+      if (editingBookmarkId) {
+        const idx = currentBookmarks.findIndex(b => b.id === editingBookmarkId);
+        if (idx >= 0) {
+          currentBookmarks[idx].title = name;
+          currentBookmarks[idx].url = url;
+        }
+      } else {
+        currentBookmarks.push({
+          id: 'bm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+          title: name,
+          url: url,
+          createdAt: Date.now()
+        });
+      }
+
+      ipcRenderer.send('action-save-bookmarks', currentBookmarks);
+      renderBookmarks();
+      hideInlineEditor();
+      const activeTab = currentTabs.find(t => t.id === currentActiveId);
+      updateBookmarkStarState(activeTab);
+    });
+
+    editorDeleteBtn.addEventListener('click', () => {
+      if (editingBookmarkId) {
+        currentBookmarks = currentBookmarks.filter(b => b.id !== editingBookmarkId);
+        ipcRenderer.send('action-save-bookmarks', currentBookmarks);
+        renderBookmarks();
+      }
+      hideInlineEditor();
+      const activeTab = currentTabs.find(t => t.id === currentActiveId);
+      updateBookmarkStarState(activeTab);
+    });
+
+    editorCancelBtn.addEventListener('click', hideInlineEditor);
+
+    bookmarkInlineEditor.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        editorSaveBtn.click();
+      } else if (e.key === 'Escape') {
+        hideInlineEditor();
+      }
+    });
+
+    bookmarksBar.addEventListener('contextmenu', (e) => {
+      if (e.target === bookmarksBar || e.target === bookmarksList || (e.target.classList && e.target.classList.contains('bookmark-empty-hint'))) {
+        e.preventDefault();
+        ipcRenderer.send('action-bookmarks-bar-context-menu');
+      }
+    });
+
+    addressInput.addEventListener('input', () => {
+      const activeTab = currentTabs.find(t => t.id === currentActiveId);
+      updateBookmarkStarState(activeTab);
+    });
+
+    ipcRenderer.on('trigger-bookmark-current', () => {
+      triggerBookmarkCurrent();
+    });
+
+    ipcRenderer.on('action-edit-bookmark', (_e, { index, bookmark }) => {
+      if (bookmark) {
+        showInlineEditor('edit', bookmark.title, bookmark.url, bookmark.id);
+      }
+    });
+
+    ipcRenderer.on('action-delete-bookmark', (_e, { index, bookmark }) => {
+      const targetId = bookmark ? bookmark.id : (currentBookmarks[index] && currentBookmarks[index].id);
+      if (targetId) {
+        currentBookmarks = currentBookmarks.filter(b => b.id !== targetId);
+        ipcRenderer.send('action-save-bookmarks', currentBookmarks);
+        renderBookmarks();
+        const activeTab = currentTabs.find(t => t.id === currentActiveId);
+        updateBookmarkStarState(activeTab);
+      }
+    });
+
+    ipcRenderer.on('action-add-new-bookmark', () => {
+      showInlineEditor('new', '', 'https://');
+    });
+  </script>
+</body>
+</html>

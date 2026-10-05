@@ -1,0 +1,10 @@
+{
+  "name": "@fp-lab/electron-sdk",
+  "version": "0.1.0",
+  "description": "Embedding and automation SDK for the FP Lab custom Electron runtime",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": ["index.js", "index.d.ts", "lib", "profiles", "README.md", "COMPATIBILITY.md", "examples"],
+  "scripts": {"test": "node tests/run.js"},
+  "private": true
+}

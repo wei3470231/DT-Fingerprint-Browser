@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>新标签页</title>
+  <link rel="stylesheet" href="newtab.css">
+</head>
+<body>
+  <main>
+    <h1>此标签页的浏览器指纹</h1>
+    <p class="lead">以下数值由页面脚本在当前身份的 Session 中实际读取，与右上角“身份与指纹”中的配置应一致。</p>
+    <table id="fingerprint"><tbody></tbody></table>
+    <section class="storage">
+      <strong>存储隔离演示：</strong><span id="visits"></span>
+    </section>
+    <h2>公开检测站</h2>
+    <nav id="links">
+      <a href="https://www.browserscan.net/">BrowserScan</a>
+      <a href="https://abrahamjuliot.github.io/creepjs/">CreepJS</a>
+      <a href="https://bot.sannysoft.com/">Sannysoft</a>
+      <a href="https://pixelscan.net/">Pixelscan</a>
+      <a href="https://browserleaks.com/">BrowserLeaks</a>
+      <a href="https://ipinfo.io/json">出口 IP</a>
+    </nav>
+  </main>
+  <script src="newtab.js"></script>
+</body>
+</html>

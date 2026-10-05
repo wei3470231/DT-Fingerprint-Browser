@@ -1,0 +1,9 @@
+* text=auto
+*.js text eol=lf
+*.json text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+*.md text eol=lf
+*.patch -text
+fp-kernel/build/lock.json -text
+*.png -text

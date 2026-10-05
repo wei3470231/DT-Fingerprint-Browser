@@ -1,0 +1,7 @@
+{
+  "name": "fp-tab-browser-example",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-tab browser with per-identity custom fingerprints, built on @fp-lab/electron-sdk",
+  "main": "main.js"
+}

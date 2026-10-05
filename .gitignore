@@ -1,0 +1,41 @@
+# Generated/local artifacts; keep source, lockfiles and selected reports.
+.fp-local.json
+runtime/
+dist/
+/downloads/
+**/node_modules/
+**/test-results/
+**/exports/
+**/__pycache__/
+**/*.pyc
+.build/
+/profiles/
+*.pdb
+*.obj
+*.lib
+cert.pem
+key.pem
+*.pem
+*.pfx
+*.p12
+*.key
+.env*
+.npmrc
+
+# Private user data and profiles (私用环境配置与登录Cookie隔离)
+data/
+/data/
+
+# Private extensions and plugins (私用扩展插件隔离)
+插件/
+/插件/
+chrome/
+google_pro_1.4.7/
+turnstile_extension2/
+
+# Executable binaries and temporary test artifacts
+*.exe
+proxy.txt
+test-turnstile.html
+一键编译EXE.cmd
+说明文档.md

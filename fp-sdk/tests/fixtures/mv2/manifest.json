@@ -1,0 +1,1 @@
+{"manifest_version":2,"name":"FP SDK MV2 Compatibility Fixture","version":"1.0.0","permissions":["storage"],"background":{"scripts":["background.js"],"persistent":true},"content_scripts":[{"matches":["http://127.0.0.1/*"],"js":["content.js"],"run_at":"document_idle"}],"browser_action":{"default_popup":"popup.html"}}

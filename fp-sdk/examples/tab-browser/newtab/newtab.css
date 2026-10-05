@@ -1,0 +1,18 @@
+:root { --bg: #f7f8fa; --card: #fff; --text: #1f2937; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1c1f24; --card: #25292f; --text: #e5e7eb; --muted: #9ca3af; --line: #3b414b; --accent: #60a5fa; color-scheme: dark; }
+}
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 40px 24px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 28px 0 10px; }
+.lead { color: var(--muted); margin: 0 0 18px; }
+table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+th, td { text-align: left; vertical-align: top; padding: 8px 14px; border-top: 1px solid var(--line); }
+tr:first-child th, tr:first-child td { border-top: 0; }
+th { width: 180px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+td { font-family: Consolas, "Cascadia Mono", monospace; font-size: 13px; word-break: break-all; }
+.storage { margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+#links { display: flex; flex-wrap: wrap; gap: 10px; }
+#links a { padding: 8px 14px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); color: var(--accent); text-decoration: none; }
+#links a:hover { border-color: var(--accent); }

@@ -1,0 +1,22 @@
+{
+  "name": "win10-intel",
+  "platform": "Win32",
+  "uaPlatform": "Windows",
+  "platformVersion": "10.0.0",
+  "cores": [4, 6, 8],
+  "memory": [8, 16],
+  "resolutions": [
+    { "width": 1920, "height": 1080 },
+    { "width": 1366, "height": 768 }
+  ],
+  "gpus": [
+    {
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    }
+  ]
+}

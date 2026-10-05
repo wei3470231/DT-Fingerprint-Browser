@@ -1,0 +1,23 @@
+{
+  "name": "win10-amd-radeon",
+  "platform": "Win32",
+  "uaPlatform": "Windows",
+  "platformVersion": "10.0.0",
+  "cores": [6, 8, 12, 16],
+  "memory": [8, 16, 32],
+  "resolutions": [
+    { "width": 1920, "height": 1080 },
+    { "width": 2560, "height": 1440 },
+    { "width": 1600, "height": 900 }
+  ],
+  "gpus": [
+    {
+      "vendor": "Google Inc. (AMD)",
+      "renderer": "ANGLE (AMD, AMD Radeon RX 6700 XT Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "vendor": "Google Inc. (AMD)",
+      "renderer": "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    }
+  ]
+}

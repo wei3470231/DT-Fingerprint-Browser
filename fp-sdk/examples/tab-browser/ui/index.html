@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src http: https: data:">
+  <title>FP 多标签指纹浏览器</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="chrome">
+    <div id="tabstrip">
+      <div id="tabs" role="tablist"></div>
+      <button id="new-tab" class="icon" title="新标签页（当前身份，Ctrl+T）">
+        <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>
+      </button>
+      <button id="new-tab-menu" class="icon small" title="选择身份新建标签页">
+        <svg viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg>
+      </button>
+    </div>
+    <div id="toolbar">
+      <button id="back" class="icon" title="后退（Alt+←）"><svg viewBox="0 0 16 16"><path d="M13 8H3m4-4L3 8l4 4"/></svg></button>
+      <button id="forward" class="icon" title="前进（Alt+→）"><svg viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg></button>
+      <button id="reload" class="icon" title="重新加载（F5）">
+        <svg class="reload" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/></svg>
+        <svg class="stop" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+      <form id="address-form" autocomplete="off">
+        <button type="button" id="identity" title="当前标签页的身份，点击查看指纹"><span class="dot"></span><span class="name"></span></button>
+        <input id="address" spellcheck="false" placeholder="输入网址或搜索内容" aria-label="地址栏">
+      </form>
+      <button id="toggle-drawer" title="身份与指纹">
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5c.8-2.6 2.7-4 5-4s4.2 1.4 5 4"/></svg>
+        身份与指纹
+      </button>
+    </div>
+  </header>
+
+  <main id="page-area"><p id="page-status"></p></main>
+
+  <aside id="drawer" hidden>
+    <div class="drawer-head">
+      <h2>身份与指纹</h2>
+      <button id="close-drawer" class="icon" title="关闭"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+    </div>
+    <div class="drawer-body">
+      <p class="intro">每个身份拥有独立的指纹、Cookie 与存储；同一身份的标签页共享登录状态。</p>
+      <div id="profile-list"></div>
+      <button id="create-profile" class="secondary wide">+ 新建身份</button>
+
+      <form id="editor" novalidate>
+        <h3>编辑身份</h3>
+        <label class="full">名称<input name="name" maxlength="40"></label>
+        <div class="full"><span class="label">标签颜色</span><div id="colors"></div></div>
+
+        <fieldset>
+          <legend>系统与区域</legend>
+          <label>系统<select name="os"></select></label>
+          <label>语言<select name="language"></select></label>
+          <label class="full">时区<input name="timezone" list="timezones" spellcheck="false"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>硬件与屏幕</legend>
+          <label>CPU 核心<select name="cores"></select></label>
+          <label>内存（GB）<select name="memory"></select></label>
+          <label>分辨率<input name="screen" list="screens" spellcheck="false"></label>
+          <label>缩放 DPR<select name="dpr"></select></label>
+          <label class="full">WebGL 厂商<input name="gpuVendor" list="gpu-vendors" spellcheck="false"></label>
+          <label class="full">WebGL 渲染器<select id="gpu-preset"></select><input name="gpuRenderer" spellcheck="false"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>噪声与种子</legend>
+          <div class="full checks">
+            <label class="check"><input type="checkbox" name="canvas">Canvas</label>
+            <label class="check"><input type="checkbox" name="audio">Audio</label>
+            <label class="check"><input type="checkbox" name="rects">ClientRects</label>
+          </div>
+          <label class="full">种子 seed（16 位十六进制）<input name="seed" spellcheck="false" maxlength="16"></label>
+        </fieldset>
+
+        <fieldset>
+          <legend>网络</legend>
+          <label class="full">代理<input name="proxy" spellcheck="false" placeholder="留空直连，如 http://127.0.0.1:7890"></label>
+        </fieldset>
+
+        <p id="editor-hint" class="hint"></p>
+        <div class="actions">
+          <button type="button" id="randomize" class="secondary" title="保留语言和时区，重新随机其余字段">随机生成</button>
+          <button type="submit" class="primary">保存并应用</button>
+        </div>
+        <button type="button" id="open-in-profile" class="secondary wide">在此身份中新建标签页</button>
+        <button type="button" id="delete-profile" class="danger wide">删除身份及其浏览数据</button>
+      </form>
+      <p id="versions" class="versions"></p>
+    </div>
+  </aside>
+
+  <datalist id="timezones"></datalist>
+  <datalist id="screens"></datalist>
+  <datalist id="gpu-vendors"></datalist>
+  <div id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "name": "win11-nvidia",
+  "platform": "Win32",
+  "uaPlatform": "Windows",
+  "platformVersion": "15.0.0",
+  "cores": [8, 12, 16],
+  "memory": [8, 16],
+  "resolutions": [
+    { "width": 1920, "height": 1080 },
+    { "width": 2560, "height": 1440 }
+  ],
+  "gpus": [
+    {
+      "vendor": "Google Inc. (NVIDIA)",
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "vendor": "Google Inc. (NVIDIA)",
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    }
+  ]
+}

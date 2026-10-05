@@ -1,0 +1,3112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>DT - 指纹浏览器</title>
+  <style>
+    /* ===================================================================== */
+    /* 0. 默认兜底基础变量 (默认经典深色) */
+    /* ===================================================================== */
+    :root {
+      --bg-body: #0f172a;
+      --bg-header: #1e293b;
+      --bg-card: #1e293b;
+      --bg-sub: #334155;
+      --bg-input: #0f172a;
+      --bg-hover: #334155;
+      --bg-thead: #182234;
+      --border: #334155;
+      --border-sub: #475569;
+      --text-main: #f8fafc;
+      --text-sub: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --modal-bg: #1e293b;
+      --modal-header: #182234;
+      --badge-bg: #334155;
+      --btn-sec-bg: #334155;
+      --btn-sec-border: #475569;
+      --btn-sec-hover: #475569;
+      --accent: #3b82f6;
+    }
+
+    /* ===================================================================== */
+    /* 1. 经典双色 (深色 · 曜石极夜黑 / 浅色 · 极简象牙白) */
+    /* ===================================================================== */
+    html[data-theme="dark"], html[data-theme="midnight"] {
+      --bg-body: #0f172a;
+      --bg-header: #1e293b;
+      --bg-card: #1e293b;
+      --bg-sub: #334155;
+      --bg-input: #0f172a;
+      --bg-hover: #334155;
+      --bg-thead: #182234;
+      --border: #334155;
+      --border-sub: #475569;
+      --text-main: #f8fafc;
+      --text-sub: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --modal-bg: #1e293b;
+      --modal-header: #182234;
+      --badge-bg: #334155;
+      --btn-sec-bg: #334155;
+      --btn-sec-border: #475569;
+      --btn-sec-hover: #475569;
+      --accent: #3b82f6;
+    }
+
+    html[data-theme="light"] {
+      --bg-body: #f1f5f9;
+      --bg-header: #ffffff;
+      --bg-card: #ffffff;
+      --bg-sub: #e2e8f0;
+      --bg-input: #ffffff;
+      --bg-hover: #f1f5f9;
+      --bg-thead: #f8fafc;
+      --border: #e2e8f0;
+      --border-sub: #cbd5e1;
+      --text-main: #0f172a;
+      --text-sub: #1e293b;
+      --text-muted: #475569;
+      --text-dim: #64748b;
+      --modal-bg: #ffffff;
+      --modal-header: #f8fafc;
+      --badge-bg: #e2e8f0;
+      --btn-sec-bg: #ffffff;
+      --btn-sec-border: #cbd5e1;
+      --btn-sec-hover: #f1f5f9;
+      --accent: #2563eb;
+    }
+
+    /* ===================================================================== */
+    /* 2. 7 种舒缓温润浅底色体系 (赤橙黄绿青蓝紫 - 卡片与底色全套改换) */
+    /* ===================================================================== */
+    /* 赤 · 绯霞柔粉 */
+    html[data-theme="red"] {
+      --bg-body: #fff1f2;
+      --bg-header: #ffe4e6;
+      --bg-card: #fff7f8;
+      --bg-sub: #fecdd3;
+      --bg-input: #ffffff;
+      --bg-hover: #fecdd3;
+      --bg-thead: #ffe4e6;
+      --border: #fecdd3;
+      --border-sub: #fda4af;
+      --text-main: #1c0a10;
+      --text-sub: #4c1421;
+      --text-muted: #881337;
+      --text-dim: #9f1239;
+      --modal-bg: #fff7f8;
+      --modal-header: #ffe4e6;
+      --badge-bg: #ffe4e6;
+      --btn-sec-bg: #ffffff;
+      --btn-sec-border: #fecdd3;
+      --btn-sec-hover: #fff1f2;
+      --accent: #e11d48;
+    }
+
+    /* 橙 · 暖阳杏橙 */
+    html[data-theme="orange"] {
+      --bg-body: #fff7ed;
+      --bg-header: #ffedd5;
+      --bg-card: #fffbf5;
+      --bg-sub: #fed7aa;
+      --bg-input: #ffffff;
+      --bg-hover: #fed7aa;
+      --bg-thead: #ffedd5;
+      --border: #fed7aa;
+      --border-sub: #fdba74;
+      --text-main: #1c0a02;
+      --text-sub: #431407;
+      --text-muted: #9a3412;
+      --text-dim: #c2410c;
+      --modal-bg: #fffbf5;
+      --modal-header: #ffedd5;
+      --badge-bg: #ffedd5;
+      --btn-sec-bg: #ffffff;
+      --btn-sec-border: #fed7aa;
+      --btn-sec-hover: #fff7ed;
+      --accent: #ea580c;
+    }
+
+    /* 黄 · 暖玉麦金 */
+    html[data-theme="yellow"] {
+      --bg-body: #fefce8;
+      --bg-header: #fef9c3;
+      --bg-card: #fffef2;
+      --bg-sub: #fef08a;
+      --bg-input: #ffffff;
+      --bg-hover: #fef08a;
+      --bg-thead: #fef9c3;
+      --border: #fef08a;
+      --border-sub: #fde047;
+      --text-main: #1c1602;
+      --text-sub: #422006;
+      --text-muted: #854d0e;
+      --text-dim: #a16207;
+      --modal-bg: #fffef2;
+      --modal-header: #fef9c3;
+      --badge-bg: #fef9c3;
+      --btn-sec-bg: #ffffff;
+      --btn-sec-border: #fef08a;
+      --btn-sec-hover: #fefce8;
+      --accent: #d97706;
+    }
+
+    /* 绿 · 翠竹松影 */
+    html[data-theme="green"] {
+      --bg-body: #f0fdf4;
+      --bg-header: #dcfce7;
+      --bg-card: #f6fdf8;
+      --bg-sub: #bbf7d0;
+      --bg-input: #ffffff;
+      --bg-hover: #bbf7d0;
+      --bg-thead: #dcfce7;
+      --border: #bbf7d0;
+      --border-sub: #86efac;
+      --text-main: #021a0d;
+      --text-sub: #064e3b;
+      --text-muted: #166534;
+      --text-dim: #15803d;
+      --modal-bg: #f6fdf8;
+      --modal-header: #dcfce7;
+      --badge-bg: #dcfce7;
+      --btn-sec-bg: #ffffff;
+      --btn-sec-border: #bbf7d0;
+      --btn-sec-hover: #f0fdf4;
+      --accent: #059669;
+    }
+
+    /* 青 · 碧水青瓷 */
+    html[data-theme="cyan"] {
+      --bg-body: #ecfeff;
+      --bg-header: #cffafe;
+      --bg-card: #f4fdfe;
+      --bg-sub: #a5f3fc;
+      --bg-input: #ffffff;
+      --bg-hover: #a5f3fc;
+      --bg-thead: #cffafe;
+      --border: #a5f3fc;
+      --border-sub: #67e8f9;
+      --text-main: #02161b;
+      --text-sub: #164e63;
+      --text-muted: #0e7490;
+      --text-dim: #0891b2;
+      --modal-bg: #f4fdfe;
+      --modal-header: #cffafe;
+      --badge-bg: #cffafe;
+      --btn-sec-bg: #ffffff;
+      --btn-sec-border: #a5f3fc;
+      --btn-sec-hover: #ecfeff;
+      --accent: #0891b2;
+    }
+
+    /* 蓝 · 极光霁蓝 */
+    html[data-theme="blue"] {
+      --bg-body: #eff6ff;
+      --bg-header: #dbeafe;
+      --bg-card: #f6faff;
+      --bg-sub: #bfdbfe;
+      --bg-input: #ffffff;
+      --bg-hover: #bfdbfe;
+      --bg-thead: #dbeafe;
+      --border: #bfdbfe;
+      --border-sub: #93c5fd;
+      --text-main: #031024;
+      --text-sub: #1e3a8a;
+      --text-muted: #1d4ed8;
+      --text-dim: #2563eb;
+      --modal-bg: #f6faff;
+      --modal-header: #dbeafe;
+      --badge-bg: #dbeafe;
+      --btn-sec-bg: #ffffff;
+      --btn-sec-border: #bfdbfe;
+      --btn-sec-hover: #eff6ff;
+      --accent: #2563eb;
+    }
+
+    /* 紫 · 幽夜紫罗 */
+    html[data-theme="purple"] {
+      --bg-body: #faf5ff;
+      --bg-header: #f3e8ff;
+      --bg-card: #fcf9ff;
+      --bg-sub: #e9d5ff;
+      --bg-input: #ffffff;
+      --bg-hover: #e9d5ff;
+      --bg-thead: #f3e8ff;
+      --border: #e9d5ff;
+      --border-sub: #d8b4fe;
+      --text-main: #160424;
+      --text-sub: #3b0764;
+      --text-muted: #7e22ce;
+      --text-dim: #9333ea;
+      --modal-bg: #fcf9ff;
+      --modal-header: #f3e8ff;
+      --badge-bg: #f3e8ff;
+      --btn-sec-bg: #ffffff;
+      --btn-sec-border: #e9d5ff;
+      --btn-sec-hover: #faf5ff;
+      --accent: #9333ea;
+    }
+
+    /* ===================================================================== */
+    /* 3. 7 种醇厚深邃深底色体系 (赤橙黄绿青蓝紫 - 纯正暗色调，超高对比度) */
+    /* ===================================================================== */
+    /* 赤 · 沉稳红木 */
+    html[data-theme="red-dark"] {
+      --bg-body: #2e0c15;
+      --bg-header: #3d101c;
+      --bg-card: #360d19;
+      --bg-sub: #4f1626;
+      --bg-input: #20070e;
+      --bg-hover: #541728;
+      --bg-thead: #3f101d;
+      --border: #691d33;
+      --border-sub: #852541;
+      --text-main: #ffffff;
+      --text-sub: #ffffff;
+      --text-muted: #fda4af;
+      --text-dim: #fb7185;
+      --modal-bg: #360d19;
+      --modal-header: #3f101d;
+      --badge-bg: #4f1626;
+      --btn-sec-bg: #3d101c;
+      --btn-sec-border: #691d33;
+      --btn-sec-hover: #541728;
+      --accent: #fb7185;
+    }
+
+    /* 橙 · 焦糖琥珀 */
+    html[data-theme="orange-dark"] {
+      --bg-body: #2d1405;
+      --bg-header: #3d1b07;
+      --bg-card: #351706;
+      --bg-sub: #4d230b;
+      --bg-input: #200e03;
+      --bg-hover: #59280d;
+      --bg-thead: #401d08;
+      --border: #6e320f;
+      --border-sub: #8a3f13;
+      --text-main: #ffffff;
+      --text-sub: #ffffff;
+      --text-muted: #fdba74;
+      --text-dim: #fb923c;
+      --modal-bg: #351706;
+      --modal-header: #401d08;
+      --badge-bg: #4d230b;
+      --btn-sec-bg: #3d1b07;
+      --btn-sec-border: #6e320f;
+      --btn-sec-hover: #59280d;
+      --accent: #fb923c;
+    }
+
+    /* 黄 · 曜石麦金 */
+    html[data-theme="yellow-dark"] {
+      --bg-body: #292004;
+      --bg-header: #382c06;
+      --bg-card: #302605;
+      --bg-sub: #453708;
+      --bg-input: #1d1602;
+      --bg-hover: #4f3f0a;
+      --bg-thead: #3a2e06;
+      --border: #634f0d;
+      --border-sub: #7e6511;
+      --text-main: #ffffff;
+      --text-sub: #ffffff;
+      --text-muted: #fde047;
+      --text-dim: #facc15;
+      --modal-bg: #302605;
+      --modal-header: #3a2e06;
+      --badge-bg: #453708;
+      --btn-sec-bg: #382c06;
+      --btn-sec-border: #634f0d;
+      --btn-sec-hover: #4f3f0a;
+      --accent: #facc15;
+    }
+
+    /* 绿 · 深林松柏 */
+    html[data-theme="green-dark"] {
+      --bg-body: #0b2416;
+      --bg-header: #103320;
+      --bg-card: #0d2b1b;
+      --bg-sub: #17452b;
+      --bg-input: #07190f;
+      --bg-hover: #1b5233;
+      --bg-thead: #123924;
+      --border: #236942;
+      --border-sub: #2d8554;
+      --text-main: #ffffff;
+      --text-sub: #ffffff;
+      --text-muted: #86efac;
+      --text-dim: #4ade80;
+      --modal-bg: #0d2b1b;
+      --modal-header: #123924;
+      --badge-bg: #17452b;
+      --btn-sec-bg: #103320;
+      --btn-sec-border: #236942;
+      --btn-sec-hover: #1b5233;
+      --accent: #34d399;
+    }
+
+    /* 青 · 黛色青瓷 */
+    html[data-theme="cyan-dark"], html[data-theme="slate"] {
+      --bg-body: #082329;
+      --bg-header: #0d343d;
+      --bg-card: #0b2c34;
+      --bg-sub: #134653;
+      --bg-input: #05181c;
+      --bg-hover: #175464;
+      --bg-thead: #0f3b46;
+      --border: #1f6d80;
+      --border-sub: #27889f;
+      --text-main: #ffffff;
+      --text-sub: #ffffff;
+      --text-muted: #67e8f9;
+      --text-dim: #22d3ee;
+      --modal-bg: #0b2c34;
+      --modal-header: #0f3b46;
+      --badge-bg: #134653;
+      --btn-sec-bg: #0d343d;
+      --btn-sec-border: #1f6d80;
+      --btn-sec-hover: #175464;
+      --accent: #22d3ee;
+    }
+
+    /* 蓝 · 深海群青 */
+    html[data-theme="blue-dark"] {
+      --bg-body: #0f1e3d;
+      --bg-header: #152952;
+      --bg-card: #122346;
+      --bg-sub: #1b356a;
+      --bg-input: #0a1429;
+      --bg-hover: #214182;
+      --bg-thead: #172d5a;
+      --border: #284e9b;
+      --border-sub: #3363bf;
+      --text-main: #ffffff;
+      --text-sub: #ffffff;
+      --text-muted: #93c5fd;
+      --text-dim: #60a5fa;
+      --modal-bg: #122346;
+      --modal-header: #172d5a;
+      --badge-bg: #1b356a;
+      --btn-sec-bg: #152952;
+      --btn-sec-border: #284e9b;
+      --btn-sec-hover: #214182;
+      --accent: #60a5fa;
+    }
+
+    /* 紫 · 幽夜紫晶 */
+    html[data-theme="purple-dark"] {
+      --bg-body: #220d33;
+      --bg-header: #2f1246;
+      --bg-card: #280f3c;
+      --bg-sub: #3d185b;
+      --bg-input: #160822;
+      --bg-hover: #4b1e70;
+      --bg-thead: #33144c;
+      --border: #592484;
+      --border-sub: #702da7;
+      --text-main: #ffffff;
+      --text-sub: #ffffff;
+      --text-muted: #d8b4fe;
+      --text-dim: #c084fc;
+      --modal-bg: #280f3c;
+      --modal-header: #33144c;
+      --badge-bg: #3d185b;
+      --btn-sec-bg: #2f1246;
+      --btn-sec-border: #592484;
+      --btn-sec-hover: #4b1e70;
+      --accent: #c084fc;
+    }
+
+    /* 配色方案设置 Modal 特有样式 */
+    .theme-palette-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .theme-card {
+      background: var(--bg-card);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+    .theme-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .theme-card.active {
+      border-color: var(--accent);
+      background: var(--bg-hover);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .theme-card-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      border: 1.5px solid rgba(255,255,255,0.4);
+    }
+    .theme-card-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .theme-card-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .theme-card-desc {
+      font-size: 10px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg-body, #0f172a);
+      min-height: 100vh;
+    }
+    body {
+      background: var(--bg-body);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      user-select: none;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    /* 顶部导航 Header */
+    header {
+      height: 60px;
+      background: var(--bg-header);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-badge {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), rgba(255,255,255,0.2));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+    .logo-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: 0.5px;
+    }
+    .logo-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    /* 统计卡片 Stats */
+    .stats-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .stat-pill {
+      background: var(--bg-sub);
+      border: 1px solid var(--border-sub);
+      border-radius: 6px;
+      padding: 5px 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+    .stat-pill b {
+      color: var(--accent);
+      font-size: 13px;
+    }
+    .stat-pill.running b { color: #34d399; }
+
+    /* 主体布局 */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 24px;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    /* 工具栏 Controls */
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 按钮规范 */
+    .btn {
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+    .btn-primary:hover { filter: brightness(1.12); }
+    .btn-secondary {
+      background: var(--btn-sec-bg);
+      color: var(--text-sub);
+      border: 1px solid var(--btn-sec-border);
+    }
+    .btn-secondary:hover { background: var(--btn-sec-hover); color: var(--text-main); }
+    .btn-danger {
+      background: #dc2626;
+      color: #fff;
+    }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-success {
+      background: #059669;
+      color: #fff;
+    }
+    .btn-success:hover { background: #047857; }
+    .btn-warning {
+      background: #d97706;
+      color: #fff;
+    }
+    .btn-warning:hover { background: #b45309; }
+    .btn-sm {
+      height: 28px;
+      padding: 0 8px;
+      font-size: 12px;
+      border-radius: 5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    /* 搜索框与筛选 */
+    .input-box {
+      height: 34px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-sub);
+      border-radius: 6px;
+      padding: 0 12px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+      transition: border 0.15s;
+    }
+    .input-box:focus { border-color: var(--accent); }
+    .select-box {
+      height: 34px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-sub);
+      border-radius: 6px;
+      padding: 0 10px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* 表格容器 */
+    .table-card {
+      flex: 1;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    }
+    .table-scroll {
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: auto;
+    }
+    table {
+      width: 100%;
+      min-width: 1180px;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12px;
+    }
+    thead {
+      position: sticky;
+      top: 0;
+      background: var(--bg-thead);
+      z-index: 10;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      padding: 12px 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-main);
+    }
+    tbody tr:hover { background: var(--bg-hover); }
+
+    /* 状态与徽章 */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .status-badge.running {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-badge.stopped {
+      background: rgba(148, 163, 184, 0.1);
+      color: #64748b;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.5; }
+      50% { opacity: 1; }
+      100% { opacity: 0.5; }
+    }
+
+    .tag {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--badge-bg);
+      color: var(--text-muted);
+      border: 1px solid var(--border-sub);
+    }
+    .tag.proxy { color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+    .tag.direct { color: #3b82f6; border-color: rgba(59, 130, 246, 0.3); }
+    .tag.port { color: #a855f7; border-color: rgba(168, 85, 247, 0.3); font-weight: 600; }
+
+    /* 底部状态栏 Footer */
+    .app-footer {
+      height: 32px;
+      min-height: 32px;
+      background: var(--bg-header);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      user-select: none;
+      z-index: 50;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .footer-left, .footer-right, .footer-center {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .footer-slogan {
+      font-size: 11px;
+      color: var(--text-muted);
+      opacity: 0.85;
+      letter-spacing: 0.3px;
+    }
+    .footer-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      color: var(--text-sub);
+    }
+    .footer-tag:hover {
+      background: var(--bg-hover);
+      color: var(--text-main);
+    }
+    .footer-badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--accent);
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    .footer-badge.success {
+      background: #10b981;
+      color: #fff;
+    }
+    .footer-version-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: var(--bg-sub);
+      border: 1px solid var(--border-sub);
+      transition: all 0.2s ease;
+    }
+    .footer-version-badge.has-update {
+      background: rgba(245, 158, 11, 0.18);
+      border-color: #f59e0b;
+      color: #f59e0b;
+      font-weight: 600;
+      animation: pulseUpdate 1.8s infinite;
+    }
+    @keyframes pulseUpdate {
+      0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+      70% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .status-dot.green { background: #10b981; }
+    .status-dot.orange { background: #f59e0b; }
+    .status-dot.blue { background: #3b82f6; }
+
+    /* 操作组按钮 */
+    .action-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+      flex-wrap: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* 模态框 Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-card {
+      width: 720px;
+      max-height: 90vh;
+      background: var(--modal-bg);
+      border: 1px solid var(--border-sub);
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+      color: var(--text-main);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      background: var(--modal-header);
+      border-bottom: 1px solid var(--border-sub);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-title { font-size: 15px; font-weight: 700; color: var(--text-main); }
+    .modal-close {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 18px;
+    }
+    .modal-close:hover { color: var(--text-main); }
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .modal-footer {
+      padding: 14px 20px;
+      background: var(--modal-header);
+      border-top: 1px solid var(--border-sub);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    /* 表单控件 */
+    .form-row {
+      display: flex;
+      gap: 14px;
+    }
+    .form-group {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .form-input {
+      height: 34px;
+      background: var(--bg-input);
+      border: 1px solid var(--border-sub);
+      border-radius: 6px;
+      padding: 0 12px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+    }
+    .form-input:focus { border-color: var(--accent); }
+
+    /* 指纹预览卡片 */
+    .fp-preview-card {
+      background: var(--bg-input);
+      border: 1px solid var(--border-sub);
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .fp-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      font-size: 11px;
+    }
+    .fp-meta-item {
+      background: var(--bg-sub);
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-sub);
+    }
+    .fp-meta-item span { color: var(--text-dim); display: block; margin-bottom: 2px; }
+    .fp-meta-item b { color: var(--accent); font-size: 12px; }
+
+    /* 消息提示 Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bg-header);
+      color: var(--text-main);
+      border: 1px solid var(--border-sub);
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-size: 13px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      z-index: 999;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.25s ease;
+      pointer-events: none;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-badge" id="logoBadge"></div>
+      <div>
+        <div class="logo-title">DT - 指纹浏览器</div>
+        <div class="logo-sub">多环境管理 · 独立远程调试端口 · 独立缓存隔离 · 商业级指纹对抗</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <!-- 皮肤切换 (深浅双色 + 赤橙黄绿青蓝紫) -->
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span id="themeLabel" style="font-size: 12px; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 4px;"></span>
+        <span id="themeColorIndicator" style="width: 14px; height: 14px; border-radius: 50%; display: inline-block; background: #1e293b; border: 1px solid var(--border-sub); vertical-align: middle;" title="当前配色底色预览"></span>
+        <select class="select-box" id="themeSelect" style="height: 32px; font-size: 12px; padding: 0 8px; cursor: pointer;">
+          <optgroup label="经典双色 (深色 / 浅色)">
+            <option value="dark">● 经典深色 · 曜石极夜</option>
+            <option value="light">● 极简浅色 · 象牙素雅</option>
+          </optgroup>
+          <optgroup label="舒缓柔和彩色 (赤橙黄绿青蓝紫)">
+            <option value="red">● 赤 · 绯霞柔粉</option>
+            <option value="orange">● 橙 · 暖阳杏橙</option>
+            <option value="yellow">● 黄 · 暖玉麦金</option>
+            <option value="green">● 绿 · 翠竹松影</option>
+            <option value="cyan">● 青 · 碧水青瓷</option>
+            <option value="blue">● 蓝 · 极光霁蓝</option>
+            <option value="purple">● 紫 · 幽夜紫罗</option>
+          </optgroup>
+          <optgroup label="醇厚深沉深彩 (赤橙黄绿青蓝紫)">
+            <option value="red-dark">● 赤 · 沉稳红木 (深)</option>
+            <option value="orange-dark">● 橙 · 焦糖琥珀 (深)</option>
+            <option value="yellow-dark">● 黄 · 曜石麦金 (深)</option>
+            <option value="green-dark">● 绿 · 深林松柏 (深)</option>
+            <option value="cyan-dark">● 青 · 黛色青瓷 (深)</option>
+            <option value="blue-dark">● 蓝 · 深海群青 (深)</option>
+            <option value="purple-dark">● 紫 · 幽夜紫晶 (深)</option>
+          </optgroup>
+        </select>
+        <button class="btn btn-secondary" id="btnThemeSettings" style="height: 32px; padding: 0 10px; font-size: 12px; gap: 4px;" title="设置开机自启、系统环境变量及默认配色方案"></button>
+      </div>
+
+      <!-- 字体选择列表 (自动扫描本地 Fonts 目录) -->
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span id="fontLabel" style="font-size: 12px; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 4px;"></span>
+        <select class="select-box" id="fontSelect" style="height: 32px; font-size: 12px; padding: 0 8px; cursor: pointer; min-width: 140px; max-width: 175px;" title="切换界面字体 (自动扫描并读取 Fonts 目录字体)">
+          <option value="system-default">系统默认字体</option>
+        </select>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-pill" title="UI关闭仅隐藏至右下角系统托盘，彻底退出请在右下角图标右键选择【退出管理器】" style="border-color: rgba(59, 130, 246, 0.35); cursor: help;">
+          <span id="trayProtectPill" style="color:#60a5fa; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;"></span>
+        </div>
+        <div class="stat-pill">全部环境: <b id="statTotal">0</b></div>
+        <div class="stat-pill running">运行中: <b id="statRunning">0</b></div>
+        <div class="stat-pill">已分配端口: <b id="statPorts">0</b></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Body -->
+  <main>
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <button class="btn btn-primary" id="btnNewEnv"></button>
+        <button class="btn btn-success" id="btnLaunchSelected"></button>
+        <button class="btn btn-secondary" id="btnBatchSetGroup" title="将勾选的环境批量移至指定分组"></button>
+        <button class="btn btn-secondary" id="btnClearSelectedCache" style="color: #f59e0b;" title="批量清空所选环境的 Cookie 与本地缓存 (防误触二次确认)"></button>
+        <button class="btn btn-danger" id="btnStopAll"></button>
+        <button class="btn btn-secondary" id="btnRefresh"></button>
+      </div>
+      <div class="toolbar-right">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span id="groupFilterLabel" style="font-size: 12px; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 4px;"></span>
+          <select class="select-box" id="filterGroup" style="min-width: 160px; font-weight: 500;" title="选择显示指定分组的环境或查看全部配置">
+            <option value="">全部配置 (所有环境)</option>
+          </select>
+          <button class="btn btn-secondary" id="btnManageGroups" style="height: 34px; padding: 0 10px; font-size: 12px; gap: 4px;" title="新建与管理环境分组分类"></button>
+        </div>
+        <select class="select-box" id="filterStatus">
+          <option value="all">全部状态</option>
+          <option value="running">运行中</option>
+          <option value="stopped">已停止</option>
+        </select>
+        <input type="text" class="input-box" id="searchKeyword" placeholder="搜索环境名/备注..." style="width: 170px;">
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-card">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40px;"><input type="checkbox" id="checkAll"></th>
+              <th style="width: 170px;">环境名称</th>
+              <th style="width: 110px;">运行状态</th>
+              <th style="width: 100px;">远程端口</th>
+              <th style="width: 150px;">代理信息</th>
+              <th>硬件指纹摘要</th>
+              <th style="width: 440px; min-width: 440px; text-align: right;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="envTableBody">
+            <!-- Dynamic rows -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- 底部状态栏 / 标签栏 (Footer) -->
+  <footer class="app-footer">
+    <div class="footer-left">
+      <div id="btnCopyQQ" class="footer-tag" title="点击一键复制官方技术交流与BUG反馈 QQ 群号">
+        <span>💬 提交BUG Q群：<b style="color: var(--accent); letter-spacing: 0.5px;">328399769</b></span>
+        <span class="footer-badge" id="badgeCopyQQ">点击复制</span>
+      </div>
+    </div>
+    <div class="footer-center">
+      <span class="footer-slogan">🛡️ 商业级对抗内核 · 永久纯免费 · 100%完全开源 · 拒绝收费套路</span>
+    </div>
+    <div class="footer-right">
+      <div id="btnVersionCheck" class="footer-tag" title="点击检查更新或前往 GitHub Releases 页面">
+        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v2.1</b></span>
+        <span class="footer-version-badge" id="versionBadge">
+          <span class="status-dot green" id="versionDot"></span>
+          <span id="versionStatusText">检测更新中...</span>
+        </span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Modal: 系统设置与默认配色 (开机自启 / 环境变量 / 默认配色) -->
+  <div class="modal-overlay" id="themeModal">
+    <div class="modal-card" style="width: 780px; max-height: 90vh;">
+      <div class="modal-header">
+        <div class="modal-title" id="themeModalTitle" style="display: flex; align-items: center; gap: 8px;">
+          <span>系统设置与默认配色方案</span>
+        </div>
+        <div class="modal-close" id="themeModalClose">&times;</div>
+      </div>
+      <div class="modal-body" style="padding: 20px 24px; gap: 16px;">
+
+        <!-- 1. 开机启动设置 -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span id="titleAutoStart" style="display: inline-flex; align-items: center; gap: 6px;">开机自启动设置</span>
+              <span style="font-size: 11px; font-weight: normal; color: var(--text-muted);">(Windows 登录时自动启动管理器)</span>
+            </div>
+            <span class="status-badge" id="autoStartStatusBadge" style="font-size: 11px;">检测中...</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-main); cursor: pointer;">
+              <input type="checkbox" id="chkAutoStart" style="width: 16px; height: 16px; cursor: pointer;">
+              <span>开机随 Windows 系统自动启动 DT 指纹浏览器管理器</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-sub); margin-left: 24px; cursor: pointer;">
+              <input type="checkbox" id="chkAutoStartSilent" style="width: 15px; height: 15px; cursor: pointer;">
+              <span>静默开机自启 (仅最小化常驻至右下角系统任务托盘，不弹出窗口打扰屏幕)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 2. 全局环境变量与 CLI API -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span id="titlePathEnv" style="display: inline-flex; align-items: center; gap: 6px;">系统环境变量配置 (CLI / 自动化脚本 API 直调)</span>
+            </div>
+            <span class="status-badge" id="pathEnvStatusBadge" style="font-size: 11px;">检测中...</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-sub); line-height: 1.6; margin-top: 6px;">
+            一键将当前程序目录写入 Windows 用户 <code>PATH</code> 环境变量，配置后外部自动化脚本（Python / Playwright / Selenium / Node.js / CMD / 批处理）在<b>任意目录</b>均可直接调用 <code>dt-cli</code> 命令与 API：
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px; gap: 10px;">
+            <div style="background: var(--bg-input); border: 1px solid var(--border-sub); border-radius: 6px; padding: 6px 12px; font-family: Consolas, monospace; font-size: 12px; color: var(--accent); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              dt-cli start --name "环境名" --json
+            </div>
+            <button class="btn btn-primary" id="btnTogglePathEnv" style="height: 32px; padding: 0 14px; font-size: 12px; gap: 6px;">
+              添加到系统环境变量
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. 配色方案设置 -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;">
+          <!-- 管理器默认配色 -->
+          <div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+              <span id="titleManagerTheme" style="display: inline-flex; align-items: center; gap: 6px;">管理器界面默认配色</span>
+              <span style="font-size: 11px; font-weight: normal; color: var(--text-muted);">(启动管理器时默认生效)</span>
+            </div>
+            <div class="theme-palette-grid" id="managerThemePalette"></div>
+          </div>
+
+          <div style="height: 1px; background: var(--border); margin: 12px 0;"></div>
+
+          <!-- 浏览器默认配色 -->
+          <div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+              <span id="titleBrowserTheme" style="display: inline-flex; align-items: center; gap: 6px;">新建浏览器窗口默认配色</span>
+              <span style="font-size: 11px; font-weight: normal; color: var(--text-muted);">(启动任何浏览器窗口时默认继承)</span>
+            </div>
+            <div class="theme-palette-grid" id="browserThemePalette"></div>
+          </div>
+        </div>
+
+        <!-- 4. 界面统一字体设置 (精简系统中文防乱码 / 统一全局字体) -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 13px; font-weight: 700; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span id="titleFontUnified" style="display: inline-flex; align-items: center; gap: 6px;">界面统一字体 (精简系统中文防乱码 / 自定义字体)</span>
+            </div>
+            <span class="status-badge running" id="modalFontBadge" style="font-size: 11px;">检测中...</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-sub); line-height: 1.6; margin-top: 6px;">
+            程序启动时默认自动读取项目 <code>Fonts</code> 目录下的字体文件（支持 .ttf、.otf、.woff 等格式）。选择后<b>管理器与浏览器界面即时统一切换</b>，用户亦可随时放入新字体文件：
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px; gap: 10px;">
+            <select class="select-box" id="modalFontSelect" style="flex: 1; height: 34px; font-size: 13px;">
+              <option value="system-default">系统默认字体</option>
+            </select>
+            <button class="btn btn-secondary" id="btnRefreshFonts" style="height: 34px; padding: 0 12px; font-size: 12px; gap: 4px;" title="重新扫描 Fonts 目录字体">
+              刷新字体
+            </button>
+            <button class="btn btn-secondary" id="btnOpenFontsDir" style="height: 34px; padding: 0 12px; font-size: 12px; gap: 4px;" title="打开本地 Fonts 字体文件夹，可直接放入中文字体文件">
+              打开字体目录
+            </button>
+          </div>
+        </div>
+
+        <div style="background: var(--bg-sub); border: 1px solid var(--border-sub); border-radius: 6px; padding: 10px 14px; font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+          <b>设置生效说明：</b>开机自启将在下次系统启动时生效；环境变量添加后，新打开的终端或自动化程序可直接以 <code>dt-cli</code> 命令操作所有环境；默认配色与字体选择即刻全局保存并跨窗口生效。
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnThemeModalCancel">取消</button>
+        <button class="btn btn-primary" id="btnThemeModalSave">保存并应用设置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 删除/清理缓存二次确认 (防误触) -->
+  <div class="modal-overlay" id="clearCacheModal">
+    <div class="modal-card" style="width: 500px;">
+      <div class="modal-header" style="background: rgba(239, 68, 68, 0.1); border-bottom-color: rgba(239, 68, 68, 0.25);">
+        <div class="modal-title" id="clearCacheModalTitle" style="color: #ef4444; display: flex; align-items: center; gap: 8px;">
+          <span>危险操作：确认清空缓存目录？</span>
+        </div>
+        <div class="modal-close" id="clearCacheModalClose">&times;</div>
+      </div>
+      <div class="modal-body" style="padding: 24px; gap: 14px;">
+        <input type="hidden" id="clearCacheEnvId">
+        <p style="font-size: 14px; line-height: 1.6; color: var(--text-main);">
+          您正在清空环境【<b id="clearCacheEnvName" style="color: #ef4444;"></b>】的独立缓存目录！
+        </p>
+        <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 6px; padding: 12px; font-size: 12px; color: #ef4444; line-height: 1.7;">
+          • 将彻底删除该环境下的所有网站 Cookie、LocalStorage 网页存储、IndexedDB 及静态缓存数据。<br>
+          • 独立硬件指纹、环境名称、代理配置将完好保留。<br>
+          • <b>此操作一旦确认执行不可恢复！</b>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnClearCacheCancel">取消</button>
+        <button class="btn btn-danger" id="btnClearCacheConfirm">确认彻底清空</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 新建/编辑环境 -->
+  <div class="modal-overlay" id="envModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="modalTitle">新建环境配置</div>
+        <div class="modal-close" id="modalClose">&times;</div>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="editEnvId">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">环境名称 *</label>
+            <input type="text" class="form-input" id="formName" placeholder="例如：TK-欧美账号-01">
+          </div>
+          <div class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+              <label class="form-label" style="margin: 0;">所属分组 *</label>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnQuickAddGroup" style="height: 20px; font-size: 11px; padding: 0 6px;" title="快速创建新分组">新建分组</button>
+            </div>
+            <select class="form-input" id="formGroup" style="cursor: pointer;">
+              <!-- 动态载入已建分组 -->
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">打开网址 (默认本地指纹自测页)</label>
+            <input type="text" class="form-input" id="formUrl" value="dt://fingerprint-test" placeholder="dt://fingerprint-test 或 https://...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">浏览器语言 (默认 EN)</label>
+            <select class="form-input" id="formLang">
+              <option value="en-US">en-US (英语·美国)</option>
+              <option value="en-GB">en-GB (英语·英国)</option>
+              <option value="zh-CN">zh-CN (简体中文)</option>
+              <option value="ja-JP">ja-JP (日语)</option>
+              <option value="de-DE">de-DE (德语)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 远程端口与命令行 -->
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">远程调试端口 (CDP)</label>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <input type="checkbox" id="formPortEnabled" checked style="cursor: pointer;">
+              <label for="formPortEnabled" style="font-size: 12px; cursor: pointer;">开启端口</label>
+              <input type="number" class="form-input" id="formPort" style="flex: 1;" placeholder="端口 (如 9222)">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">自定义命令行参数</label>
+            <input type="text" class="form-input" id="formCustomArgs" placeholder="例如：--disable-web-security">
+          </div>
+        </div>
+
+        <!-- 代理设置 -->
+        <div style="background: var(--bg-sub); padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div id="titleProxySettings" style="font-size: 12px; font-weight: 600; color: #f59e0b; display: inline-flex; align-items: center; gap: 6px;">代理设置 (HTTP / SOCKS5)</div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <input type="checkbox" id="formProxyEnabled">
+              <label for="formProxyEnabled" style="font-size: 12px; cursor: pointer;">启用代理</label>
+            </div>
+          </div>
+
+          <!-- 4 种格式快捷识别与连通性测试 -->
+          <div style="background: var(--bg-hover); border: 1px dashed var(--accent); border-radius: 6px; padding: 10px; margin-bottom: 12px;">
+            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 6px; font-weight: 500;">
+              快速粘贴代理字符串 (自动识别 4 种常见格式):
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" class="form-input" id="formProxyQuickPaste" style="flex: 1; font-size: 12px;" placeholder="粘贴 如: 服务器:端口:账号:密码 或 服务器:端口@账号:密码 或 账号:密码:服务器:端口 或 账号:密码@服务器:端口">
+              <button type="button" class="btn btn-secondary btn-sm" id="btnProxyAutoParse" style="height: 34px;">识别填入</button>
+              <button type="button" class="btn btn-primary btn-sm" id="btnProxyTest" style="height: 34px;">测试连接</button>
+            </div>
+            <div id="proxyTestResult" style="font-size: 11px; margin-top: 6px; display: none;"></div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group" style="max-width: 120px;">
+              <label class="form-label">协议类型</label>
+              <select class="form-input" id="formProxyType">
+                <option value="socks5">SOCKS5</option>
+                <option value="http">HTTP</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">主机 IP/域名</label>
+              <input type="text" class="form-input" id="formProxyHost" placeholder="127.0.0.1">
+            </div>
+            <div class="form-group" style="max-width: 100px;">
+              <label class="form-label">端口</label>
+              <input type="text" class="form-input" id="formProxyPort" placeholder="7890">
+            </div>
+          </div>
+          <div class="form-row" style="margin-top: 10px;">
+            <div class="form-group">
+              <label class="form-label">用户名 (可选)</label>
+              <input type="text" class="form-input" id="formProxyUser" placeholder="无密码请留空">
+            </div>
+            <div class="form-group">
+              <label class="form-label">密码 (可选)</label>
+              <input type="password" class="form-input" id="formProxyPass" placeholder="无密码请留空">
+            </div>
+            <div class="form-group">
+              <label class="form-label">代理范围</label>
+              <select class="form-input" id="formProxyScope">
+                <option value="all">全都走代理 (推荐)</option>
+                <option value="rules">指定 URL 规则走代理</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" id="proxyRulesRow" style="margin-top: 10px; display: none;">
+            <label class="form-label">指定 URL 规则 (以分号分隔)</label>
+            <input type="text" class="form-input" id="formProxyRules" placeholder="例如：*.browserscan.net;*google.com">
+          </div>
+        </div>
+
+        <!-- Chrome 扩展插件设置 -->
+        <div style="background: var(--bg-sub); padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div id="titleExtensions" style="font-size: 12px; font-weight: 600; color: #a78bfa; display: inline-flex; align-items: center; gap: 6px;">加载 Chrome 扩展插件 (支持多个)</div>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnFillTestExtension" style="height: 24px; font-size: 11px;">填入测试插件 (Buster)</button>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="font-size: 11px;">插件解压目录路径 (多个插件请以分号 ; 或换行分隔):</label>
+            <textarea class="form-input" id="formExtensions" style="height: 52px; padding: 6px 10px; resize: vertical; font-family: monospace; font-size: 12px;" placeholder="例如：chrome;D:\other-extension (支持相对项目根目录或绝对路径)"></textarea>
+          </div>
+        </div>
+
+        <!-- 硬件指纹预览与一键随机 -->
+        <div class="fp-preview-card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div id="titleFp" style="font-size: 12px; font-weight: 600; color: #38bdf8; display: inline-flex; align-items: center; gap: 6px;">硬件与环境指纹</div>
+            <button type="button" class="btn btn-secondary btn-sm" id="btnModalRandomFp">随机生成新指纹</button>
+          </div>
+          <div class="fp-meta-grid">
+            <div class="fp-meta-item">
+              <span>CPU 核心数</span>
+              <b id="prevCores">-</b>
+            </div>
+            <div class="fp-meta-item">
+              <span>设备内存 (RAM)</span>
+              <b id="prevMemory">-</b>
+            </div>
+            <div class="fp-meta-item">
+              <span>屏幕分辨率</span>
+              <b id="prevRes">-</b>
+            </div>
+            <div class="fp-meta-item">
+              <span>地理时区</span>
+              <b id="prevTimezone">America/New_York</b>
+            </div>
+            <div class="fp-meta-item" style="grid-column: span 2;">
+              <span>WebGL 渲染器</span>
+              <b id="prevGpu" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">-</b>
+            </div>
+            <div class="fp-meta-item">
+              <span>噪点算法</span>
+              <b id="prevNoise">Canvas+Audio+Rects</b>
+            </div>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px;">
+            <label style="font-size: 12px; color: var(--text-sub); white-space: nowrap; font-weight: 500;">时区选项:</label>
+            <select class="form-input" id="formTimezone" style="flex: 1; padding: 4px 10px; height: 32px; font-size: 12px;">
+              <option value="America/New_York">America/New_York (美国/纽约 · 默认随机时区)</option>
+              <option value="America/Los_Angeles">America/Los_Angeles (美国/洛杉矶 · 太平洋时间)</option>
+              <option value="Asia/Shanghai">Asia/Shanghai (中国/上海 · 北京时间)</option>
+            </select>
+            <span style="font-size: 11px; color: var(--text-muted); white-space: nowrap;">* 任何情况下随机时区仅为 America/New_York</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">备注说明</label>
+          <input type="text" class="form-input" id="formNotes" placeholder="填写账号或用途备注...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnModalCancel">取消</button>
+        <button class="btn btn-primary" id="btnModalSave">保存配置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 分组管理 (modalGroupManager) -->
+  <div class="modal-overlay" id="modalGroupManager">
+    <div class="modal-card" style="width: 540px;">
+      <div class="modal-header">
+        <div class="modal-title" id="titleGroupManager" style="display: flex; align-items: center; gap: 8px;">
+          <span>环境分组与分类管理</span>
+        </div>
+        <div class="modal-close" id="modalGroupManagerClose">&times;</div>
+      </div>
+      <div class="modal-body" style="gap: 14px;">
+        <div style="display: flex; gap: 8px;">
+          <input type="text" class="form-input" id="inputNewGroupName" placeholder="输入新分组名称 (例如：跨境电商、欧美社媒、测试分组...)" style="flex: 1;">
+          <button class="btn btn-primary" id="btnConfirmAddGroup" style="white-space: nowrap;">添加分组</button>
+        </div>
+
+        <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-top: 4px;">当前已建分组列表：</div>
+        <div id="groupManagerList" style="display: flex; flex-direction: column; gap: 8px; max-height: 300px; overflow-y: auto; padding-right: 4px;">
+          <!-- 动态载入各分组卡片 -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnGroupManagerDone">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 批量移至分组 (modalBatchGroup) -->
+  <div class="modal-overlay" id="modalBatchGroup">
+    <div class="modal-card" style="width: 440px;">
+      <div class="modal-header">
+        <div class="modal-title" id="titleBatchGroup" style="display: flex; align-items: center; gap: 8px;">
+          <span>批量修改所属分组</span>
+        </div>
+        <div class="modal-close" id="modalBatchGroupClose">&times;</div>
+      </div>
+      <div class="modal-body" style="gap: 12px;">
+        <div style="font-size: 13px; color: var(--text-main);" id="batchGroupCountText">已勾选 0 个环境，请选择目标分组：</div>
+        <div class="form-group">
+          <label class="form-label">目标归属分组 *</label>
+          <select class="form-input" id="selectBatchTargetGroup" style="cursor: pointer;"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnBatchGroupCancel">取消</button>
+        <button class="btn btn-primary" id="btnBatchGroupConfirm">确认移动</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toastBox">提示信息</div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    const { getIconSvg } = require('../../shared/icon-loader');
+
+    function icon(name, opts = {}) {
+      return getIconSvg(name, opts);
+    }
+
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function initStaticIcons() {
+      const logoBadge = document.getElementById('logoBadge');
+      if (logoBadge) logoBadge.innerHTML = icon('bolt', { size: 16, color: '#38bdf8' });
+
+      const themeLabel = document.getElementById('themeLabel');
+      if (themeLabel) themeLabel.innerHTML = `${icon('palette', { size: 13 })} 配色:`;
+
+      const trayProtectPill = document.getElementById('trayProtectPill');
+      if (trayProtectPill) trayProtectPill.innerHTML = `${icon('shield', { size: 13, color: '#60a5fa' })} 任务托盘常驻保护`;
+
+      const fontLabel = document.getElementById('fontLabel');
+      if (fontLabel) fontLabel.innerHTML = `${icon('font', { size: 13 })} 字体:`;
+
+      const groupFilterLabel = document.getElementById('groupFilterLabel');
+      if (groupFilterLabel) groupFilterLabel.innerHTML = `${icon('folder', { size: 13 })} 分类:`;
+
+      const btnThemeSettings = document.getElementById('btnThemeSettings');
+      if (btnThemeSettings) btnThemeSettings.innerHTML = `${icon('settings', { size: 13 })} 系统设置`;
+
+      const btnNewEnv = document.getElementById('btnNewEnv');
+      if (btnNewEnv) btnNewEnv.innerHTML = `${icon('plus', { size: 13 })} 新建环境`;
+
+      const btnLaunchSelected = document.getElementById('btnLaunchSelected');
+      if (btnLaunchSelected) btnLaunchSelected.innerHTML = `${icon('play', { size: 13 })} 启动所选`;
+
+      const btnBatchSetGroup = document.getElementById('btnBatchSetGroup');
+      if (btnBatchSetGroup) btnBatchSetGroup.innerHTML = `${icon('folder', { size: 13 })} 批量移至分组`;
+
+      const btnClearSelectedCache = document.getElementById('btnClearSelectedCache');
+      if (btnClearSelectedCache) btnClearSelectedCache.innerHTML = `${icon('broom', { size: 13, color: '#f59e0b' })} 清理所选缓存`;
+
+      const btnStopAll = document.getElementById('btnStopAll');
+      if (btnStopAll) btnStopAll.innerHTML = `${icon('stop', { size: 13 })} 一键关闭全部`;
+
+      const btnRefresh = document.getElementById('btnRefresh');
+      if (btnRefresh) btnRefresh.innerHTML = `${icon('refresh', { size: 13 })} 刷新`;
+
+      const btnManageGroups = document.getElementById('btnManageGroups');
+      if (btnManageGroups) btnManageGroups.innerHTML = `${icon('folder', { size: 13 })} 分组管理`;
+
+      const themeModalTitle = document.getElementById('themeModalTitle');
+      if (themeModalTitle) themeModalTitle.innerHTML = `${icon('settings', { size: 15 })} <span>系统设置与默认配色方案</span>`;
+
+      const titleAutoStart = document.getElementById('titleAutoStart');
+      if (titleAutoStart) titleAutoStart.innerHTML = `${icon('rocket', { size: 14, color: '#38bdf8' })} 开机自启动设置`;
+
+      const titlePathEnv = document.getElementById('titlePathEnv');
+      if (titlePathEnv) titlePathEnv.innerHTML = `${icon('globe', { size: 14, color: '#38bdf8' })} 系统环境变量配置 (CLI / 自动化脚本 API 直调)`;
+
+      const titleManagerTheme = document.getElementById('titleManagerTheme');
+      if (titleManagerTheme) titleManagerTheme.innerHTML = `${icon('cpu', { size: 14, color: '#a78bfa' })} 管理器界面默认配色`;
+
+      const titleBrowserTheme = document.getElementById('titleBrowserTheme');
+      if (titleBrowserTheme) titleBrowserTheme.innerHTML = `${icon('globe', { size: 14, color: '#a78bfa' })} 新建浏览器窗口默认配色`;
+
+      const titleFontUnified = document.getElementById('titleFontUnified');
+      if (titleFontUnified) titleFontUnified.innerHTML = `${icon('font', { size: 14, color: '#f59e0b' })} 界面统一字体 (精简系统中文防乱码 / 自定义字体)`;
+
+      const btnRefreshFonts = document.getElementById('btnRefreshFonts');
+      if (btnRefreshFonts) btnRefreshFonts.innerHTML = `${icon('refresh', { size: 13 })} 刷新字体`;
+
+      const btnOpenFontsDir = document.getElementById('btnOpenFontsDir');
+      if (btnOpenFontsDir) btnOpenFontsDir.innerHTML = `${icon('folder', { size: 13 })} 打开字体目录`;
+
+      const btnThemeModalSave = document.getElementById('btnThemeModalSave');
+      if (btnThemeModalSave) btnThemeModalSave.innerHTML = `${icon('save', { size: 13 })} 保存并应用设置`;
+
+      const clearCacheModalTitle = document.getElementById('clearCacheModalTitle');
+      if (clearCacheModalTitle) clearCacheModalTitle.innerHTML = `${icon('alert-triangle', { size: 15, color: '#ef4444' })} <span>危险操作：确认清空缓存目录？</span>`;
+
+      const btnClearCacheConfirm = document.getElementById('btnClearCacheConfirm');
+      if (btnClearCacheConfirm) btnClearCacheConfirm.innerHTML = `${icon('broom', { size: 13, color: '#fff' })} 确认彻底清空`;
+
+      const btnQuickAddGroup = document.getElementById('btnQuickAddGroup');
+      if (btnQuickAddGroup) btnQuickAddGroup.innerHTML = `${icon('plus', { size: 11 })} 新建分组`;
+
+      const titleProxySettings = document.getElementById('titleProxySettings');
+      if (titleProxySettings) titleProxySettings.innerHTML = `${icon('globe', { size: 13, color: '#f59e0b' })} 代理设置 (HTTP / SOCKS5)`;
+
+      const btnProxyTest = document.getElementById('btnProxyTest');
+      if (btnProxyTest) btnProxyTest.innerHTML = `${icon('search', { size: 12 })} 测试连接`;
+
+      const titleExtensions = document.getElementById('titleExtensions');
+      if (titleExtensions) titleExtensions.innerHTML = `${icon('puzzle', { size: 13, color: '#a78bfa' })} 加载 Chrome 扩展插件 (支持多个)`;
+
+      const titleFp = document.getElementById('titleFp');
+      if (titleFp) titleFp.innerHTML = `${icon('cpu', { size: 13, color: '#38bdf8' })} 硬件与环境指纹`;
+
+      const btnModalRandomFp = document.getElementById('btnModalRandomFp');
+      if (btnModalRandomFp) btnModalRandomFp.innerHTML = `${icon('dice', { size: 12 })} 随机生成新指纹`;
+
+      const titleGroupManager = document.getElementById('titleGroupManager');
+      if (titleGroupManager) titleGroupManager.innerHTML = `${icon('folder', { size: 14, color: '#38bdf8' })} <span>环境分组与分类管理</span>`;
+
+      const btnConfirmAddGroup = document.getElementById('btnConfirmAddGroup');
+      if (btnConfirmAddGroup) btnConfirmAddGroup.innerHTML = `${icon('plus', { size: 12 })} 添加分组`;
+
+      const titleBatchGroup = document.getElementById('titleBatchGroup');
+      if (titleBatchGroup) titleBatchGroup.innerHTML = `${icon('folder', { size: 14, color: '#38bdf8' })} <span>批量修改所属分组</span>`;
+    }
+
+    let allEnvironments = [];
+    let runningStatus = {};
+    let selectedIds = new Set();
+    let modalFpData = null;
+    let allGroups = ['默认分组'];
+
+    function showToast(msg) {
+      const box = document.getElementById('toastBox');
+      box.textContent = msg;
+      box.className = 'toast show';
+      setTimeout(() => { box.className = 'toast'; }, 2600);
+    }
+
+    async function refreshGroups() {
+      try {
+        const groups = await ipcRenderer.invoke('get-groups');
+        if (Array.isArray(groups) && groups.length > 0) {
+          allGroups = groups;
+        }
+      } catch (err) {
+        console.error('Failed to get groups:', err);
+      }
+    }
+
+    async function loadData() {
+      initStaticIcons();
+      await refreshGroups();
+      const state = await ipcRenderer.invoke('get-state');
+      allEnvironments = state.environments || [];
+      runningStatus = state.running || {};
+      updateGroupsDropdown();
+      renderTable();
+      updateStats();
+    }
+
+    function updateStats() {
+      document.getElementById('statTotal').textContent = allEnvironments.length;
+      const runningCount = Object.keys(runningStatus).length;
+      document.getElementById('statRunning').textContent = runningCount;
+      const portCount = allEnvironments.filter(e => e.remotePortEnabled && e.remotePort).length;
+      document.getElementById('statPorts').textContent = portCount;
+    }
+
+    function updateGroupsDropdown() {
+      // 1. 顶部栏分类选择下拉框 (包含"全部配置"与各分类配置数量)
+      const selectFilter = document.getElementById('filterGroup');
+      const savedFilter = localStorage.getItem('dt_filter_group') || '';
+      const currentFilter = selectFilter.value || savedFilter;
+
+      selectFilter.innerHTML = `<option value="">全部配置 (所有环境 · ${allEnvironments.length})</option>`;
+      allGroups.forEach(g => {
+        const count = allEnvironments.filter(e => (e.group || '默认分组') === g).length;
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = `${g} (${count})`;
+        selectFilter.appendChild(opt);
+      });
+      if (currentFilter && allGroups.includes(currentFilter)) {
+        selectFilter.value = currentFilter;
+      } else {
+        selectFilter.value = '';
+      }
+
+      // 2. 新建/编辑环境弹窗中的所属分组下拉框
+      const formSelect = document.getElementById('formGroup');
+      const currentFormVal = formSelect.value || '默认分组';
+      formSelect.innerHTML = '';
+      allGroups.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = g;
+        formSelect.appendChild(opt);
+      });
+      if (allGroups.includes(currentFormVal)) {
+        formSelect.value = currentFormVal;
+      } else if (allGroups.length > 0) {
+        formSelect.value = allGroups[0];
+      }
+
+      // 3. 批量移至分组弹窗中的下拉框
+      const batchSelect = document.getElementById('selectBatchTargetGroup');
+      const currentBatchVal = batchSelect.value || '默认分组';
+      batchSelect.innerHTML = '';
+      allGroups.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = g;
+        batchSelect.appendChild(opt);
+      });
+      if (allGroups.includes(currentBatchVal)) {
+        batchSelect.value = currentBatchVal;
+      }
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('envTableBody');
+      const keyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
+      const filterGroup = document.getElementById('filterGroup').value;
+      const filterStatus = document.getElementById('filterStatus').value;
+
+      tbody.innerHTML = '';
+
+      const filtered = allEnvironments.filter(env => {
+        if (keyword && !env.name.toLowerCase().includes(keyword) && !(env.notes && env.notes.toLowerCase().includes(keyword))) {
+          return false;
+        }
+        if (filterGroup && (env.group || '默认分组') !== filterGroup) return false;
+        const isRunning = Boolean(runningStatus[env.id]);
+        if (filterStatus === 'running' && !isRunning) return false;
+        if (filterStatus === 'stopped' && isRunning) return false;
+        return true;
+      });
+
+      filtered.forEach(env => {
+        const tr = document.createElement('tr');
+        const isRunning = Boolean(runningStatus[env.id]);
+        const runInfo = runningStatus[env.id];
+
+        // 复选框
+        const tdCheck = document.createElement('td');
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = selectedIds.has(env.id);
+        chk.addEventListener('change', () => {
+          chk.checked ? selectedIds.add(env.id) : selectedIds.delete(env.id);
+        });
+        tdCheck.appendChild(chk);
+        tr.appendChild(tdCheck);
+
+        // 环境名称与所属分组 (带分类徽章快速筛选)
+        const tdName = document.createElement('td');
+        const envGroup = env.group || '默认分组';
+        const safeName = escapeHtml(env.name);
+        const safeNotes = escapeHtml(env.notes || '');
+        const safeGroup = escapeHtml(envGroup);
+        tdName.innerHTML = `
+          <div style="font-weight: 600; color: var(--text-main); font-size: 13px;">${safeName}</div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 5px;">
+            <span class="tag group-filter-badge" style="cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 3px;" title="点击切换至只看该分类">${icon('folder', { size: 11 })} ${safeGroup}</span>
+            ${safeNotes ? `<span>${safeNotes}</span>` : ''}
+          </div>
+        `;
+        const groupBadge = tdName.querySelector('.group-filter-badge');
+        if (groupBadge) {
+          groupBadge.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('filterGroup').value = envGroup;
+            localStorage.setItem('dt_filter_group', envGroup);
+            renderTable();
+          });
+        }
+        tr.appendChild(tdName);
+
+        // 运行状态
+        const tdStatus = document.createElement('td');
+        if (isRunning) {
+          tdStatus.innerHTML = `
+            <div class="status-badge running">
+              <div class="pulse-dot"></div>
+              <span>运行中</span>
+            </div>
+          `;
+        } else {
+          tdStatus.innerHTML = `
+            <div class="status-badge stopped">
+              <span>已停止</span>
+            </div>
+          `;
+        }
+        tr.appendChild(tdStatus);
+
+        // 远程端口
+        const tdPort = document.createElement('td');
+        if (env.remotePortEnabled && env.remotePort) {
+          tdPort.innerHTML = `<span class="tag port">CDP: ${escapeHtml(env.remotePort)}</span>`;
+        } else {
+          tdPort.innerHTML = `<span style="color: var(--text-muted); opacity: 0.8;">未开启</span>`;
+        }
+        tr.appendChild(tdPort);
+
+        // 代理信息
+        const tdProxy = document.createElement('td');
+        if (env.proxy && env.proxy.enabled && env.proxy.host) {
+          const type = (env.proxy.type || 'http').toUpperCase();
+          const scope = env.proxy.scope === 'rules' ? '指定URL' : '全局';
+          const safeHost = escapeHtml(env.proxy.host);
+          const safePort = escapeHtml(env.proxy.port);
+          tdProxy.innerHTML = `
+            <span class="tag proxy">${type}</span>
+            <span style="font-size: 11px; margin-left: 4px; color: var(--text-sub);">${safeHost}:${safePort} (${scope})</span>
+          `;
+        } else {
+          tdProxy.innerHTML = `<span class="tag direct">直连网络</span>`;
+        }
+        tr.appendChild(tdProxy);
+
+        // 硬件指纹摘要
+        const tdFp = document.createElement('td');
+        const fp = env.fp || {};
+        const cores = fp.navigator?.hardwareConcurrency || '?';
+        const mem = fp.navigator?.deviceMemory || '?';
+        const rawGpu = fp.webgl?.renderer ? fp.webgl.renderer.split('(')[1]?.split(')')[0] || fp.webgl.renderer.slice(0, 24) : '默认显卡';
+        const gpu = escapeHtml(rawGpu);
+        const res = fp.screen ? `${fp.screen.width}x${fp.screen.height}` : '?';
+        const lang = escapeHtml(env.language || 'en-US');
+
+        tdFp.innerHTML = `
+          <div style="font-size: 12px; color: var(--text-main);">
+            <b style="color: var(--accent);">${cores}核/${mem}G</b> · <span style="color: var(--text-sub);">${gpu}</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+            分辨率: ${res} | 时区: <b style="color: var(--accent);">${escapeHtml(env.timezone || fp.timezone || 'America/New_York')}</b> | 语言: <b style="color: var(--accent);">${lang}</b>
+          </div>
+        `;
+        tr.appendChild(tdFp);
+
+        // 操作组
+        const tdActions = document.createElement('td');
+        tdActions.style.textAlign = 'right';
+        tdActions.style.whiteSpace = 'nowrap';
+        tdActions.style.minWidth = '440px';
+        tdActions.style.width = '440px';
+
+        const actionGroup = document.createElement('div');
+        actionGroup.className = 'action-group';
+        actionGroup.style.justifyContent = 'flex-end';
+        actionGroup.style.display = 'inline-flex';
+        actionGroup.style.whiteSpace = 'nowrap';
+        actionGroup.style.flexWrap = 'nowrap';
+
+        // 启动/停止按钮
+        const btnToggle = document.createElement('button');
+        if (isRunning) {
+          btnToggle.className = 'btn btn-danger btn-sm';
+          btnToggle.innerHTML = `${icon('stop', { size: 12 })} 停止`;
+          btnToggle.title = '停止该环境浏览器';
+          btnToggle.addEventListener('click', async () => {
+            await ipcRenderer.invoke('stop-env', env.id);
+            showToast(`已停止 "${env.name}"`);
+          });
+        } else {
+          btnToggle.className = 'btn btn-success btn-sm';
+          btnToggle.innerHTML = `${icon('play', { size: 12 })} 启动`;
+          btnToggle.title = '启动独立指纹窗口';
+          btnToggle.addEventListener('click', async () => {
+            const res = await ipcRenderer.invoke('launch-env', env.id);
+            showToast(res.message);
+          });
+        }
+        actionGroup.appendChild(btnToggle);
+
+        // 随机指纹 (支持热生效)
+        const btnRandom = document.createElement('button');
+        btnRandom.className = 'btn btn-secondary btn-sm';
+        btnRandom.title = '一键随机重置指纹 (运行中即刻热生效并自动刷新页面)';
+        btnRandom.innerHTML = `${icon('dice', { size: 12 })} 改指纹`;
+        btnRandom.addEventListener('click', async () => {
+          await ipcRenderer.invoke('random-fp', env.id);
+          showToast(`已重置 "${env.name}" 的硬件指纹！${isRunning ? '(已实时热同步到运行窗口)' : ''}`);
+        });
+        actionGroup.appendChild(btnRandom);
+
+        // 编辑
+        const btnEdit = document.createElement('button');
+        btnEdit.className = 'btn btn-secondary btn-sm';
+        btnEdit.innerHTML = `${icon('edit', { size: 12 })} 编辑`;
+        btnEdit.addEventListener('click', () => openEditModal(env));
+        actionGroup.appendChild(btnEdit);
+
+        // 复制
+        const btnClone = document.createElement('button');
+        btnClone.className = 'btn btn-secondary btn-sm';
+        btnClone.innerHTML = `${icon('copy', { size: 12 })} 复制`;
+        btnClone.addEventListener('click', async () => {
+          await ipcRenderer.invoke('clone-env', { id: env.id });
+          showToast(`已克隆并生成独立新指纹！`);
+        });
+        actionGroup.appendChild(btnClone);
+
+        // 打开缓存目录
+        const btnDir = document.createElement('button');
+        btnDir.className = 'btn btn-secondary btn-sm';
+        btnDir.title = '在资源管理器中打开该环境的独立缓存目录';
+        btnDir.innerHTML = `${icon('folder', { size: 12 })} 目录`;
+        btnDir.addEventListener('click', () => {
+          ipcRenderer.invoke('open-path', env.userDataDir);
+        });
+        actionGroup.appendChild(btnDir);
+
+        // 删除缓存目录 (带防误触二次确认)
+        const btnDelCache = document.createElement('button');
+        btnDelCache.className = 'btn btn-secondary btn-sm';
+        btnDelCache.style.color = '#f59e0b';
+        btnDelCache.innerHTML = `${icon('broom', { size: 12, color: '#f59e0b' })} 删缓存`;
+        btnDelCache.title = '彻底清空该环境下的 Cookie 与本地缓存数据 (防误触确认)';
+        btnDelCache.addEventListener('click', () => {
+          if (isRunning) {
+            alert(`环境 "${env.name}" 当前正在运行中，清理缓存前请先停止该环境！`);
+            return;
+          }
+          openClearCacheModal(env.id, env.name);
+        });
+        actionGroup.appendChild(btnDelCache);
+
+        // 删除 (运行中禁用，避免误删导致崩溃)
+        const btnDel = document.createElement('button');
+        btnDel.className = 'btn btn-secondary btn-sm';
+        btnDel.style.color = '#ef4444';
+        btnDel.innerHTML = icon('trash', { size: 13, color: '#ef4444' });
+        if (isRunning) {
+          btnDel.disabled = true;
+          btnDel.style.opacity = '0.35';
+          btnDel.style.cursor = 'not-allowed';
+          btnDel.title = '当前环境正在运行中，不可删除 (请先停止)';
+        } else {
+          btnDel.disabled = false;
+          btnDel.title = '删除环境';
+          btnDel.addEventListener('click', async () => {
+            if (confirm(`确定要删除环境 "${env.name}" 吗？`)) {
+              await ipcRenderer.invoke('delete-env', env.id);
+              showToast(`已删除环境`);
+            }
+          });
+        }
+        actionGroup.appendChild(btnDel);
+
+        tdActions.appendChild(actionGroup);
+        tr.appendChild(tdActions);
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Modal 处理逻辑
+    const modal = document.getElementById('envModal');
+    const formProxyScope = document.getElementById('formProxyScope');
+    const proxyRulesRow = document.getElementById('proxyRulesRow');
+
+    formProxyScope.addEventListener('change', () => {
+      proxyRulesRow.style.display = formProxyScope.value === 'rules' ? 'block' : 'none';
+    });
+
+    document.getElementById('modalClose').addEventListener('click', () => modal.classList.remove('show'));
+    document.getElementById('btnModalCancel').addEventListener('click', () => modal.classList.remove('show'));
+
+    async function openEditModal(env = null) {
+      try {
+        await refreshGroups();
+        updateGroupsDropdown();
+        document.getElementById('modalTitle').textContent = env ? `编辑环境: ${env.name}` : '新建指纹环境配置';
+        document.getElementById('editEnvId').value = env ? env.id : '';
+
+        // 自动计算不重复的默认名称
+        let defaultName = `环境 ${allEnvironments.length + 1}`;
+        let counter = allEnvironments.length + 1;
+        while (allEnvironments.some(e => e.name === defaultName)) {
+          counter++;
+          defaultName = `环境 ${counter}`;
+        }
+        document.getElementById('formName').value = env ? env.name : defaultName;
+
+        const formGroupSelect = document.getElementById('formGroup');
+        const targetGroup = env ? (env.group || '默认分组') : '默认分组';
+        if (!allGroups.includes(targetGroup)) {
+          const opt = document.createElement('option');
+          opt.value = targetGroup;
+          opt.textContent = targetGroup;
+          formGroupSelect.appendChild(opt);
+        }
+        formGroupSelect.value = targetGroup;
+        document.getElementById('formUrl').value = env ? env.url : 'dt://fingerprint-test';
+        document.getElementById('formLang').value = env ? env.language || 'en-US' : 'en-US';
+        const tz = env ? (env.timezone || env.fp?.timezone || 'America/New_York') : 'America/New_York';
+        const tzSelect = document.getElementById('formTimezone');
+        if (!Array.from(tzSelect.options).some(o => o.value === tz)) {
+          const opt = document.createElement('option');
+          opt.value = tz;
+          opt.textContent = `${tz} (自定义时区)`;
+          tzSelect.appendChild(opt);
+        }
+        tzSelect.value = tz;
+        document.getElementById('formPortEnabled').checked = env ? Boolean(env.remotePortEnabled) : true;
+
+        if (env) {
+          document.getElementById('formPort').value = env.remotePort || '';
+        } else {
+          // 新建环境：调用底层自动分配真正未被占用、独立的远程端口 (带快速超时兜底，杜绝卡顿)
+          try {
+            const nextPort = await Promise.race([
+              ipcRenderer.invoke('get-next-port'),
+              new Promise(r => setTimeout(() => r(null), 800))
+            ]);
+            document.getElementById('formPort').value = nextPort || (9222 + allEnvironments.length);
+          } catch (_) {
+            document.getElementById('formPort').value = 9222 + allEnvironments.length;
+          }
+        }
+        document.getElementById('formCustomArgs').value = env ? env.customArgs || '' : '';
+        document.getElementById('formNotes').value = env ? env.notes || '' : '';
+
+        // 代理
+        const proxy = env?.proxy || {};
+        document.getElementById('formProxyEnabled').checked = Boolean(proxy.enabled);
+        document.getElementById('formProxyType').value = proxy.type || 'socks5';
+        document.getElementById('formProxyHost').value = proxy.host || '';
+        document.getElementById('formProxyPort').value = proxy.port || '';
+        document.getElementById('formProxyUser').value = proxy.username || '';
+        document.getElementById('formProxyPass').value = proxy.password || '';
+        document.getElementById('formProxyScope').value = proxy.scope || 'all';
+        document.getElementById('formProxyRules').value = proxy.rules || '';
+        proxyRulesRow.style.display = (proxy.scope === 'rules') ? 'block' : 'none';
+
+        // 扩展插件
+        document.getElementById('formExtensions').value = env ? (env.extensions || '') : '';
+
+        // 快速粘贴框与测试状态重置
+        document.getElementById('formProxyQuickPaste').value = proxy.rawString || (proxy.host ? `${proxy.host}:${proxy.port}${proxy.username ? `:${proxy.username}:${proxy.password}` : ''}` : '');
+        const testResEl = document.getElementById('proxyTestResult');
+        testResEl.style.display = 'none';
+        testResEl.textContent = '';
+
+        // 指纹
+        modalFpData = env?.fp || null;
+        updateFpPreview();
+
+        modal.classList.add('show');
+      } catch (err) {
+        console.error('打开环境配置弹窗失败:', err);
+        alert('打开配置弹窗异常: ' + (err.message || err));
+      }
+    }
+
+    function updateFpPreview() {
+      const tzVal = (modalFpData && modalFpData.timezone) || document.getElementById('formTimezone')?.value || 'America/New_York';
+      const prevTzEl = document.getElementById('prevTimezone');
+      if (prevTzEl) prevTzEl.textContent = tzVal;
+
+      if (modalFpData) {
+        document.getElementById('prevCores').textContent = `${modalFpData.navigator?.hardwareConcurrency || '?'} 核心`;
+        document.getElementById('prevMemory').textContent = `${modalFpData.navigator?.deviceMemory || '?'} GB`;
+        document.getElementById('prevRes').textContent = modalFpData.screen ? `${modalFpData.screen.width}x${modalFpData.screen.height}` : '-';
+        document.getElementById('prevGpu').textContent = modalFpData.webgl?.renderer || '-';
+      } else {
+        document.getElementById('prevCores').textContent = '自动随机';
+        document.getElementById('prevMemory').textContent = '自动随机';
+        document.getElementById('prevRes').textContent = '自动随机';
+        document.getElementById('prevGpu').textContent = '自动随机生成';
+      }
+    }
+
+    document.getElementById('btnModalRandomFp').addEventListener('click', async () => {
+      try {
+        const lang = document.getElementById('formLang').value;
+        const tz = document.getElementById('formTimezone').value || 'America/New_York';
+        modalFpData = await ipcRenderer.invoke('get-random-fp', { language: lang, timezone: tz });
+        updateFpPreview();
+        showToast('已随机生成全新硬件指纹！');
+      } catch (err) {
+        console.error('随机生成指纹失败:', err);
+        alert('随机指纹生成失败: ' + err.message);
+      }
+    });
+
+    document.getElementById('formTimezone').addEventListener('change', () => {
+      const selectedTz = document.getElementById('formTimezone').value;
+      if (modalFpData) {
+        modalFpData.timezone = selectedTz;
+      }
+      updateFpPreview();
+    });
+
+    // 自动识别代理格式
+    async function doAutoParseProxy() {
+      const raw = document.getElementById('formProxyQuickPaste').value.trim();
+      if (!raw) return;
+      const parsed = await ipcRenderer.invoke('parse-proxy', raw);
+      if (parsed) {
+        document.getElementById('formProxyEnabled').checked = true;
+        document.getElementById('formProxyType').value = parsed.type;
+        document.getElementById('formProxyHost').value = parsed.host;
+        document.getElementById('formProxyPort').value = parsed.port;
+        document.getElementById('formProxyUser').value = parsed.username || '';
+        document.getElementById('formProxyPass').value = parsed.password || '';
+        showToast(`已成功识别代理: ${parsed.type.toUpperCase()}://${parsed.host}:${parsed.port}`);
+      } else {
+        alert('无法识别该代理格式，请参考格式说明！');
+      }
+    }
+
+    document.getElementById('btnProxyAutoParse').addEventListener('click', doAutoParseProxy);
+    document.getElementById('formProxyQuickPaste').addEventListener('change', doAutoParseProxy);
+
+    // 测试代理连接
+    document.getElementById('btnProxyTest').addEventListener('click', async () => {
+      const type = document.getElementById('formProxyType').value;
+      const host = document.getElementById('formProxyHost').value.trim();
+      const port = document.getElementById('formProxyPort').value.trim();
+      const username = document.getElementById('formProxyUser').value.trim();
+      const password = document.getElementById('formProxyPass').value.trim();
+
+      const testResEl = document.getElementById('proxyTestResult');
+      testResEl.style.display = 'block';
+      testResEl.style.color = '#38bdf8';
+      testResEl.textContent = '正在测试代理连通性，请稍候...';
+
+      const res = await ipcRenderer.invoke('test-proxy', { type, host, port, username, password });
+      if (res.success) {
+        testResEl.style.color = '#4ade80';
+        testResEl.innerHTML = `${icon('check-circle', { color: '#4ade80', size: 13 })} ${escapeHtml(res.message)}`;
+      } else {
+        testResEl.style.color = '#f87171';
+        testResEl.innerHTML = `${icon('circle-dot', { color: '#f87171', size: 13 })} ${escapeHtml(res.message)}`;
+      }
+    });
+
+    document.getElementById('btnModalSave').addEventListener('click', async () => {
+      const name = document.getElementById('formName').value.trim();
+      if (!name) {
+        alert('请输入环境名称！');
+        return;
+      }
+
+      const id = document.getElementById('editEnvId').value;
+      const portEnabled = document.getElementById('formPortEnabled').checked;
+      const portVal = Number(document.getElementById('formPort').value);
+
+      if (portEnabled) {
+        if (!portVal || portVal <= 0 || portVal > 65535) {
+          alert('请输入有效的远程调试端口号 (1 - 65535)！');
+          return;
+        }
+
+        // 1. 检查是否与列表中其他环境配置端口冲突
+        const conflictEnv = allEnvironments.find(e => e.id !== id && e.remotePortEnabled && Number(e.remotePort) === portVal);
+        if (conflictEnv) {
+          alert(`远程调试端口 ${portVal} 已被环境 "${conflictEnv.name}" 占用，请更换为独立端口！`);
+          return;
+        }
+
+        // 2. 检查操作系统层面是否已被占用 (若占用方为自身已启动实例则豁免警告)
+        const isSelfRunningOnPort = id && runningStatus[id] && Number(runningStatus[id].port) === portVal;
+        if (!isSelfRunningOnPort) {
+          const isFree = await ipcRenderer.invoke('check-port-available', portVal);
+          if (!isFree) {
+            const proceed = confirm(`检测到端口 ${portVal} 当前正被本地其他程序或运行中的窗口监听占用。\n若非预期的同一实例，启动时可能会导致端口冲突。\n是否仍要保存该端口？`);
+            if (!proceed) return;
+          }
+        }
+      }
+
+      const tzVal = document.getElementById('formTimezone').value || 'America/New_York';
+      const data = {
+        name,
+        group: document.getElementById('formGroup').value.trim() || '默认分组',
+        url: document.getElementById('formUrl').value.trim() || 'dt://fingerprint-test',
+        language: document.getElementById('formLang').value,
+        timezone: tzVal,
+        remotePortEnabled: portEnabled,
+        remotePort: portVal || undefined,
+        customArgs: document.getElementById('formCustomArgs').value.trim(),
+        notes: document.getElementById('formNotes').value.trim(),
+        proxy: {
+          enabled: document.getElementById('formProxyEnabled').checked,
+          type: document.getElementById('formProxyType').value,
+          host: document.getElementById('formProxyHost').value.trim(),
+          port: document.getElementById('formProxyPort').value.trim(),
+          username: document.getElementById('formProxyUser').value.trim(),
+          password: document.getElementById('formProxyPass').value.trim(),
+          rawString: document.getElementById('formProxyQuickPaste').value.trim(),
+          scope: document.getElementById('formProxyScope').value,
+          rules: document.getElementById('formProxyRules').value.trim()
+        },
+        extensions: document.getElementById('formExtensions').value.trim()
+      };
+
+      if (modalFpData) {
+        modalFpData.timezone = tzVal;
+        data.fp = modalFpData;
+      }
+
+      try {
+        if (id) {
+          await ipcRenderer.invoke('update-env', { id, updates: data });
+          showToast(`已更新环境配置 "${name}"`);
+        } else {
+          await ipcRenderer.invoke('create-env', data);
+          showToast(`成功创建环境 "${name}"`);
+        }
+        modal.classList.remove('show');
+      } catch (e) {
+        alert('保存失败: ' + e.message);
+      }
+    });
+
+    // 填入测试插件快捷按钮
+    document.getElementById('btnFillTestExtension').addEventListener('click', () => {
+      const current = document.getElementById('formExtensions').value.trim();
+      const testPath = 'chrome';
+      if (!current) {
+        document.getElementById('formExtensions').value = testPath;
+      } else if (!current.includes(testPath)) {
+        document.getElementById('formExtensions').value = current + ';' + testPath;
+      }
+      showToast('已填入测试插件路径 (chrome)');
+    });
+
+    // ==========================================
+    // 分组管理与分类逻辑
+    // ==========================================
+
+    // 1. 新建/编辑环境弹窗中的快速新建分组按钮
+    document.getElementById('btnQuickAddGroup').addEventListener('click', async () => {
+      const name = prompt('请输入新分组名称：');
+      if (!name || !name.trim()) return;
+      const trimmed = name.trim();
+      try {
+        const res = await ipcRenderer.invoke('add-group', trimmed);
+        if (res.success) {
+          await refreshGroups();
+          updateGroupsDropdown();
+          document.getElementById('formGroup').value = trimmed;
+          showToast(`已成功创建新分组 "${trimmed}" 并已选定！`);
+        } else {
+          alert(res.message || '创建分组失败');
+        }
+      } catch (err) {
+        alert('创建分组失败: ' + err.message);
+      }
+    });
+
+    // 2. 分组管理弹窗 (Group Manager Modal)
+    const modalGroupManager = document.getElementById('modalGroupManager');
+    const modalGroupManagerClose = document.getElementById('modalGroupManagerClose');
+    const btnGroupManagerDone = document.getElementById('btnGroupManagerDone');
+    const btnManageGroups = document.getElementById('btnManageGroups');
+    const inputNewGroupName = document.getElementById('inputNewGroupName');
+    const btnConfirmAddGroup = document.getElementById('btnConfirmAddGroup');
+    const groupManagerList = document.getElementById('groupManagerList');
+
+    function renderGroupManagerList() {
+      groupManagerList.innerHTML = '';
+      allGroups.forEach(g => {
+        const count = allEnvironments.filter(e => (e.group || '默认分组') === g).length;
+        const item = document.createElement('div');
+        item.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; background: var(--bg-sub); border: 1px solid var(--border); border-radius: 6px;';
+
+        const info = document.createElement('div');
+        info.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        info.innerHTML = `
+          <span style="display: inline-flex; align-items: center;">${icon('folder', { size: 14, color: '#38bdf8' })}</span>
+          <span style="font-weight: 600; color: var(--text-main); font-size: 13px;">${escapeHtml(g)}</span>
+          <span style="font-size: 11px; color: var(--text-muted); padding: 1px 6px; background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border);">${count} 个环境</span>
+        `;
+        item.appendChild(info);
+
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+
+        if (g === '默认分组') {
+          actions.innerHTML = `<span style="font-size: 11px; color: var(--text-muted); padding: 2px 8px; background: var(--bg-card); border-radius: 4px; border: 1px solid var(--border);">系统默认 (内置)</span>`;
+        } else {
+          // 重命名按钮
+          const btnRename = document.createElement('button');
+          btnRename.className = 'btn btn-secondary btn-sm';
+          btnRename.style.fontSize = '11px';
+          btnRename.style.height = '24px';
+          btnRename.style.padding = '0 8px';
+          btnRename.innerHTML = `${icon('edit', { size: 11 })} 改名`;
+          btnRename.title = '重命名该分组';
+          btnRename.addEventListener('click', async () => {
+            const newName = prompt(`请输入分组 "${g}" 的新名称：`, g);
+            if (!newName || !newName.trim() || newName.trim() === g) return;
+            try {
+              const res = await ipcRenderer.invoke('rename-group', { oldName: g, newName: newName.trim() });
+              if (res.success) {
+                await refreshGroups();
+                updateGroupsDropdown();
+                renderGroupManagerList();
+                renderTable();
+                showToast(`分组已成功重命名为 "${newName.trim()}"`);
+              } else {
+                alert(res.message || '重命名失败');
+              }
+            } catch (err) {
+              alert('重命名失败: ' + err.message);
+            }
+          });
+          actions.appendChild(btnRename);
+
+          // 删除按钮 (带安全迁移机制)
+          const btnDel = document.createElement('button');
+          btnDel.className = 'btn btn-secondary btn-sm';
+          btnDel.style.fontSize = '11px';
+          btnDel.style.height = '24px';
+          btnDel.style.padding = '0 8px';
+          btnDel.style.color = '#ef4444';
+          btnDel.innerHTML = `${icon('trash', { size: 11, color: '#ef4444' })} 删除`;
+          btnDel.title = '删除此分组 (该分组下的所有环境将自动安全迁移至默认分组)';
+          btnDel.addEventListener('click', async () => {
+            if (confirm(`确定要删除分组 "${g}" 吗？\n\n提示：该分组下的 ${count} 个环境配置将自动安全转移至 "默认分组"，不会丢失任何环境！`)) {
+              try {
+                const res = await ipcRenderer.invoke('delete-group', g);
+                if (res.success) {
+                  await refreshGroups();
+                  updateGroupsDropdown();
+                  renderGroupManagerList();
+                  renderTable();
+                  showToast(`已删除分组 "${g}"，所属环境已安全转移至默认分组`);
+                } else {
+                  alert(res.message || '删除分组失败');
+                }
+              } catch (err) {
+                alert('删除分组失败: ' + err.message);
+              }
+            }
+          });
+          actions.appendChild(btnDel);
+        }
+
+        item.appendChild(actions);
+        groupManagerList.appendChild(item);
+      });
+    }
+
+    async function handleAddGroup() {
+      const name = inputNewGroupName.value.trim();
+      if (!name) {
+        alert('请输入新分组名称！');
+        return;
+      }
+      try {
+        const res = await ipcRenderer.invoke('add-group', name);
+        if (res.success) {
+          inputNewGroupName.value = '';
+          await refreshGroups();
+          updateGroupsDropdown();
+          renderGroupManagerList();
+          showToast(`已成功添加分组 "${name}"`);
+        } else {
+          alert(res.message || '添加分组失败');
+        }
+      } catch (err) {
+        alert('添加失败: ' + err.message);
+      }
+    }
+
+    btnConfirmAddGroup.addEventListener('click', handleAddGroup);
+    inputNewGroupName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleAddGroup();
+    });
+
+    btnManageGroups.addEventListener('click', async () => {
+      await refreshGroups();
+      renderGroupManagerList();
+      modalGroupManager.classList.add('show');
+    });
+
+    modalGroupManagerClose.addEventListener('click', () => modalGroupManager.classList.remove('show'));
+    btnGroupManagerDone.addEventListener('click', () => modalGroupManager.classList.remove('show'));
+
+    // 3. 批量移至分组弹窗 (Batch Group Modal)
+    const modalBatchGroup = document.getElementById('modalBatchGroup');
+    const modalBatchGroupClose = document.getElementById('modalBatchGroupClose');
+    const btnBatchGroupCancel = document.getElementById('btnBatchGroupCancel');
+    const btnBatchGroupConfirm = document.getElementById('btnBatchGroupConfirm');
+    const btnBatchSetGroup = document.getElementById('btnBatchSetGroup');
+    const selectBatchTargetGroup = document.getElementById('selectBatchTargetGroup');
+    const batchGroupCountText = document.getElementById('batchGroupCountText');
+
+    btnBatchSetGroup.addEventListener('click', async () => {
+      if (selectedIds.size === 0) {
+        alert('请先在左侧勾选需要批量移动分组的环境！');
+        return;
+      }
+      await refreshGroups();
+      updateGroupsDropdown();
+      batchGroupCountText.textContent = `已勾选 ${selectedIds.size} 个环境，请选择目标归属分组：`;
+      modalBatchGroup.classList.add('show');
+    });
+
+    modalBatchGroupClose.addEventListener('click', () => modalBatchGroup.classList.remove('show'));
+    btnBatchGroupCancel.addEventListener('click', () => modalBatchGroup.classList.remove('show'));
+
+    btnBatchGroupConfirm.addEventListener('click', async () => {
+      const targetGroup = selectBatchTargetGroup.value;
+      if (!targetGroup) {
+        alert('请选择目标分组！');
+        return;
+      }
+      try {
+        btnBatchGroupConfirm.disabled = true;
+        btnBatchGroupConfirm.textContent = '⏳ 正在移动...';
+        const res = await ipcRenderer.invoke('batch-set-group', {
+          ids: Array.from(selectedIds),
+          group: targetGroup
+        });
+        if (res.success) {
+          modalBatchGroup.classList.remove('show');
+          showToast(`成功将 ${res.count || selectedIds.size} 个环境移动至分组 "${targetGroup}"！`);
+          await loadData();
+        } else {
+          alert(res.message || '移动失败');
+        }
+      } catch (err) {
+        alert('批量移动分组失败: ' + err.message);
+      } finally {
+        btnBatchGroupConfirm.disabled = false;
+        btnBatchGroupConfirm.textContent = '确认移动';
+      }
+    });
+
+    // 16 种纯正底色改换且超高对比度配色 (经典深浅2色 + 7 舒缓彩色 + 7 醇厚深彩)
+    const THEME_OPTIONS = [
+      // 经典双色体系 (深色 / 浅色)
+      { key: 'dark', name: '● 经典深色 · 曜石极夜', desc: '极夜黑底色 · 纯白皓雪', color: '#1e293b', category: 'classic' },
+      { key: 'light', name: '● 极简浅色 · 象牙素雅', desc: '素雅浅底色 · 曜石深字', color: '#f1f5f9', category: 'classic' },
+
+      // 舒缓柔和彩色体系 (赤橙黄绿青蓝紫)
+      { key: 'red', name: '● 赤 · 绯霞柔粉', desc: '柔粉底色 · 胭脂深字', color: '#fb7185', category: 'light' },
+      { key: 'orange', name: '● 橙 · 暖阳杏橙', desc: '暖杏底色 · 焦糖深字', color: '#fb923c', category: 'light' },
+      { key: 'yellow', name: '● 黄 · 暖玉麦金', desc: '麦香底色 · 琥珀深字', color: '#facc15', category: 'light' },
+      { key: 'green', name: '● 绿 · 翠竹松影', desc: '清竹底色 · 松柏深字', color: '#34d399', category: 'light' },
+      { key: 'cyan', name: '● 青 · 碧水青瓷', desc: '青瓷底色 · 黛蓝深字', color: '#22d3ee', category: 'light' },
+      { key: 'blue', name: '● 蓝 · 极光霁蓝', desc: '霁蓝底色 · 深海深字', color: '#60a5fa', category: 'light' },
+      { key: 'purple', name: '● 紫 · 幽夜紫罗', desc: '淡紫底色 · 紫苏深字', color: '#c084fc', category: 'light' },
+
+      // 醇厚深沉深彩体系 (赤橙黄绿青蓝紫)
+      { key: 'red-dark', name: '● 赤 · 沉稳红木', desc: '红木底色 · 纯白皓雪', color: '#e11d48', category: 'dark' },
+      { key: 'orange-dark', name: '● 橙 · 焦糖琥珀', desc: '琥珀底色 · 纯白皓雪', color: '#ea580c', category: 'dark' },
+      { key: 'yellow-dark', name: '● 黄 · 曜石麦金', desc: '古铜底色 · 纯白皓雪', color: '#d97706', category: 'dark' },
+      { key: 'green-dark', name: '● 绿 · 深林松柏', desc: '墨绿底色 · 纯白皓雪', color: '#059669', category: 'dark' },
+      { key: 'cyan-dark', name: '● 青 · 黛色青瓷', desc: '黛青底色 · 纯白皓雪', color: '#0891b2', category: 'dark' },
+      { key: 'blue-dark', name: '● 蓝 · 深海群青', desc: '群青底色 · 纯白皓雪', color: '#2563eb', category: 'dark' },
+      { key: 'purple-dark', name: '● 紫 · 幽夜紫晶', desc: '紫晶底色 · 纯白皓雪', color: '#9333ea', category: 'dark' }
+    ];
+
+    const ALL_THEME_KEYS = [
+      'dark', 'light',
+      'red', 'orange', 'yellow', 'green', 'cyan', 'blue', 'purple',
+      'red-dark', 'orange-dark', 'yellow-dark', 'green-dark', 'cyan-dark', 'blue-dark', 'purple-dark'
+    ];
+
+    function normalizeThemeName(th) {
+      if (!th) return 'dark';
+      if (th === 'midnight') return 'dark';
+      if (th === 'slate') return 'cyan-dark';
+      if (ALL_THEME_KEYS.includes(th)) return th;
+      return 'dark';
+    }
+
+    const themeSelect = document.getElementById('themeSelect');
+    let currentManagerTheme = normalizeThemeName(localStorage.getItem('dt_manager_theme'));
+    document.documentElement.setAttribute('data-theme', currentManagerTheme);
+    themeSelect.value = currentManagerTheme;
+
+    themeSelect.addEventListener('change', async () => {
+      const selected = themeSelect.value;
+      currentManagerTheme = selected;
+      document.documentElement.setAttribute('data-theme', selected);
+      localStorage.setItem('dt_manager_theme', selected);
+      // 同步更新管理器默认配置
+      try {
+        await ipcRenderer.invoke('update-settings', { managerTheme: selected });
+      } catch {}
+      showToast(`已应用【${themeSelect.options[themeSelect.selectedIndex].text}】配色`);
+    });
+
+    // 默认配色设置 Modal
+    const themeModal = document.getElementById('themeModal');
+    const themeModalClose = document.getElementById('themeModalClose');
+    const btnThemeModalCancel = document.getElementById('btnThemeModalCancel');
+    const btnThemeModalSave = document.getElementById('btnThemeModalSave');
+    const btnThemeSettings = document.getElementById('btnThemeSettings');
+    const managerThemePalette = document.getElementById('managerThemePalette');
+    const browserThemePalette = document.getElementById('browserThemePalette');
+
+    let pendingManagerTheme = currentManagerTheme;
+    let pendingBrowserTheme = 'dark';
+
+    function createThemeCard(item, selectedKey, onSelect) {
+      const card = document.createElement('div');
+      card.className = 'theme-card' + (item.key === selectedKey ? ' active' : '');
+      card.innerHTML = `
+        <div class="theme-card-dot" style="background: ${item.color};"></div>
+        <div class="theme-card-info">
+          <div class="theme-card-title">${item.name}</div>
+          <div class="theme-card-desc">${item.desc}</div>
+        </div>
+      `;
+      card.addEventListener('click', () => onSelect(item.key));
+      return card;
+    }
+
+    function renderThemePalettes() {
+      // 渲染管理器色板
+      managerThemePalette.innerHTML = '';
+      
+      // 1. 经典双色 (深色 / 浅色)
+      const mgrClassicTitle = document.createElement('div');
+      mgrClassicTitle.style.cssText = 'grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 2px 0;';
+      mgrClassicTitle.textContent = '● 经典配色体系 (深色 / 浅色)';
+      managerThemePalette.appendChild(mgrClassicTitle);
+      
+      THEME_OPTIONS.filter(i => i.category === 'classic').forEach(item => {
+        managerThemePalette.appendChild(createThemeCard(item, pendingManagerTheme, (key) => {
+          pendingManagerTheme = key;
+          document.documentElement.setAttribute('data-theme', key);
+          themeSelect.value = key;
+          renderThemePalettes();
+        }));
+      });
+
+      // 2. 舒缓柔和彩色 (赤橙黄绿青蓝紫)
+      const mgrLightTitle = document.createElement('div');
+      mgrLightTitle.style.cssText = 'grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 8px 0 2px 0;';
+      mgrLightTitle.textContent = '● 舒缓柔和彩色体系 (赤橙黄绿青蓝紫 · 浅)';
+      managerThemePalette.appendChild(mgrLightTitle);
+      
+      THEME_OPTIONS.filter(i => i.category === 'light').forEach(item => {
+        managerThemePalette.appendChild(createThemeCard(item, pendingManagerTheme, (key) => {
+          pendingManagerTheme = key;
+          document.documentElement.setAttribute('data-theme', key);
+          themeSelect.value = key;
+          renderThemePalettes();
+        }));
+      });
+
+      // 3. 醇厚深沉深彩 (赤橙黄绿青蓝紫)
+      const mgrDarkTitle = document.createElement('div');
+      mgrDarkTitle.style.cssText = 'grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 8px 0 2px 0;';
+      mgrDarkTitle.textContent = '● 醇厚深沉深彩体系 (赤橙黄绿青蓝紫 · 深)';
+      managerThemePalette.appendChild(mgrDarkTitle);
+
+      THEME_OPTIONS.filter(i => i.category === 'dark').forEach(item => {
+        managerThemePalette.appendChild(createThemeCard(item, pendingManagerTheme, (key) => {
+          pendingManagerTheme = key;
+          document.documentElement.setAttribute('data-theme', key);
+          themeSelect.value = key;
+          renderThemePalettes();
+        }));
+      });
+
+      // 渲染浏览器色板
+      browserThemePalette.innerHTML = '';
+
+      // 1. 经典双色
+      const brwClassicTitle = document.createElement('div');
+      brwClassicTitle.style.cssText = 'grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 2px 0;';
+      brwClassicTitle.textContent = '● 经典配色体系 (深色 / 浅色)';
+      browserThemePalette.appendChild(brwClassicTitle);
+
+      THEME_OPTIONS.filter(i => i.category === 'classic').forEach(item => {
+        browserThemePalette.appendChild(createThemeCard(item, pendingBrowserTheme, (key) => {
+          pendingBrowserTheme = key;
+          renderThemePalettes();
+        }));
+      });
+
+      // 2. 舒缓柔和彩色
+      const brwLightTitle = document.createElement('div');
+      brwLightTitle.style.cssText = 'grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 8px 0 2px 0;';
+      brwLightTitle.textContent = '● 舒缓柔和彩色体系 (赤橙黄绿青蓝紫 · 浅)';
+      browserThemePalette.appendChild(brwLightTitle);
+
+      THEME_OPTIONS.filter(i => i.category === 'light').forEach(item => {
+        browserThemePalette.appendChild(createThemeCard(item, pendingBrowserTheme, (key) => {
+          pendingBrowserTheme = key;
+          renderThemePalettes();
+        }));
+      });
+
+      // 3. 醇厚深沉深彩
+      const brwDarkTitle = document.createElement('div');
+      brwDarkTitle.style.cssText = 'grid-column: 1 / -1; font-size: 11px; font-weight: 700; color: var(--text-muted); margin: 8px 0 2px 0;';
+      brwDarkTitle.textContent = '● 醇厚深沉深彩体系 (赤橙黄绿青蓝紫 · 深)';
+      browserThemePalette.appendChild(brwDarkTitle);
+
+      THEME_OPTIONS.filter(i => i.category === 'dark').forEach(item => {
+        browserThemePalette.appendChild(createThemeCard(item, pendingBrowserTheme, (key) => {
+          pendingBrowserTheme = key;
+          renderThemePalettes();
+        }));
+      });
+    }
+
+    // 系统设置与环境变量 DOM
+    const chkAutoStart = document.getElementById('chkAutoStart');
+    const chkAutoStartSilent = document.getElementById('chkAutoStartSilent');
+    const autoStartStatusBadge = document.getElementById('autoStartStatusBadge');
+    const pathEnvStatusBadge = document.getElementById('pathEnvStatusBadge');
+    const btnTogglePathEnv = document.getElementById('btnTogglePathEnv');
+
+    let isCurrentInPath = false;
+
+    async function refreshSystemStatus() {
+      try {
+        const autoStart = await ipcRenderer.invoke('get-autostart');
+        chkAutoStart.checked = Boolean(autoStart.enabled);
+        chkAutoStartSilent.checked = Boolean(autoStart.silent);
+        chkAutoStartSilent.disabled = !autoStart.enabled;
+
+        if (autoStart.enabled) {
+          autoStartStatusBadge.className = 'status-badge running';
+          autoStartStatusBadge.innerHTML = `${icon('check-circle', { color: '#10b981', size: 13 })} ${autoStart.silent ? '已启用 (静默常驻托盘)' : '已启用 (正常窗口)'}`;
+        } else {
+          autoStartStatusBadge.className = 'status-badge stopped';
+          autoStartStatusBadge.innerHTML = `${icon('circle-dot', { color: '#94a3b8', size: 13 })} 未启用`;
+        }
+      } catch (err) {
+        autoStartStatusBadge.textContent = '检测失败';
+      }
+
+      try {
+        const pathStatus = await ipcRenderer.invoke('get-path-status');
+        isCurrentInPath = Boolean(pathStatus.inPath);
+        if (isCurrentInPath) {
+          pathEnvStatusBadge.className = 'status-badge running';
+          pathEnvStatusBadge.innerHTML = `${icon('check-circle', { color: '#10b981', size: 13 })} 已添加到用户 PATH 环境变量`;
+          btnTogglePathEnv.className = 'btn btn-secondary';
+          btnTogglePathEnv.innerHTML = `${icon('minus', { size: 13 })} 从系统环境变量中移除`;
+        } else {
+          pathEnvStatusBadge.className = 'status-badge stopped';
+          pathEnvStatusBadge.innerHTML = `${icon('circle-dot', { color: '#94a3b8', size: 13 })} 未添加到 PATH`;
+          btnTogglePathEnv.className = 'btn btn-primary';
+          btnTogglePathEnv.innerHTML = `${icon('plus', { size: 13 })} 添加到系统环境变量`;
+        }
+      } catch (err) {
+        pathEnvStatusBadge.textContent = '检测失败';
+      }
+    }
+
+    chkAutoStart.addEventListener('change', () => {
+      chkAutoStartSilent.disabled = !chkAutoStart.checked;
+    });
+
+    btnTogglePathEnv.addEventListener('click', async () => {
+      try {
+        btnTogglePathEnv.disabled = true;
+        const targetState = !isCurrentInPath;
+        btnTogglePathEnv.textContent = targetState ? '正在写入环境变量...' : '正在移除...';
+        await ipcRenderer.invoke('set-path-env', { enabled: targetState });
+        await refreshSystemStatus();
+        if (targetState) {
+          showToast('成功将项目目录加入用户 PATH 环境变量！新打开的终端可直接输入 dt-cli 调用 API。');
+        } else {
+          showToast('已从用户 PATH 环境变量中移除项目路径。');
+        }
+      } catch (err) {
+        alert('配置环境变量失败: ' + err.message);
+      } finally {
+        btnTogglePathEnv.disabled = false;
+      }
+    });
+
+    async function openThemeModal() {
+      try {
+        const settings = await ipcRenderer.invoke('get-settings');
+        pendingManagerTheme = normalizeThemeName(settings.managerTheme || currentManagerTheme);
+        pendingBrowserTheme = normalizeThemeName(settings.browserTheme || 'blue');
+      } catch {
+        pendingManagerTheme = currentManagerTheme;
+        pendingBrowserTheme = 'blue';
+      }
+      renderThemePalettes();
+      await refreshSystemStatus();
+      await loadFontsList();
+      themeModal.classList.add('show');
+    }
+
+    function closeThemeModal() {
+      themeModal.classList.remove('show');
+      // 还原当前管理器生效主题
+      document.documentElement.setAttribute('data-theme', currentManagerTheme);
+      themeSelect.value = currentManagerTheme;
+    }
+
+    btnThemeSettings.addEventListener('click', openThemeModal);
+    themeModalClose.addEventListener('click', closeThemeModal);
+    btnThemeModalCancel.addEventListener('click', closeThemeModal);
+
+    btnThemeModalSave.addEventListener('click', async () => {
+      try {
+        btnThemeModalSave.disabled = true;
+        btnThemeModalSave.textContent = '⏳ 保存中...';
+        currentManagerTheme = pendingManagerTheme;
+        document.documentElement.setAttribute('data-theme', currentManagerTheme);
+        themeSelect.value = currentManagerTheme;
+        localStorage.setItem('dt_manager_theme', currentManagerTheme);
+
+        // 1. 保存配色方案
+        await ipcRenderer.invoke('update-settings', {
+          managerTheme: pendingManagerTheme,
+          browserTheme: pendingBrowserTheme
+        });
+
+        // 2. 保存开机自启
+        await ipcRenderer.invoke('set-autostart', {
+          enabled: chkAutoStart.checked,
+          silent: chkAutoStartSilent.checked
+        });
+
+        // 3. 保存并应用字体
+        if (modalFontSelect && modalFontSelect.value) {
+          await handleFontChange(modalFontSelect.value);
+        }
+
+        themeModal.classList.remove('show');
+        showToast('系统配置与默认配色已成功保存并生效！');
+      } catch (err) {
+        alert('保存设置失败: ' + err.message);
+      } finally {
+        btnThemeModalSave.disabled = false;
+        btnThemeModalSave.innerHTML = `${icon('save', { size: 13 })} 保存并应用设置`;
+      }
+    });
+
+    // =========================================================================
+    // 全局字体管理系统 (精简系统防乱码 / 统一管理器与浏览器字体)
+    // =========================================================================
+    const fontSelect = document.getElementById('fontSelect');
+    const modalFontSelect = document.getElementById('modalFontSelect');
+    const modalFontBadge = document.getElementById('modalFontBadge');
+    const btnRefreshFonts = document.getElementById('btnRefreshFonts');
+    const btnOpenFontsDir = document.getElementById('btnOpenFontsDir');
+
+    let currentFontInfo = null;
+
+    function applyCustomFont(fontInfo) {
+      currentFontInfo = fontInfo;
+      let fontStyleEl = document.getElementById('dt-custom-font-style');
+      if (!fontStyleEl) {
+        fontStyleEl = document.createElement('style');
+        fontStyleEl.id = 'dt-custom-font-style';
+        document.head.appendChild(fontStyleEl);
+      }
+      if (fontInfo && fontInfo.type === 'custom' && fontInfo.fileUrl) {
+        fontStyleEl.textContent = `
+          @font-face {
+            font-family: '${fontInfo.family}';
+            src: url('${fontInfo.fileUrl}') format('${fontInfo.format || 'truetype'}');
+            font-weight: normal;
+            font-style: normal;
+            font-display: swap;
+          }
+          body, input, select, textarea, button, table, div, span, p, a, h1, h2, h3, h4, h5, h6 {
+            font-family: '${fontInfo.family}', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", "PingFang SC", sans-serif !important;
+          }
+        `;
+      } else {
+        fontStyleEl.textContent = '';
+      }
+    }
+
+    async function loadFontsList() {
+      try {
+        const data = await ipcRenderer.invoke('get-fonts');
+        const available = data.fonts || [];
+        const active = data.current || null;
+
+        const populateSelect = (selectEl) => {
+          if (!selectEl) return;
+          const prevVal = selectEl.value;
+          selectEl.innerHTML = '';
+          available.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f.id;
+            opt.textContent = (f.isDefault ? '[默认] ' : '') + f.name;
+            selectEl.appendChild(opt);
+          });
+          if (active && active.id) {
+            selectEl.value = active.id;
+          } else if (prevVal) {
+            selectEl.value = prevVal;
+          }
+        };
+
+        populateSelect(fontSelect);
+        populateSelect(modalFontSelect);
+
+        if (active) {
+          applyCustomFont(active);
+        }
+
+        if (modalFontBadge) {
+          const customCount = available.filter(f => f.type === 'custom').length;
+          if (customCount > 0) {
+            modalFontBadge.className = 'status-badge running';
+            modalFontBadge.innerHTML = `${icon('check-circle', { color: '#10b981', size: 13 })} 已就绪 (${customCount} 个本地字体)`;
+          } else {
+            modalFontBadge.className = 'status-badge stopped';
+            modalFontBadge.innerHTML = `${icon('circle-dot', { color: '#94a3b8', size: 13 })} 仅系统默认字体`;
+          }
+        }
+      } catch (err) {
+        console.error('加载字体列表失败:', err);
+      }
+    }
+
+    async function handleFontChange(newFontId) {
+      try {
+        const res = await ipcRenderer.invoke('set-font', newFontId);
+        if (res && res.active) {
+          applyCustomFont(res.active);
+          if (fontSelect) fontSelect.value = res.active.id;
+          if (modalFontSelect) modalFontSelect.value = res.active.id;
+          showToast(`界面字体已统一切换为: ${res.active.name}`);
+        }
+      } catch (err) {
+        alert('切换字体失败: ' + err.message);
+      }
+    }
+
+    if (fontSelect) {
+      fontSelect.addEventListener('change', () => {
+        handleFontChange(fontSelect.value);
+      });
+    }
+
+    if (modalFontSelect) {
+      modalFontSelect.addEventListener('change', () => {
+        handleFontChange(modalFontSelect.value);
+      });
+    }
+
+    if (btnRefreshFonts) {
+      btnRefreshFonts.addEventListener('click', async () => {
+        btnRefreshFonts.disabled = true;
+        btnRefreshFonts.textContent = '⏳ 正在扫描...';
+        await loadFontsList();
+        btnRefreshFonts.disabled = false;
+        btnRefreshFonts.innerHTML = `${icon('refresh', { size: 13 })} 刷新字体`;
+        showToast('已重新扫描 Fonts 目录字体');
+      });
+    }
+
+    if (btnOpenFontsDir) {
+      btnOpenFontsDir.addEventListener('click', () => {
+        ipcRenderer.invoke('open-fonts-dir');
+      });
+    }
+
+    // 初始化时从全局设置同步
+    ipcRenderer.invoke('get-settings').then(settings => {
+      if (settings && settings.managerTheme) {
+        const norm = normalizeThemeName(settings.managerTheme);
+        if (!localStorage.getItem('dt_manager_theme')) {
+          currentManagerTheme = norm;
+          document.documentElement.setAttribute('data-theme', norm);
+          themeSelect.value = norm;
+        }
+      }
+    }).catch(() => {});
+
+    // 清空缓存防误触弹窗逻辑
+    const clearCacheModal = document.getElementById('clearCacheModal');
+    const clearCacheModalClose = document.getElementById('clearCacheModalClose');
+    const btnClearCacheCancel = document.getElementById('btnClearCacheCancel');
+    const btnClearCacheConfirm = document.getElementById('btnClearCacheConfirm');
+    const clearCacheEnvId = document.getElementById('clearCacheEnvId');
+    const clearCacheEnvName = document.getElementById('clearCacheEnvName');
+
+    function openClearCacheModal(id, name) {
+      clearCacheEnvId.value = id;
+      clearCacheEnvName.textContent = name;
+      clearCacheModal.classList.add('show');
+    }
+
+    function closeClearCacheModal() {
+      clearCacheModal.classList.remove('show');
+      clearCacheEnvId.value = '';
+    }
+
+    clearCacheModalClose.addEventListener('click', closeClearCacheModal);
+    btnClearCacheCancel.addEventListener('click', closeClearCacheModal);
+
+    btnClearCacheConfirm.addEventListener('click', async () => {
+      const id = clearCacheEnvId.value;
+      const name = clearCacheEnvName.textContent;
+      if (!id) return;
+      try {
+        btnClearCacheConfirm.disabled = true;
+        btnClearCacheConfirm.textContent = '⏳ 清理中...';
+        await ipcRenderer.invoke('clear-env-cache', id);
+        showToast(`已成功彻底清空 "${name}" 的缓存目录！`);
+        closeClearCacheModal();
+      } catch (err) {
+        alert('清理失败: ' + err.message);
+      } finally {
+        btnClearCacheConfirm.disabled = false;
+        btnClearCacheConfirm.innerHTML = `${icon('broom', { size: 13, color: '#fff' })} 确认彻底清空`;
+      }
+    });
+
+    // 批量清理所选缓存
+    document.getElementById('btnClearSelectedCache').addEventListener('click', async () => {
+      if (selectedIds.size === 0) {
+        alert('请先勾选需要清理缓存的环境！');
+        return;
+      }
+      // 检查是否有运行中的
+      const runningSelected = Array.from(selectedIds).filter(id => Boolean(runningStatus[id]));
+      if (runningSelected.length > 0) {
+        const names = runningSelected.map(id => allEnvironments.find(e => e.id === id)?.name || id).join('、');
+        alert(`以下所选环境正在运行中，清理缓存前请先停止该环境：\n${names}`);
+        return;
+      }
+      const count = selectedIds.size;
+      if (confirm(`危险操作确认（防误触）\n\n您确定要彻底清空所选的 ${count} 个环境的缓存目录吗？\n所有选中的环境内的 Cookies、LocalStorage 及页面缓存将被清除（配置参数及硬件指纹完好保留）。\n\n此操作不可撤销，是否继续？`)) {
+        for (const id of selectedIds) {
+          await ipcRenderer.invoke('clear-env-cache', id);
+        }
+        showToast(`已成功批量清空所选 ${count} 个环境的缓存目录！`);
+      }
+    });
+
+    // 顶部按钮事件
+    document.getElementById('btnNewEnv').addEventListener('click', () => openEditModal(null));
+    document.getElementById('btnRefresh').addEventListener('click', loadData);
+
+    document.getElementById('btnLaunchSelected').addEventListener('click', async () => {
+      if (selectedIds.size === 0) {
+        alert('请先勾选需要启动的环境！');
+        return;
+      }
+      for (const id of selectedIds) {
+        await ipcRenderer.invoke('launch-env', id);
+      }
+      showToast(`已批量启动 ${selectedIds.size} 个环境`);
+    });
+
+    document.getElementById('btnStopAll').addEventListener('click', async () => {
+      await ipcRenderer.invoke('stop-all');
+      showToast('已关闭所有运行中的浏览器窗口');
+    });
+
+    document.getElementById('searchKeyword').addEventListener('input', renderTable);
+    document.getElementById('filterGroup').addEventListener('change', (e) => {
+      localStorage.setItem('dt_filter_group', e.target.value);
+      renderTable();
+    });
+    document.getElementById('filterStatus').addEventListener('change', renderTable);
+
+    document.getElementById('checkAll').addEventListener('change', (e) => {
+      if (e.target.checked) {
+        allEnvironments.forEach(env => selectedIds.add(env.id));
+      } else {
+        selectedIds.clear();
+      }
+      renderTable();
+    });
+
+    // 接收状态广播 (带差异比对，避免无变更时反复销毁重建 DOM 引发内存泄露或黑屏)
+    let lastRenderedState = '';
+    ipcRenderer.on('state-updated', async (_event, state) => {
+      const stateStr = JSON.stringify(state);
+      if (stateStr === lastRenderedState) return;
+      lastRenderedState = stateStr;
+
+      if (state.activeFont) {
+        applyCustomFont(state.activeFont);
+        if (fontSelect && fontSelect.value !== state.activeFont.id) {
+          fontSelect.value = state.activeFont.id;
+        }
+        if (modalFontSelect && modalFontSelect.value !== state.activeFont.id) {
+          modalFontSelect.value = state.activeFont.id;
+        }
+      }
+
+      allEnvironments = state.environments || [];
+      runningStatus = state.running || {};
+      await refreshGroups();
+      updateGroupsDropdown();
+      renderTable();
+      updateStats();
+    });
+
+    // 底部状态栏：复制 QQ 群号与版本更新检测
+    const QQ_GROUP_NUMBER = '328399769';
+    const GITHUB_REPO_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser';
+    const GITHUB_RELEASES_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser/releases';
+    const APP_CURRENT_VERSION = '2.1';
+
+    const btnCopyQQ = document.getElementById('btnCopyQQ');
+    const badgeCopyQQ = document.getElementById('badgeCopyQQ');
+    if (btnCopyQQ) {
+      btnCopyQQ.addEventListener('click', async () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(QQ_GROUP_NUMBER);
+          } else {
+            const input = document.createElement('input');
+            input.value = QQ_GROUP_NUMBER;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+          }
+          if (badgeCopyQQ) {
+            badgeCopyQQ.textContent = '已复制!';
+            badgeCopyQQ.classList.add('success');
+          }
+          showToast(`QQ 群号 ${QQ_GROUP_NUMBER} 已复制到剪贴板！可前往 QQ 搜索加群交流与反馈 BUG`);
+          setTimeout(() => {
+            if (badgeCopyQQ) {
+              badgeCopyQQ.textContent = '点击复制';
+              badgeCopyQQ.classList.remove('success');
+            }
+          }, 2500);
+        } catch (e) {
+          prompt('请手动复制 QQ 群号：', QQ_GROUP_NUMBER);
+        }
+      });
+    }
+
+    // 版本比较函数 (如 2.2 > 2.1 返回 1)
+    function compareVersionNumbers(v1, v2) {
+      const p1 = (v1 || '').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+      const p2 = (v2 || '').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+      const maxLen = Math.max(p1.length, p2.length);
+      for (let i = 0; i < maxLen; i++) {
+        const a = p1[i] || 0;
+        const b = p2[i] || 0;
+        if (a > b) return 1;
+        if (a < b) return -1;
+      }
+      return 0;
+    }
+
+    // 异步检测 GitHub 最新 Release
+    async function checkAppVersionUpdate() {
+      const versionBadge = document.getElementById('versionBadge');
+      const versionDot = document.getElementById('versionDot');
+      const versionStatusText = document.getElementById('versionStatusText');
+      if (!versionBadge) return;
+
+      try {
+        const res = await Promise.race([
+          fetch('https://api.github.com/repos/wei3470231/DT-Fingerprint-Browser/releases/latest', {
+            headers: { 'Accept': 'application/vnd.github.v3+json' }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        ]);
+
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+
+        const releaseData = await res.json();
+        const latestTag = releaseData.tag_name || '';
+        const hasNew = compareVersionNumbers(latestTag, APP_CURRENT_VERSION) > 0;
+
+        if (hasNew) {
+          versionBadge.className = 'footer-version-badge has-update';
+          if (versionDot) versionDot.className = 'status-dot orange';
+          if (versionStatusText) versionStatusText.textContent = `🎉 发现新版本 ${latestTag} (点击更新)`;
+          versionBadge.title = `发现新版本 ${latestTag}，点击前往 GitHub 下载更新`;
+        } else {
+          versionBadge.className = 'footer-version-badge';
+          if (versionDot) versionDot.className = 'status-dot green';
+          if (versionStatusText) versionStatusText.textContent = `已是最新版本 (v${APP_CURRENT_VERSION})`;
+          versionBadge.title = `当前版本 v${APP_CURRENT_VERSION} 为最新版，点击查看 Releases 发布页`;
+        }
+      } catch (err) {
+        // 离线或 API 限流兜底
+        versionBadge.className = 'footer-version-badge';
+        if (versionDot) versionDot.className = 'status-dot green';
+        if (versionStatusText) versionStatusText.textContent = `已是最新版本 (v${APP_CURRENT_VERSION})`;
+        versionBadge.title = `点击访问 GitHub 仓库页面`;
+      }
+    }
+
+    const btnVersionCheck = document.getElementById('btnVersionCheck');
+    if (btnVersionCheck) {
+      btnVersionCheck.addEventListener('click', () => {
+        try {
+          ipcRenderer.invoke('open-external', GITHUB_RELEASES_URL);
+        } catch (_) {
+          window.open(GITHUB_RELEASES_URL, '_blank');
+        }
+      });
+    }
+
+    // 启动时自动检查更新
+    setTimeout(checkAppVersionUpdate, 1500);
+
+    loadData();
+    loadFontsList();
+  </script>
+</body>
+</html>
