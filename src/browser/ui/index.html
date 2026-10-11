@@ -1217,6 +1217,7 @@
     } catch (_) {}
 
     // 接收状态推送
+    let lastTabsStateKey = '';
     ipcRenderer.on('update-state', (event, data) => {
       const { env, tabs, activeId, port, extensions, defaultTheme, fontInfo, bookmarks } = data;
       currentTabs = tabs;
@@ -1287,49 +1288,53 @@
         }
       }
 
-      // 渲染标签与动态加载状态
-      tabsList.innerHTML = '';
-      tabs.forEach(tab => {
-        const tabEl = document.createElement('div');
-        tabEl.className = 'tab' + (tab.id === activeId ? ' active' : '');
+      // 渲染标签与动态加载状态 (增加 Diff 比对，无变更时不重复销毁重建 DOM)
+      const tabsStateKey = JSON.stringify(tabs.map(t => [t.id, t.title, t.isLoading, t.id === activeId]));
+      if (tabsStateKey !== lastTabsStateKey) {
+        lastTabsStateKey = tabsStateKey;
+        tabsList.innerHTML = '';
+        tabs.forEach(tab => {
+          const tabEl = document.createElement('div');
+          tabEl.className = 'tab' + (tab.id === activeId ? ' active' : '');
 
-        // 加载中视觉指示器 (转圈 Spinner / 完成小圆点)
-        const iconContainer = document.createElement('div');
-        iconContainer.className = 'tab-icon';
-        if (tab.isLoading) {
-          const spinner = document.createElement('div');
-          spinner.className = 'tab-spinner';
-          spinner.title = '页面正在加载中...';
-          iconContainer.appendChild(spinner);
-        } else {
-          const dot = document.createElement('div');
-          dot.className = 'tab-dot';
-          dot.title = '页面已就绪';
-          iconContainer.appendChild(dot);
-        }
-        tabEl.appendChild(iconContainer);
-        
-        const titleEl = document.createElement('span');
-        titleEl.className = 'title';
-        titleEl.textContent = tab.title || (tab.isLoading ? '加载中...' : '新标签页');
-        titleEl.title = tab.url || '';
+          // 加载中视觉指示器 (转圈 Spinner / 完成小圆点)
+          const iconContainer = document.createElement('div');
+          iconContainer.className = 'tab-icon';
+          if (tab.isLoading) {
+            const spinner = document.createElement('div');
+            spinner.className = 'tab-spinner';
+            spinner.title = '页面正在加载中...';
+            iconContainer.appendChild(spinner);
+          } else {
+            const dot = document.createElement('div');
+            dot.className = 'tab-dot';
+            dot.title = '页面已就绪';
+            iconContainer.appendChild(dot);
+          }
+          tabEl.appendChild(iconContainer);
+          
+          const titleEl = document.createElement('span');
+          titleEl.className = 'title';
+          titleEl.textContent = tab.title || (tab.isLoading ? '加载中...' : '新标签页');
+          titleEl.title = tab.url || '';
 
-        const closeBtn = document.createElement('div');
-        closeBtn.className = 'close-btn';
-        closeBtn.innerHTML = icon('x', { size: 10 });
-        closeBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          ipcRenderer.send('action-close-tab', tab.id);
+          const closeBtn = document.createElement('div');
+          closeBtn.className = 'close-btn';
+          closeBtn.innerHTML = icon('x', { size: 10 });
+          closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            ipcRenderer.send('action-close-tab', tab.id);
+          });
+
+          tabEl.appendChild(titleEl);
+          tabEl.appendChild(closeBtn);
+          tabEl.addEventListener('click', () => {
+            ipcRenderer.send('action-switch-tab', tab.id);
+          });
+
+          tabsList.appendChild(tabEl);
         });
-
-        tabEl.appendChild(titleEl);
-        tabEl.appendChild(closeBtn);
-        tabEl.addEventListener('click', () => {
-          ipcRenderer.send('action-switch-tab', tab.id);
-        });
-
-        tabsList.appendChild(tabEl);
-      });
+      }
 
       // 更新地址栏、导航按钮与主加载条状态
       const activeTab = tabs.find(t => t.id === activeId);

@@ -969,8 +969,19 @@
       color: var(--text-main);
       font-size: 13px;
       outline: none;
+      user-select: text !important;
+      -webkit-user-select: text !important;
     }
     .form-input:focus { border-color: var(--accent); }
+    .form-input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    input, textarea, select, .input-box {
+      user-select: text !important;
+      -webkit-user-select: text !important;
+    }
 
     /* 指纹预览卡片 */
     .fp-preview-card {
@@ -1403,7 +1414,7 @@
             <div style="display: flex; gap: 8px; align-items: center;">
               <input type="checkbox" id="formPortEnabled" checked style="cursor: pointer;">
               <label for="formPortEnabled" style="font-size: 12px; cursor: pointer;">开启端口</label>
-              <input type="number" class="form-input" id="formPort" style="flex: 1;" placeholder="端口 (如 9222)">
+              <input type="text" inputmode="numeric" class="form-input" id="formPort" style="flex: 1;" placeholder="端口 (如 9222)" autocomplete="off">
             </div>
           </div>
           <div class="form-group">
@@ -1449,7 +1460,7 @@
             </div>
             <div class="form-group" style="max-width: 100px;">
               <label class="form-label">端口</label>
-              <input type="text" class="form-input" id="formProxyPort" placeholder="7890">
+              <input type="text" inputmode="numeric" class="form-input" id="formProxyPort" placeholder="7890" autocomplete="off">
             </div>
           </div>
           <div class="form-row" style="margin-top: 10px;">
@@ -2222,21 +2233,29 @@
           tzSelect.appendChild(opt);
         }
         tzSelect.value = tz;
-        document.getElementById('formPortEnabled').checked = env ? Boolean(env.remotePortEnabled) : true;
+        const portInput = document.getElementById('formPort');
+        const portEnabledChk = document.getElementById('formPortEnabled');
+        portEnabledChk.checked = env ? Boolean(env.remotePortEnabled) : true;
+        portInput.disabled = !portEnabledChk.checked;
+        isUserEditedPort = false;
 
         if (env) {
-          document.getElementById('formPort').value = env.remotePort || '';
+          portInput.value = (env.remotePort !== undefined && env.remotePort !== null) ? String(env.remotePort) : '';
         } else {
-          // 新建环境：调用底层自动分配真正未被占用、独立的远程端口 (带快速超时兜底，杜绝卡顿)
-          try {
-            const nextPort = await Promise.race([
-              ipcRenderer.invoke('get-next-port'),
-              new Promise(r => setTimeout(() => r(null), 800))
-            ]);
-            document.getElementById('formPort').value = nextPort || (9222 + allEnvironments.length);
-          } catch (_) {
-            document.getElementById('formPort').value = 9222 + allEnvironments.length;
-          }
+          // 新建环境：先赋默认端口避免空值和异步阻塞，后台异步探测安全更新，绝不覆写用户已键入的端口
+          const fallbackPort = 9222 + allEnvironments.length;
+          portInput.value = String(fallbackPort);
+          (async () => {
+            try {
+              const nextPort = await Promise.race([
+                ipcRenderer.invoke('get-next-port'),
+                new Promise(r => setTimeout(() => r(null), 1000))
+              ]);
+              if (nextPort && !isUserEditedPort && !document.getElementById('editEnvId').value) {
+                portInput.value = String(nextPort);
+              }
+            } catch (_) {}
+          })();
         }
         document.getElementById('formCustomArgs').value = env ? env.customArgs || '' : '';
         document.getElementById('formNotes').value = env ? env.notes || '' : '';
@@ -2409,6 +2428,47 @@
       }
     });
 
+    // 远程端口输入体验增强：纯数字过滤、粘贴自动清理、勾选联动，杜绝中文输入法吃字与无法输入
+    let isUserEditedPort = false;
+    const formPortEl = document.getElementById('formPort');
+    const formPortEnabledEl = document.getElementById('formPortEnabled');
+    const formProxyPortEl = document.getElementById('formProxyPort');
+
+    formPortEnabledEl.addEventListener('change', () => {
+      formPortEl.disabled = !formPortEnabledEl.checked;
+      if (formPortEnabledEl.checked && !formPortEl.value.trim()) {
+        formPortEl.value = String(9222 + allEnvironments.length);
+      }
+    });
+
+    formPortEl.addEventListener('input', () => {
+      isUserEditedPort = true;
+      const cleaned = formPortEl.value.replace(/\D/g, '');
+      if (formPortEl.value !== cleaned) {
+        formPortEl.value = cleaned;
+      }
+    });
+
+    formPortEl.addEventListener('paste', (e) => {
+      isUserEditedPort = true;
+      setTimeout(() => {
+        formPortEl.value = formPortEl.value.replace(/\D/g, '');
+      }, 0);
+    });
+
+    formProxyPortEl.addEventListener('input', () => {
+      const cleaned = formProxyPortEl.value.replace(/\D/g, '');
+      if (formProxyPortEl.value !== cleaned) {
+        formProxyPortEl.value = cleaned;
+      }
+    });
+
+    formProxyPortEl.addEventListener('paste', (e) => {
+      setTimeout(() => {
+        formProxyPortEl.value = formProxyPortEl.value.replace(/\D/g, '');
+      }, 0);
+    });
+
     document.getElementById('btnModalSave').addEventListener('click', async () => {
       const name = document.getElementById('formName').value.trim();
       if (!name) {
@@ -2417,8 +2477,9 @@
       }
 
       const id = document.getElementById('editEnvId').value;
-      const portEnabled = document.getElementById('formPortEnabled').checked;
-      const portVal = Number(document.getElementById('formPort').value);
+      const portEnabled = formPortEnabledEl.checked;
+      const portRaw = formPortEl.value.trim();
+      const portVal = Number(portRaw);
 
       if (portEnabled) {
         if (!portVal || portVal <= 0 || portVal > 65535) {
@@ -2441,6 +2502,20 @@
             const proceed = confirm(`检测到端口 ${portVal} 当前正被本地其他程序或运行中的窗口监听占用。\n若非预期的同一实例，启动时可能会导致端口冲突。\n是否仍要保存该端口？`);
             if (!proceed) return;
           }
+        }
+      }
+
+      const isProxyEnabled = document.getElementById('formProxyEnabled').checked;
+      const proxyHostVal = document.getElementById('formProxyHost').value.trim();
+      const proxyPortVal = document.getElementById('formProxyPort').value.trim();
+      if (isProxyEnabled) {
+        if (!proxyHostVal) {
+          alert('请填写代理服务器主机 IP 或域名！');
+          return;
+        }
+        if (!proxyPortVal || Number(proxyPortVal) <= 0 || Number(proxyPortVal) > 65535) {
+          alert('请填写有效的代理端口号 (1 - 65535)！');
+          return;
         }
       }
 

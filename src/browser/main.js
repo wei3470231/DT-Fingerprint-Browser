@@ -281,7 +281,16 @@ function scheduleTabLoadingCheck(tab) {
   }, 100);
 }
 
+let notifyShellTimer = null;
 function notifyShell() {
+  if (notifyShellTimer) return;
+  notifyShellTimer = setImmediate(() => {
+    notifyShellTimer = null;
+    doNotifyShell();
+  });
+}
+
+function doNotifyShell() {
   if (!shellView || shellView.webContents.isDestroyed()) return;
   const isLocalTest = (u) => Boolean(u && (u === LOCAL_TEST_PAGE_URL || (u.startsWith('file:') && u.includes('testing/index.html'))));
 
@@ -635,9 +644,10 @@ async function dispatchNativePhysicalClick(wc, x, y) {
     }
   });
 
-  // 页面注入轻量同步捕获脚本
-  view.webContents.on('dom-ready', () => {
-    view.webContents.executeJavaScript(`
+  // 页面按需注入轻量同步捕获脚本 (仅在当前窗口作为主控端时启用，滚轮采用 50ms 严格节流，严禁高频 IPC 洪泛)
+  function injectSyncCapture(wc) {
+    if (!isSyncMaster || !wc || wc.isDestroyed()) return;
+    wc.executeJavaScript(`
       (() => {
         if (window.__dt_sync_listener_set) return;
         window.__dt_sync_listener_set = true;
@@ -647,14 +657,24 @@ async function dispatchNativePhysicalClick(wc, x, y) {
           const yRatio = e.clientY / Math.max(1, window.innerHeight);
           console.log('__DT_SYNC_CLICK__:' + JSON.stringify({ xRatio, yRatio }));
         }, true);
+        let lastWheel = 0;
         window.addEventListener('wheel', (e) => {
           if (!e.isTrusted) return;
+          const now = Date.now();
+          if (now - lastWheel < 50) return;
+          lastWheel = now;
           const xRatio = e.clientX / Math.max(1, window.innerWidth);
           const yRatio = e.clientY / Math.max(1, window.innerHeight);
           console.log('__DT_SYNC_WHEEL__:' + JSON.stringify({ xRatio, yRatio, deltaX: e.deltaX, deltaY: e.deltaY }));
         }, { passive: true, capture: true });
       })();
     `, true).catch(() => {});
+  }
+
+  view.webContents.on('dom-ready', () => {
+    if (isSyncMaster) {
+      injectSyncCapture(view.webContents);
+    }
   });
 
   // 监听导航和加载事件：支持多框架递归彻底完成检测
@@ -906,6 +926,8 @@ async function applyPendingCookies(ses, envId) {
 let isSyncMaster = false;
 let isSyncSlave = false;
 let hubSocket = null;
+let hubReconnectTimer = null;
+let isHubConnecting = false;
 
 function sendHubMessage(msg) {
   if (hubSocket && !hubSocket.destroyed) {
@@ -915,9 +937,36 @@ function sendHubMessage(msg) {
   }
 }
 
+// 核心修复：建立严格单例重连调度，彻底根除 error + close 连续触发引发的 2^N 级几何重连风暴与 2 分钟卡顿假死
+function scheduleHubReconnect(delayMs = 3000) {
+  if (hubReconnectTimer) return;
+  if (hubSocket) {
+    try {
+      hubSocket.removeAllListeners();
+      hubSocket.destroy();
+    } catch (_) {}
+    hubSocket = null;
+  }
+  isHubConnecting = false;
+  hubReconnectTimer = setTimeout(() => {
+    hubReconnectTimer = null;
+    connectToHub();
+  }, delayMs);
+}
+
 function connectToHub() {
+  if (hubSocket && !hubSocket.destroyed) return;
+  if (isHubConnecting) return;
+  if (hubReconnectTimer) {
+    clearTimeout(hubReconnectTimer);
+    hubReconnectTimer = null;
+  }
+
+  isHubConnecting = true;
   try {
-    hubSocket = net.connect(PIPE_PATH, () => {
+    const socket = net.connect(PIPE_PATH, () => {
+      isHubConnecting = false;
+      hubSocket = socket;
       sendHubMessage({
         action: 'register',
         envId: currentEnv.id
@@ -925,7 +974,7 @@ function connectToHub() {
     });
 
     let buffer = '';
-    hubSocket.on('data', (chunk) => {
+    socket.on('data', (chunk) => {
       buffer += chunk.toString('utf8');
       const lines = buffer.split('\n');
       buffer = lines.pop();
@@ -939,17 +988,15 @@ function connectToHub() {
       }
     });
 
-    hubSocket.on('error', () => {
-      hubSocket = null;
-      setTimeout(connectToHub, 2500);
+    socket.once('error', () => {
+      scheduleHubReconnect(3000);
     });
 
-    hubSocket.on('close', () => {
-      hubSocket = null;
-      setTimeout(connectToHub, 2500);
+    socket.once('close', () => {
+      scheduleHubReconnect(3000);
     });
   } catch (_) {
-    setTimeout(connectToHub, 2500);
+    scheduleHubReconnect(3000);
   }
 }
 
@@ -995,8 +1042,16 @@ async function handleHubMessage(msg) {
       sendHubMessage({ msgId, error: err.message });
     }
   } else if (action === 'set-sync-role' || action === 'register-ack') {
+    const oldMaster = isSyncMaster;
     isSyncMaster = Boolean(isMaster);
     isSyncSlave = Boolean(isSlave);
+    if (!oldMaster && isSyncMaster) {
+      for (const t of tabs) {
+        if (t.view && t.view.webContents && !t.view.webContents.isDestroyed()) {
+          injectSyncCapture(t.view.webContents);
+        }
+      }
+    }
     notifyShell();
   } else if (action === 'dispatch-sync-event') {
     handleDispatchedSyncEvent(msg.event);

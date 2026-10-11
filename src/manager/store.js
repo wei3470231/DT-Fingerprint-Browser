@@ -262,8 +262,20 @@ function normalizeRecord(env) {
   return env;
 }
 
+let cachedLoadList = null;
+let lastLoadMtime = 0;
+
 function loadAll() {
   ensureDirs();
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const mtime = fs.statSync(CONFIG_FILE).mtimeMs;
+      if (cachedLoadList && mtime === lastLoadMtime) {
+        return cachedLoadList;
+      }
+    }
+  } catch (_) {}
+
   let list = [];
   let loaded = false;
 
@@ -387,6 +399,12 @@ function loadAll() {
   if (dirty) {
     saveAll(normalized);
   }
+  cachedLoadList = normalized;
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      lastLoadMtime = fs.statSync(CONFIG_FILE).mtimeMs;
+    }
+  } catch (_) {}
   return normalized;
 }
 
@@ -414,6 +432,12 @@ function safeWriteJsonSync(targetFile, data) {
 
 function saveAll(list) {
   safeWriteJsonSync(CONFIG_FILE, list);
+  cachedLoadList = list;
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      lastLoadMtime = fs.statSync(CONFIG_FILE).mtimeMs;
+    }
+  } catch (_) {}
   if (Array.isArray(list) && list.length > 0) {
     try {
       safeWriteJsonSync(path.join(DATA_DIR, 'environments.bak.json'), list);
