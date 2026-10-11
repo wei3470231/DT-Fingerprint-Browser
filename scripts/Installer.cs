@@ -89,21 +89,44 @@ namespace BitFPManager
                 Size = new Size(504, 305)
             };
 
-            // 安装路径选择
+            string defaultPath = "";
+            bool isUpgrade = false;
+            try
+            {
+                using (RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\DT-Fingerprint-Browser"))
+                {
+                    if (regKey != null)
+                    {
+                        object locObj = regKey.GetValue("InstallLocation");
+                        if (locObj != null && !string.IsNullOrEmpty(locObj.ToString()) && Directory.Exists(locObj.ToString()))
+                        {
+                            defaultPath = locObj.ToString();
+                            isUpgrade = true;
+                        }
+                    }
+                }
+            }
+            catch {}
+
+            if (string.IsNullOrEmpty(defaultPath))
+            {
+                defaultPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Programs",
+                    "DT-Fingerprint-Browser"
+                );
+            }
+
             Label lblPathTitle = new Label
             {
-                Text = "📁 请选择目标安装路径:",
+                Text = isUpgrade 
+                    ? "📁 请选择目标安装路径 (检测到现有安装，将就地覆盖升级并无损保留全部指纹与配置):"
+                    : "📁 请选择目标安装路径:",
                 Location = new Point(4, 8),
                 AutoSize = true,
                 Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold, GraphicsUnit.Point),
-                ForeColor = Color.FromArgb(30, 41, 59)
+                ForeColor = isUpgrade ? Color.FromArgb(5, 150, 105) : Color.FromArgb(30, 41, 59)
             };
-
-            string defaultPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Programs",
-                "DT-Fingerprint-Browser"
-            );
 
             txtInstallPath = new TextBox
             {
@@ -388,8 +411,12 @@ namespace BitFPManager
             // 1. 创建目标目录
             Directory.CreateDirectory(installDir);
 
-            // 1.1 覆盖安装核心数据保护与自动快照备份
+            // 1.1 覆盖安装核心数据保护与自动快照备份 (内存快照 + 磁盘备份双重保险)
             string dataDir = Path.Combine(installDir, "data");
+            byte[] preservedEnvBytes = null;
+            byte[] preservedSetBytes = null;
+            byte[] preservedBmkBytes = null;
+
             if (Directory.Exists(dataDir))
             {
                 try
@@ -397,19 +424,34 @@ namespace BitFPManager
                     string envJson = Path.Combine(dataDir, "environments.json");
                     if (File.Exists(envJson))
                     {
-                        string bkp = Path.Combine(dataDir, "environments_backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".json");
-                        File.Copy(envJson, bkp, true);
-                        File.Copy(envJson, Path.Combine(dataDir, "environments.bak.json"), true);
+                        byte[] bytes = File.ReadAllBytes(envJson);
+                        if (bytes.Length > 5)
+                        {
+                            preservedEnvBytes = bytes;
+                            string bkp = Path.Combine(dataDir, "environments_backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".json");
+                            File.WriteAllBytes(bkp, bytes);
+                            File.WriteAllBytes(Path.Combine(dataDir, "environments.bak.json"), bytes);
+                        }
                     }
                     string setJson = Path.Combine(dataDir, "settings.json");
                     if (File.Exists(setJson))
                     {
-                        File.Copy(setJson, Path.Combine(dataDir, "settings.bak.json"), true);
+                        byte[] bytes = File.ReadAllBytes(setJson);
+                        if (bytes.Length > 5)
+                        {
+                            preservedSetBytes = bytes;
+                            File.WriteAllBytes(Path.Combine(dataDir, "settings.bak.json"), bytes);
+                        }
                     }
                     string bmkJson = Path.Combine(dataDir, "bookmarks.json");
                     if (File.Exists(bmkJson))
                     {
-                        File.Copy(bmkJson, Path.Combine(dataDir, "bookmarks.bak.json"), true);
+                        byte[] bytes = File.ReadAllBytes(bmkJson);
+                        if (bytes.Length > 5)
+                        {
+                            preservedBmkBytes = bytes;
+                            File.WriteAllBytes(Path.Combine(dataDir, "bookmarks.bak.json"), bytes);
+                        }
                     }
                 }
                 catch {}
@@ -440,8 +482,14 @@ namespace BitFPManager
                             continue;
                         }
 
-                        // 关键保护：如果是覆盖安装，凡是 data/ 目录下的已有文件（如 environments.json、settings.json、profiles 缓存），绝对不覆盖！
-                        string relNorm = entry.FullName.Replace('\\', '/').TrimStart('/');
+                        // 关键修复：彻底去除 entry.FullName 开头的 "./"、"/"、".\" 等所有前缀格式，确保准确匹配 data/ 目录
+                        string relNorm = entry.FullName.Replace('\\', '/');
+                        while (relNorm.StartsWith("./") || relNorm.StartsWith("/"))
+                        {
+                            relNorm = relNorm.Substring(relNorm.StartsWith("./") ? 2 : 1);
+                        }
+
+                        // 关键保护：如果是覆盖安装，凡是 data/ 目录下的已有文件，绝对不覆盖！
                         if (relNorm.StartsWith("data/", StringComparison.OrdinalIgnoreCase))
                         {
                             if (File.Exists(outPath))
@@ -472,6 +520,55 @@ namespace BitFPManager
                     }
                 }
             }
+
+            // 最终守护：若覆盖安装前存在有效的 environments.json，确保其绝对不被置空或覆盖
+            try
+            {
+                string targetDataDir = Path.Combine(installDir, "data");
+                Directory.CreateDirectory(targetDataDir);
+
+                string finalEnvJson = Path.Combine(targetDataDir, "environments.json");
+                if (preservedEnvBytes != null && preservedEnvBytes.Length > 5)
+                {
+                    bool needRestore = false;
+                    if (!File.Exists(finalEnvJson))
+                    {
+                        needRestore = true;
+                    }
+                    else
+                    {
+                        string currentText = File.ReadAllText(finalEnvJson).Trim();
+                        if (string.IsNullOrEmpty(currentText) || currentText == "[]")
+                        {
+                            needRestore = true;
+                        }
+                    }
+
+                    if (needRestore)
+                    {
+                        File.WriteAllBytes(finalEnvJson, preservedEnvBytes);
+                    }
+                }
+
+                string finalSetJson = Path.Combine(targetDataDir, "settings.json");
+                if (preservedSetBytes != null && preservedSetBytes.Length > 5)
+                {
+                    if (!File.Exists(finalSetJson) || File.ReadAllText(finalSetJson).Trim().Length <= 5)
+                    {
+                        File.WriteAllBytes(finalSetJson, preservedSetBytes);
+                    }
+                }
+
+                string finalBmkJson = Path.Combine(targetDataDir, "bookmarks.json");
+                if (preservedBmkBytes != null && preservedBmkBytes.Length > 5)
+                {
+                    if (!File.Exists(finalBmkJson))
+                    {
+                        File.WriteAllBytes(finalBmkJson, preservedBmkBytes);
+                    }
+                }
+            }
+            catch {}
 
             // 授予 data 目录对所有本地用户的完全控制权限（防止安装在 Program Files 时普通用户无写权限）
             try

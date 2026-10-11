@@ -214,15 +214,9 @@ async function main() {
   fs.writeFileSync(path.join(PAYLOAD, 'dt-cli.cmd'), '@"%~dp0DT-CLI.exe" %*\r\n');
   fs.writeFileSync(path.join(PAYLOAD, 'dt.cmd'), '@"%~dp0DT-CLI.exe" %*\r\n');
 
-  // 初始化干净数据目录 (干净默认配置)
+  // 准备数据目录骨架 (仅创建 profiles 结构，严禁打包空 environments.json 与 settings.json，从物理层杜绝覆盖旧数据！)
   const dataDir = path.join(PAYLOAD, 'data');
   fs.mkdirSync(path.join(dataDir, 'profiles'), { recursive: true });
-  fs.writeFileSync(path.join(dataDir, 'environments.json'), '[]\r\n', 'utf8');
-  fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify({
-    managerTheme: 'dark',
-    browserTheme: 'dark',
-    groups: ['默认分组']
-  }, null, 2), 'utf8');
 
   // 7. 压缩 Payload 为高压缩比独立包 (优先采用 Windows 原生 tar.exe 极速压缩，彻底摆脱 PowerShell 依赖)
   logStep('7/8', '正在压缩生成单文件内嵌资产包 (payload.zip)...');

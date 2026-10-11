@@ -122,6 +122,42 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const BOOKMARKS_FILE = path.join(DATA_DIR, 'bookmarks.json');
 const PROFILES_DIR = path.join(DATA_DIR, 'profiles');
 
+function findHistoricDataDirectories() {
+  const dirs = [];
+  try {
+    if (process.platform === 'win32') {
+      try {
+        const cp = require('node:child_process');
+        const regOut = cp.execSync('reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\DT-Fingerprint-Browser" /v InstallLocation 2>nul', { encoding: 'utf8' });
+        const match = regOut.match(/InstallLocation\s+REG_SZ\s+(.+)/i);
+        if (match && match[1] && match[1].trim()) {
+          const loc = path.join(match[1].trim(), 'data');
+          if (fs.existsSync(loc) && path.resolve(loc) !== path.resolve(DATA_DIR)) {
+            dirs.push(loc);
+          }
+        }
+      } catch (_) {}
+    }
+
+    const localAppData = process.env.LOCALAPPDATA;
+    if (localAppData) {
+      const candidate = path.join(localAppData, 'Programs', 'DT-Fingerprint-Browser', 'data');
+      if (fs.existsSync(candidate) && path.resolve(candidate) !== path.resolve(DATA_DIR)) {
+        dirs.push(candidate);
+      }
+    }
+
+    const appData = process.env.APPDATA;
+    if (appData) {
+      const candidate = path.join(appData, 'DT-Fingerprint-Browser', 'data');
+      if (fs.existsSync(candidate) && path.resolve(candidate) !== path.resolve(DATA_DIR)) {
+        dirs.push(candidate);
+      }
+    }
+  } catch (_) {}
+  return Array.from(new Set(dirs));
+}
+
 function resolveFontsDir() {
   const candidates = [
     path.join(ROOT_DIR, 'Fonts'),
@@ -357,6 +393,61 @@ function loadAll() {
     } catch (e) {
       console.warn('[Store] 自动恢复 profiles 失败:', e.message);
     }
+  }
+
+  // 2.5 跨目录与注册表历史安装路径全自动继承：若新安装目录数据为空，自动从系统历史目录或注册表安装位置无缝继承
+  if (!loaded || list.length === 0) {
+    try {
+      const historicDirs = findHistoricDataDirectories();
+      for (const hDir of historicDirs) {
+        const hEnvJson = path.join(hDir, 'environments.json');
+        if (fs.existsSync(hEnvJson)) {
+          try {
+            const raw = fs.readFileSync(hEnvJson, 'utf8').trim();
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                console.log(`[Store] 成功从历史安装位置 ${hDir} 无损继承 ${parsed.length} 个指纹环境配置！`);
+                list = parsed;
+                loaded = true;
+                saveAll(list);
+
+                // 同步继承历史 settings.json
+                const hSetJson = path.join(hDir, 'settings.json');
+                const curSetJson = path.join(DATA_DIR, 'settings.json');
+                if (fs.existsSync(hSetJson) && !fs.existsSync(curSetJson)) {
+                  try { fs.copyFileSync(hSetJson, curSetJson); } catch (_) {}
+                }
+
+                // 同步继承历史 bookmarks.json
+                const hBmkJson = path.join(hDir, 'bookmarks.json');
+                const curBmkJson = path.join(DATA_DIR, 'bookmarks.json');
+                if (fs.existsSync(hBmkJson) && !fs.existsSync(curBmkJson)) {
+                  try { fs.copyFileSync(hBmkJson, curBmkJson); } catch (_) {}
+                }
+
+                // 复制关联 profiles 缓存目录 (若当前目录尚无)
+                const hProfiles = path.join(hDir, 'profiles');
+                if (fs.existsSync(hProfiles) && fs.existsSync(PROFILES_DIR)) {
+                  try {
+                    const profEntries = fs.readdirSync(hProfiles, { withFileTypes: true });
+                    for (const pe of profEntries) {
+                      if (pe.isDirectory()) {
+                        const targetProf = path.join(PROFILES_DIR, pe.name);
+                        if (!fs.existsSync(targetProf)) {
+                          fs.mkdirSync(targetProf, { recursive: true });
+                        }
+                      }
+                    }
+                  } catch (_) {}
+                }
+                break;
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
   }
 
   // 3. 若确实没有任何历史数据（真正的崭新首次安装），创建默认的测试环境
@@ -705,12 +796,29 @@ function regenerateFp(id, customTimezone) {
 function getSettings() {
   ensureDirs();
   if (!fs.existsSync(SETTINGS_FILE)) {
+    const bkp = path.join(DATA_DIR, 'settings.bak.json');
+    if (fs.existsSync(bkp)) {
+      try {
+        const rawBkp = fs.readFileSync(bkp, 'utf8');
+        const parsed = JSON.parse(rawBkp);
+        safeWriteJsonSync(SETTINGS_FILE, parsed);
+        return { ...DEFAULT_SETTINGS, ...parsed };
+      } catch (_) {}
+    }
     return { ...DEFAULT_SETTINGS };
   }
   try {
     const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
     return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
   } catch {
+    const bkp = path.join(DATA_DIR, 'settings.bak.json');
+    if (fs.existsSync(bkp)) {
+      try {
+        const rawBkp = fs.readFileSync(bkp, 'utf8');
+        const parsed = JSON.parse(rawBkp);
+        return { ...DEFAULT_SETTINGS, ...parsed };
+      } catch (_) {}
+    }
     return { ...DEFAULT_SETTINGS };
   }
 }
@@ -720,6 +828,9 @@ function updateSettings(patch = {}) {
   const current = getSettings();
   const updated = { ...current, ...patch };
   safeWriteJsonSync(SETTINGS_FILE, updated);
+  try {
+    safeWriteJsonSync(path.join(DATA_DIR, 'settings.bak.json'), updated);
+  } catch (_) {}
   return updated;
 }
 
