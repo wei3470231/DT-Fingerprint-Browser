@@ -854,6 +854,37 @@
       white-space: nowrap;
       flex-wrap: nowrap;
       flex-shrink: 0;
+    /* 下拉菜单 */
+    .dropdown-container {
+      position: relative;
+      display: inline-block;
+    }
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      min-width: 175px;
+      background: var(--modal-bg);
+      border: 1px solid var(--border-sub);
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+      z-index: 1000;
+      padding: 5px 0;
+    }
+    .dropdown-item {
+      padding: 8px 14px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .dropdown-item:hover {
+      background: var(--bg-hover);
+      color: var(--accent);
     }
 
     /* 模态框 Modal */
@@ -1057,6 +1088,21 @@
       <div class="toolbar-left">
         <button class="btn btn-primary" id="btnNewEnv"></button>
         <button class="btn btn-success" id="btnLaunchSelected"></button>
+        <div class="dropdown-container" id="windowLayoutContainer">
+          <button class="btn btn-secondary" id="btnWindowLayout" title="一键批量平铺排列所有运行中的浏览器窗口 (网格/水平/垂直/层叠)">
+            <span>🪟 窗口排列</span>
+          </button>
+          <div class="dropdown-menu" id="windowLayoutMenu">
+            <div class="dropdown-item" data-layout="grid">🔲 网格平铺 (Grid 排列)</div>
+            <div class="dropdown-item" data-layout="horizontal">⏸️ 水平平铺 (左右横向)</div>
+            <div class="dropdown-item" data-layout="vertical">⏩ 垂直平铺 (上下纵向)</div>
+            <div class="dropdown-item" data-layout="cascade">📑 层叠排列 (Cascade)</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="btnSyncCtrl" style="color: #ec4899;" title="多窗口键鼠镜像同步器：将主控窗口的点击、按键、滚动镜像广播至其他窗口">
+          <span>⚡ 键鼠同步</span>
+          <span class="status-dot green" id="syncStatusDot" style="display: none; margin-left: 3px;"></span>
+        </button>
         <button class="btn btn-secondary" id="btnBatchSetGroup" title="将勾选的环境批量移至指定分组"></button>
         <button class="btn btn-secondary" id="btnClearSelectedCache" style="color: #f59e0b;" title="批量清空所选环境的 Cookie 与本地缓存 (防误触二次确认)"></button>
         <button class="btn btn-danger" id="btnStopAll"></button>
@@ -1091,7 +1137,7 @@
               <th style="width: 100px;">远程端口</th>
               <th style="width: 150px;">代理信息</th>
               <th>硬件指纹摘要</th>
-              <th style="width: 440px; min-width: 440px; text-align: right;">操作</th>
+              <th style="width: 510px; min-width: 510px; text-align: right;">操作</th>
             </tr>
           </thead>
           <tbody id="envTableBody">
@@ -1115,7 +1161,7 @@
     </div>
     <div class="footer-right">
       <div id="btnVersionCheck" class="footer-tag" title="点击检查更新或前往 GitHub Releases 页面">
-        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v2.1</b></span>
+        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v2.2</b></span>
         <span class="footer-version-badge" id="versionBadge">
           <span class="status-dot green" id="versionDot"></span>
           <span id="versionStatusText">检测更新中...</span>
@@ -1302,6 +1348,49 @@
               <option value="ja-JP">ja-JP (日语)</option>
               <option value="de-DE">de-DE (德语)</option>
             </select>
+          </div>
+        </div>
+
+        <!-- 自定义 User-Agent 预设与输入 -->
+        <div style="background: var(--bg-sub); padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="font-size: 12px; font-weight: 600; color: #38bdf8; display: inline-flex; align-items: center; gap: 6px;">
+              自定义 User-Agent (UA 头)
+            </div>
+            <span style="font-size: 11px; color: var(--text-muted);">* 设置后随机指纹时将保留自定义 UA，不被随机覆写</span>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="max-width: 260px;">
+              <label class="form-label">内置预设 UA (近几代 macOS / Firefox / Chrome)</label>
+              <select class="form-input" id="formUaPreset" style="cursor: pointer;">
+                <option value="">-- 默认跟随指纹内核 --</option>
+                <optgroup label="Chrome (macOS 近几代)">
+                  <option value="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36">Chrome 134 · macOS (最新)</option>
+                  <option value="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36">Chrome 133 · macOS</option>
+                  <option value="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36">Chrome 132 · macOS</option>
+                </optgroup>
+                <optgroup label="Chrome (Windows 近几代)">
+                  <option value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36">Chrome 134 · Windows (最新)</option>
+                  <option value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36">Chrome 133 · Windows</option>
+                  <option value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36">Chrome 132 · Windows</option>
+                </optgroup>
+                <optgroup label="Firefox (近几代 macOS & Win)">
+                  <option value="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:135.0) Gecko/20100101 Firefox/135.0">Firefox 135 · macOS (最新)</option>
+                  <option value="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:134.0) Gecko/20100101 Firefox/134.0">Firefox 134 · macOS</option>
+                  <option value="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0">Firefox 135 · Windows (最新)</option>
+                  <option value="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:134.0) Gecko/20100101 Firefox/134.0">Firefox 134 · Windows</option>
+                </optgroup>
+                <optgroup label="Safari (macOS 近几代)">
+                  <option value="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15">Safari 18.2 · macOS Sequoia</option>
+                  <option value="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15">Safari 17.6 · macOS Sonoma</option>
+                </optgroup>
+                <option value="custom">-- 自定义手动输入 --</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">User-Agent 字符串内容 (可自由编辑修改)</label>
+              <input type="text" class="form-input" id="formCustomUa" placeholder="留空则自动跟随内核指纹生成，也可选择左侧预设或手动粘贴...">
+            </div>
           </div>
         </div>
 
@@ -1496,6 +1585,124 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" id="btnBatchGroupCancel">取消</button>
         <button class="btn btn-primary" id="btnBatchGroupConfirm">确认移动</button>
+      </div>
+    </div>
+  <!-- Modal: Cookie / 网站数据一键导入导出 (cookieModal) -->
+  <div class="modal-overlay" id="cookieModal">
+    <div class="modal-card" style="width: 700px; max-height: 88vh;">
+      <div class="modal-header">
+        <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <span>🍪 Cookie 网站数据管理</span>
+          <span class="tag" id="cookieEnvNameTag" style="font-size: 11px; font-weight: normal;"></span>
+          <span class="status-badge" id="cookieEnvStatusTag" style="font-size: 11px;"></span>
+        </div>
+        <div class="modal-close" id="cookieModalClose">&times;</div>
+      </div>
+      <div class="modal-body" style="gap: 14px; padding: 18px 22px;">
+        <!-- 标签页切换: 导出 vs 导入 -->
+        <div style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-sub); padding-bottom: 10px;">
+          <button class="btn btn-primary btn-sm" id="tabCookieExport" style="min-width: 110px;">📤 导出 Cookie</button>
+          <button class="btn btn-secondary btn-sm" id="tabCookieImport" style="min-width: 110px;">📥 导入 Cookie</button>
+        </div>
+
+        <!-- 导出面板 -->
+        <div id="panelCookieExport" style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 12px; font-weight: 600; color: var(--text-main);">导出格式：</span>
+              <label style="font-size: 12px; color: var(--text-main); display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="exportFormat" value="json" checked style="cursor: pointer;"> JSON 标准格式
+              </label>
+              <label style="font-size: 12px; color: var(--text-main); display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="exportFormat" value="netscape" style="cursor: pointer;"> Netscape TXT 格式
+              </label>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btnRefreshExportCookie" title="重新从浏览器提取最新 Cookie">🔄 重新读取</button>
+          </div>
+          <textarea id="cookieExportText" class="form-input" style="height: 220px; font-family: monospace; font-size: 11px; white-space: pre; line-height: 1.4; resize: vertical; padding: 10px;" readonly placeholder="正在读取 Cookie..."></textarea>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span id="cookieExportCountText" style="font-size: 12px; color: var(--text-muted);">共 0 条 Cookie</span>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-secondary" id="btnCopyExportCookie">📋 复制到剪贴板</button>
+              <button class="btn btn-primary" id="btnSaveExportCookie">💾 保存为文件...</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 导入面板 -->
+        <div id="panelCookieImport" style="display: none; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 12px; font-weight: 600; color: var(--text-main);">导入格式：</span>
+              <label style="font-size: 12px; color: var(--text-main); display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="importFormat" value="auto" checked style="cursor: pointer;"> 智能自动识别
+              </label>
+              <label style="font-size: 12px; color: var(--text-main); display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="importFormat" value="json" style="cursor: pointer;"> JSON 格式
+              </label>
+              <label style="font-size: 12px; color: var(--text-main); display: inline-flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="radio" name="importFormat" value="netscape" style="cursor: pointer;"> Netscape 格式
+              </label>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="btnLoadCookieFile">📁 从本地文件载入</button>
+          </div>
+          <textarea id="cookieImportText" class="form-input" style="height: 220px; font-family: monospace; font-size: 11px; white-space: pre; line-height: 1.4; resize: vertical; padding: 10px;" placeholder="请在此处直接粘贴 JSON 格式的 Cookie 数组，或 Netscape 格式的 TXT 内容 (带 # HttpOnly_ 或纯域名 tab 分隔行)..."></textarea>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+              💡 提示：运行中的浏览器将实时热注入；未运行则保存至离线缓存，下次启动时自动注入。
+            </span>
+            <button class="btn btn-primary" id="btnSubmitImportCookie">🚀 立即导入</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 多窗口键鼠镜像同步器 (syncModal) -->
+  <div class="modal-overlay" id="syncModal">
+    <div class="modal-card" style="width: 580px; max-height: 85vh;">
+      <div class="modal-header">
+        <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+          <span>⚡ 多窗口键鼠镜像同步器 (Synchronizer)</span>
+        </div>
+        <div class="modal-close" id="syncModalClose">&times;</div>
+      </div>
+      <div class="modal-body" style="gap: 14px; padding: 18px 22px;">
+        <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 12px; color: var(--text-sub); line-height: 1.5;">
+          📌 <b>同步原理与说明：</b><br>
+          选择一个运行中的浏览器作为<b>主控端</b>，选中的<b>从属端</b>将实时毫秒级镜像接收主控端的<b>鼠标点击、滚轮滚动、键盘敲击、页面跳转与刷新</b>。支持配合一键平铺使用！
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>1. 设定主控浏览器 (Master) *</span>
+            <span id="syncRunningCountTip" style="font-size: 11px; color: var(--text-muted); font-weight: normal;"></span>
+          </label>
+          <select class="form-input" id="selectSyncMaster" style="cursor: pointer; font-weight: 500;">
+            <option value="">-- 请选择主控窗口 (需先启动) --</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <label class="form-label" style="margin-bottom: 0;">2. 勾选跟随镜像同步的从属窗口 (Slaves) *</label>
+            <button class="btn btn-secondary btn-sm" id="btnSelectAllSlaves" style="padding: 2px 8px; font-size: 11px;">全选从属窗口</button>
+          </div>
+          <div id="syncSlavesContainer" style="max-height: 160px; overflow-y: auto; background: var(--bg-input); border: 1px solid var(--border-sub); border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px;">
+            <!-- 动态生成复选框 -->
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--border-sub);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--text-main);">同步状态：</span>
+            <span class="status-badge stopped" id="syncStatusBadge">未开启</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-danger" id="btnStopSync" style="display: none;">停止同步</button>
+            <button class="btn btn-success" id="btnStartSync">🚀 开启键鼠同步</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1830,7 +2037,7 @@
 
         tdFp.innerHTML = `
           <div style="font-size: 12px; color: var(--text-main);">
-            <b style="color: var(--accent);">${cores}核/${mem}G</b> · <span style="color: var(--text-sub);">${gpu}</span>
+            <b style="color: var(--accent);">${cores}核/${mem}G</b> · <span style="color: var(--text-sub);">${gpu}</span>${env.customUa ? `<span class="tag" style="color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); margin-left: 6px; font-size: 10px;" title="自定义UA: ${escapeHtml(env.customUa)}">自定义UA</span>` : ''}
           </div>
           <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
             分辨率: ${res} | 时区: <b style="color: var(--accent);">${escapeHtml(env.timezone || fp.timezone || 'America/New_York')}</b> | 语言: <b style="color: var(--accent);">${lang}</b>
@@ -1842,8 +2049,8 @@
         const tdActions = document.createElement('td');
         tdActions.style.textAlign = 'right';
         tdActions.style.whiteSpace = 'nowrap';
-        tdActions.style.minWidth = '440px';
-        tdActions.style.width = '440px';
+        tdActions.style.minWidth = '510px';
+        tdActions.style.width = '510px';
 
         const actionGroup = document.createElement('div');
         actionGroup.className = 'action-group';
@@ -1900,6 +2107,14 @@
           showToast(`已克隆并生成独立新指纹！`);
         });
         actionGroup.appendChild(btnClone);
+
+        // Cookie 导入导出
+        const btnCookie = document.createElement('button');
+        btnCookie.className = 'btn btn-secondary btn-sm';
+        btnCookie.title = 'Cookie 网站数据一键导入导出 (支持 JSON 与 Netscape TXT 格式)';
+        btnCookie.innerHTML = `🍪 Cookie`;
+        btnCookie.addEventListener('click', () => openCookieModal(env));
+        actionGroup.appendChild(btnCookie);
 
         // 打开缓存目录
         const btnDir = document.createElement('button');
@@ -2022,6 +2237,26 @@
         document.getElementById('formCustomArgs').value = env ? env.customArgs || '' : '';
         document.getElementById('formNotes').value = env ? env.notes || '' : '';
 
+        // 自定义 UA 回显
+        const customUa = env ? (env.customUa || '') : '';
+        document.getElementById('formCustomUa').value = customUa;
+        const formUaPreset = document.getElementById('formUaPreset');
+        if (!customUa) {
+          formUaPreset.value = '';
+        } else {
+          let foundPreset = false;
+          for (const opt of formUaPreset.options) {
+            if (opt.value && opt.value === customUa) {
+              formUaPreset.value = customUa;
+              foundPreset = true;
+              break;
+            }
+          }
+          if (!foundPreset) {
+            formUaPreset.value = 'custom';
+          }
+        }
+
         // 代理
         const proxy = env?.proxy || {};
         document.getElementById('formProxyEnabled').checked = Boolean(proxy.enabled);
@@ -2077,11 +2312,44 @@
         const lang = document.getElementById('formLang').value;
         const tz = document.getElementById('formTimezone').value || 'America/New_York';
         modalFpData = await ipcRenderer.invoke('get-random-fp', { language: lang, timezone: tz });
+        const customUa = document.getElementById('formCustomUa').value.trim();
+        // 关键规则：自定义 UA 在随机指纹时保留不被随机覆盖
+        if (customUa && modalFpData) {
+          modalFpData.uaString = customUa;
+        }
         updateFpPreview();
-        showToast('已随机生成全新硬件指纹！');
+        showToast(customUa ? '已随机生成全新硬件指纹 (自定义 UA 保持锁定)！' : '已随机生成全新硬件指纹！');
       } catch (err) {
         console.error('随机生成指纹失败:', err);
         alert('随机指纹生成失败: ' + err.message);
+      }
+    });
+
+    // 自定义 UA 预设选择联动
+    document.getElementById('formUaPreset').addEventListener('change', () => {
+      const selected = document.getElementById('formUaPreset').value;
+      if (selected && selected !== 'custom') {
+        document.getElementById('formCustomUa').value = selected;
+      } else if (selected === '') {
+        document.getElementById('formCustomUa').value = '';
+      }
+    });
+
+    document.getElementById('formCustomUa').addEventListener('input', () => {
+      const val = document.getElementById('formCustomUa').value.trim();
+      const formUaPreset = document.getElementById('formUaPreset');
+      if (!val) {
+        formUaPreset.value = '';
+      } else {
+        let found = false;
+        for (const opt of formUaPreset.options) {
+          if (opt.value && opt.value === val) {
+            formUaPreset.value = val;
+            found = true;
+            break;
+          }
+        }
+        if (!found) formUaPreset.value = 'custom';
       }
     });
 
@@ -2173,12 +2441,14 @@
       }
 
       const tzVal = document.getElementById('formTimezone').value || 'America/New_York';
+      const customUa = document.getElementById('formCustomUa').value.trim();
       const data = {
         name,
         group: document.getElementById('formGroup').value.trim() || '默认分组',
         url: document.getElementById('formUrl').value.trim() || 'dt://fingerprint-test',
         language: document.getElementById('formLang').value,
         timezone: tzVal,
+        customUa,
         remotePortEnabled: portEnabled,
         remotePort: portVal || undefined,
         customArgs: document.getElementById('formCustomArgs').value.trim(),
@@ -2199,6 +2469,9 @@
 
       if (modalFpData) {
         modalFpData.timezone = tzVal;
+        if (customUa) {
+          modalFpData.uaString = customUa;
+        }
         data.fp = modalFpData;
       }
 
@@ -3002,7 +3275,7 @@
     const QQ_GROUP_NUMBER = '328399769';
     const GITHUB_REPO_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser';
     const GITHUB_RELEASES_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser/releases';
-    const APP_CURRENT_VERSION = '2.1';
+    const APP_CURRENT_VERSION = '2.2';
 
     const btnCopyQQ = document.getElementById('btnCopyQQ');
     const badgeCopyQQ = document.getElementById('badgeCopyQQ');
@@ -3101,6 +3374,392 @@
         }
       });
     }
+
+    // ==========================================
+    // 1. Cookie 导入导出模块 (JSON & Netscape)
+    // ==========================================
+    let currentCookieEnv = null;
+    const cookieModal = document.getElementById('cookieModal');
+    const cookieModalClose = document.getElementById('cookieModalClose');
+    const cookieEnvNameTag = document.getElementById('cookieEnvNameTag');
+    const cookieEnvStatusTag = document.getElementById('cookieEnvStatusTag');
+    const tabCookieExport = document.getElementById('tabCookieExport');
+    const tabCookieImport = document.getElementById('tabCookieImport');
+    const panelCookieExport = document.getElementById('panelCookieExport');
+    const panelCookieImport = document.getElementById('panelCookieImport');
+    const cookieExportText = document.getElementById('cookieExportText');
+    const cookieExportCountText = document.getElementById('cookieExportCountText');
+    const btnRefreshExportCookie = document.getElementById('btnRefreshExportCookie');
+    const btnCopyExportCookie = document.getElementById('btnCopyExportCookie');
+    const btnSaveExportCookie = document.getElementById('btnSaveExportCookie');
+    const cookieImportText = document.getElementById('cookieImportText');
+    const btnLoadCookieFile = document.getElementById('btnLoadCookieFile');
+    const btnSubmitImportCookie = document.getElementById('btnSubmitImportCookie');
+
+    function closeCookieModal() {
+      if (cookieModal) cookieModal.classList.remove('show');
+      currentCookieEnv = null;
+    }
+
+    if (cookieModalClose) cookieModalClose.addEventListener('click', closeCookieModal);
+
+    if (tabCookieExport) {
+      tabCookieExport.addEventListener('click', () => {
+        tabCookieExport.className = 'btn btn-primary btn-sm';
+        tabCookieImport.className = 'btn btn-secondary btn-sm';
+        panelCookieExport.style.display = 'flex';
+        panelCookieImport.style.display = 'none';
+        if (currentCookieEnv) loadExportCookies();
+      });
+    }
+
+    if (tabCookieImport) {
+      tabCookieImport.addEventListener('click', () => {
+        tabCookieImport.className = 'btn btn-primary btn-sm';
+        tabCookieExport.className = 'btn btn-secondary btn-sm';
+        panelCookieImport.style.display = 'flex';
+        panelCookieImport.style.display = 'none';
+      });
+    }
+
+    document.querySelectorAll('input[name="exportFormat"]').forEach(r => {
+      r.addEventListener('change', () => {
+        if (currentCookieEnv) loadExportCookies();
+      });
+    });
+
+    async function loadExportCookies() {
+      if (!currentCookieEnv) return;
+      const fmtRadio = document.querySelector('input[name="exportFormat"]:checked');
+      const format = fmtRadio ? fmtRadio.value : 'json';
+      cookieExportText.value = '正在提取最新 Cookie 数据...';
+      cookieExportCountText.textContent = '读取中...';
+      try {
+        const res = await ipcRenderer.invoke('export-cookies', { envId: currentCookieEnv.id, format });
+        if (res.success) {
+          cookieExportText.value = res.data;
+          cookieExportCountText.textContent = `共 ${res.count} 条 Cookie (${res.format.toUpperCase()} 格式)`;
+        } else {
+          cookieExportText.value = `// ${res.error || '未能读取 Cookie'}`;
+          cookieExportCountText.textContent = '读取失败';
+        }
+      } catch (err) {
+        cookieExportText.value = `// 读取异常: ${err.message}`;
+        cookieExportCountText.textContent = '读取失败';
+      }
+    }
+
+    async function openCookieModal(env) {
+      if (!env) return;
+      currentCookieEnv = env;
+      const isRunning = Boolean(runningStatus[env.id]);
+      cookieEnvNameTag.textContent = env.name;
+      if (isRunning) {
+        cookieEnvStatusTag.className = 'status-badge running';
+        cookieEnvStatusTag.textContent = '运行中 (实时热读写)';
+      } else {
+        cookieEnvStatusTag.className = 'status-badge stopped';
+        cookieEnvStatusTag.textContent = '已停止 (离线待注入模式)';
+      }
+
+      cookieImportText.value = '';
+      if (tabCookieExport) tabCookieExport.click();
+      if (cookieModal) cookieModal.classList.add('show');
+    }
+
+    if (btnRefreshExportCookie) btnRefreshExportCookie.addEventListener('click', loadExportCookies);
+
+    if (btnCopyExportCookie) {
+      btnCopyExportCookie.addEventListener('click', async () => {
+        const text = cookieExportText.value;
+        if (!text || text.startsWith('//') || text.startsWith('正在')) {
+          alert('当前没有可复制的有效 Cookie！');
+          return;
+        }
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            cookieExportText.select();
+            document.execCommand('copy');
+          }
+          showToast('已复制 Cookie 到剪贴板！');
+        } catch (_) {
+          alert('复制失败，请手动全选复制');
+        }
+      });
+    }
+
+    if (btnSaveExportCookie) {
+      btnSaveExportCookie.addEventListener('click', async () => {
+        const text = cookieExportText.value;
+        if (!text || text.startsWith('//') || text.startsWith('正在')) {
+          alert('当前没有可导出的有效 Cookie！');
+          return;
+        }
+        const fmtRadio = document.querySelector('input[name="exportFormat"]:checked');
+        const ext = fmtRadio && fmtRadio.value === 'netscape' ? 'txt' : 'json';
+        const defaultName = `${currentCookieEnv ? currentCookieEnv.name.replace(/[\\/:*?"<>|]/g, '_') : 'cookies'}_cookies.${ext}`;
+        const res = await ipcRenderer.invoke('save-cookie-file', { content: text, defaultName });
+        if (res.success) {
+          showToast(`已成功保存至: ${res.filePath}`);
+        }
+      });
+    }
+
+    if (btnLoadCookieFile) {
+      btnLoadCookieFile.addEventListener('click', async () => {
+        const res = await ipcRenderer.invoke('select-cookie-file');
+        if (res.success && res.content) {
+          cookieImportText.value = res.content;
+          showToast(`已从文件载入内容`);
+        }
+      });
+    }
+
+    if (btnSubmitImportCookie) {
+      btnSubmitImportCookie.addEventListener('click', async () => {
+        if (!currentCookieEnv) return;
+        const rawData = cookieImportText.value.trim();
+        if (!rawData) {
+          alert('请先输入或载入要导入的 Cookie 数据！');
+          return;
+        }
+        const fmtRadio = document.querySelector('input[name="importFormat"]:checked');
+        const format = fmtRadio ? fmtRadio.value : 'auto';
+        btnSubmitImportCookie.disabled = true;
+        btnSubmitImportCookie.textContent = '⏳ 正在导入...';
+        try {
+          const res = await ipcRenderer.invoke('import-cookies', {
+            envId: currentCookieEnv.id,
+            rawData,
+            format
+          });
+          if (res.success) {
+            alert(`导入成功！\n\n${res.message}`);
+            showToast(`已导入 ${res.count} 条 Cookie`);
+            closeCookieModal();
+          } else {
+            alert(`导入失败：\n${res.error}`);
+          }
+        } catch (err) {
+          alert(`导入发生异常: ${err.message}`);
+        } finally {
+          btnSubmitImportCookie.disabled = false;
+          btnSubmitImportCookie.textContent = '🚀 立即导入';
+        }
+      });
+    }
+
+    // ==========================================
+    // 2. 窗口排列控制器 (Tile / Grid / Cascade)
+    // ==========================================
+    const btnWindowLayout = document.getElementById('btnWindowLayout');
+    const windowLayoutMenu = document.getElementById('windowLayoutMenu');
+
+    if (btnWindowLayout && windowLayoutMenu) {
+      btnWindowLayout.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isVisible = windowLayoutMenu.style.display === 'block';
+        windowLayoutMenu.style.display = isVisible ? 'none' : 'block';
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#windowLayoutContainer')) {
+          windowLayoutMenu.style.display = 'none';
+        }
+      });
+
+      windowLayoutMenu.querySelectorAll('.dropdown-item').forEach(item => {
+        item.addEventListener('click', async () => {
+          windowLayoutMenu.style.display = 'none';
+          const layout = item.getAttribute('data-layout');
+          const runningCount = Object.keys(runningStatus).length;
+          if (runningCount === 0) {
+            alert('当前没有正在运行的浏览器窗口！请先启动窗口后再进行平铺排列。');
+            return;
+          }
+          try {
+            const res = await ipcRenderer.invoke('arrange-windows', { layout });
+            if (res.success) {
+              showToast(res.message);
+            } else {
+              alert(res.message || '排列窗口失败');
+            }
+          } catch (err) {
+            alert('排列窗口异常: ' + err.message);
+          }
+        });
+      });
+    }
+
+    // ==========================================
+    // 3. 键鼠镜像同步器 (Mouse & Keyboard Synchronizer)
+    // ==========================================
+    const syncModal = document.getElementById('syncModal');
+    const syncModalClose = document.getElementById('syncModalClose');
+    const btnSyncCtrl = document.getElementById('btnSyncCtrl');
+    const syncStatusDot = document.getElementById('syncStatusDot');
+    const selectSyncMaster = document.getElementById('selectSyncMaster');
+    const syncRunningCountTip = document.getElementById('syncRunningCountTip');
+    const syncSlavesContainer = document.getElementById('syncSlavesContainer');
+    const btnSelectAllSlaves = document.getElementById('btnSelectAllSlaves');
+    const syncStatusBadge = document.getElementById('syncStatusBadge');
+    const btnStartSync = document.getElementById('btnStartSync');
+    const btnStopSync = document.getElementById('btnStopSync');
+
+    function closeSyncModal() {
+      if (syncModal) syncModal.classList.remove('show');
+    }
+
+    if (syncModalClose) syncModalClose.addEventListener('click', closeSyncModal);
+
+    async function updateSyncUI() {
+      try {
+        const status = await ipcRenderer.invoke('get-sync-status');
+        if (status && status.enabled && status.masterId) {
+          if (syncStatusBadge) {
+            syncStatusBadge.className = 'status-badge running';
+            syncStatusBadge.textContent = '⚡ 同步运行中';
+          }
+          if (syncStatusDot) syncStatusDot.style.display = 'inline-block';
+          if (btnStartSync) btnStartSync.style.display = 'none';
+          if (btnStopSync) btnStopSync.style.display = 'inline-flex';
+        } else {
+          if (syncStatusBadge) {
+            syncStatusBadge.className = 'status-badge stopped';
+            syncStatusBadge.textContent = '未开启';
+          }
+          if (syncStatusDot) syncStatusDot.style.display = 'none';
+          if (btnStartSync) btnStartSync.style.display = 'inline-flex';
+          if (btnStopSync) btnStopSync.style.display = 'none';
+        }
+        return status;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function openSyncModal() {
+      const runningIds = Object.keys(runningStatus);
+      const syncStatus = await updateSyncUI();
+
+      selectSyncMaster.innerHTML = '<option value="">-- 请选择主控窗口 (需先启动) --</option>';
+      syncSlavesContainer.innerHTML = '';
+      syncRunningCountTip.textContent = `当前运行中: ${runningIds.length} 个窗口`;
+
+      if (runningIds.length === 0) {
+        syncSlavesContainer.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 10px;">当前暂无运行中的浏览器窗口，请先启动至少 2 个窗口！</div>';
+      }
+
+      runningIds.forEach(id => {
+        const env = allEnvironments.find(e => e.id === id);
+        const name = env ? env.name : id;
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = `[主控] ${name} (ID: ${id.slice(0, 8)})`;
+        if (syncStatus && syncStatus.masterId === id) {
+          opt.selected = true;
+        }
+        selectSyncMaster.appendChild(opt);
+      });
+
+      function renderSlaveCheckboxes() {
+        const masterId = selectSyncMaster.value;
+        syncSlavesContainer.innerHTML = '';
+        const candidateSlaves = runningIds.filter(id => id !== masterId);
+
+        if (candidateSlaves.length === 0) {
+          syncSlavesContainer.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 8px;">无其他从属窗口可选</div>';
+          return;
+        }
+
+        candidateSlaves.forEach(id => {
+          const env = allEnvironments.find(e => e.id === id);
+          const name = env ? env.name : id;
+          const label = document.createElement('label');
+          label.style.display = 'flex';
+          label.style.alignItems = 'center';
+          label.style.gap = '8px';
+          label.style.fontSize = '12px';
+          label.style.color = 'var(--text-main)';
+          label.style.cursor = 'pointer';
+
+          const chk = document.createElement('input');
+          chk.type = 'checkbox';
+          chk.value = id;
+          chk.className = 'slave-chk';
+          chk.style.cursor = 'pointer';
+          if (syncStatus && syncStatus.enabled && Array.isArray(syncStatus.slaveIds) && syncStatus.slaveIds.includes(id)) {
+            chk.checked = true;
+          } else if (!syncStatus || !syncStatus.enabled) {
+            chk.checked = true; // 默认勾选全部从属端
+          }
+
+          label.appendChild(chk);
+          label.appendChild(document.createTextNode(`[从属] ${name} (${id.slice(0, 8)})`));
+          syncSlavesContainer.appendChild(label);
+        });
+      }
+
+      selectSyncMaster.onchange = renderSlaveCheckboxes;
+      renderSlaveCheckboxes();
+
+      if (syncModal) syncModal.classList.add('show');
+    }
+
+    if (btnSyncCtrl) btnSyncCtrl.addEventListener('click', openSyncModal);
+
+    if (btnSelectAllSlaves) {
+      btnSelectAllSlaves.addEventListener('click', () => {
+        const chks = syncSlavesContainer.querySelectorAll('.slave-chk');
+        const allChecked = Array.from(chks).every(c => c.checked);
+        chks.forEach(c => c.checked = !allChecked);
+      });
+    }
+
+    if (btnStartSync) {
+      btnStartSync.addEventListener('click', async () => {
+        const masterId = selectSyncMaster.value;
+        if (!masterId) {
+          alert('请选择主控窗口！');
+          return;
+        }
+        const chks = syncSlavesContainer.querySelectorAll('.slave-chk:checked');
+        const slaveIds = Array.from(chks).map(c => c.value);
+        if (slaveIds.length === 0) {
+          alert('请至少勾选一个跟随镜像同步的从属窗口！');
+          return;
+        }
+
+        try {
+          await ipcRenderer.invoke('set-window-sync', {
+            enabled: true,
+            masterId,
+            slaveIds
+          });
+          await updateSyncUI();
+          showToast('已成功开启键鼠镜像同步！');
+          closeSyncModal();
+        } catch (err) {
+          alert('开启同步异常: ' + err.message);
+        }
+      });
+    }
+
+    if (btnStopSync) {
+      btnStopSync.addEventListener('click', async () => {
+        try {
+          await ipcRenderer.invoke('set-window-sync', { enabled: false });
+          await updateSyncUI();
+          showToast('已停止键鼠镜像同步');
+        } catch (err) {
+          alert('停止同步异常: ' + err.message);
+        }
+      });
+    }
+
+    setInterval(updateSyncUI, 2000);
 
     // 启动时自动检查更新
     setTimeout(checkAppVersionUpdate, 1500);

@@ -947,8 +947,12 @@
       </select>
 
       <div class="badge green" id="portBadge" title="远程调试端口">CDP: -</div>
-      <div class="badge purple" id="hwBadge" title="硬件指纹概况">HW: -</div>
-      <div class="badge blue" id="proxyBadge" title="代理信息">代理: 直连</div>
+      <label class="proxy-toggle" id="proxyToggleLabel" title="切换使用代理或直连上网" style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-tab); cursor: pointer; user-select: none; -webkit-app-region: no-drag; padding: 2px 6px; background: var(--badge-bg); border: 1px solid var(--border-color); border-radius: 4px;">
+        <input type="checkbox" id="chkUseProxy" checked style="cursor: pointer; width: 12px; height: 12px; accent-color: var(--accent);">
+        <span>使用代理</span>
+      </label>
+      <div class="badge blue" id="proxyBadge" title="代理信息">直连</div>
+      <div class="badge orange" id="syncBadge" style="display: none; font-weight: 600;">⚡ 同步主控</div>
       <button class="nav-btn" id="devtoolsBtn" title="开发者工具 (F12)"></button>
     </div>
   </div>
@@ -994,8 +998,9 @@
     const extBadgeCount = document.getElementById('extBadgeCount');
     const envBadge = document.getElementById('envBadge');
     const portBadge = document.getElementById('portBadge');
-    const hwBadge = document.getElementById('hwBadge');
+    const chkUseProxy = document.getElementById('chkUseProxy');
     const proxyBadge = document.getElementById('proxyBadge');
+    const syncBadge = document.getElementById('syncBadge');
     const themeSelect = document.getElementById('themeSelect');
     const winMinBtn = document.getElementById('winMinBtn');
     const winMaxBtn = document.getElementById('winMaxBtn');
@@ -1103,6 +1108,12 @@
 
     devtoolsBtn.addEventListener('click', () => ipcRenderer.send('action-toggle-devtools'));
     extensionsBtn.addEventListener('click', () => ipcRenderer.send('action-show-extensions-menu'));
+
+    if (chkUseProxy) {
+      chkUseProxy.addEventListener('change', () => {
+        ipcRenderer.send('action-toggle-proxy', chkUseProxy.checked);
+      });
+    }
 
     // 地址栏焦点与输入保护：防止加载中或突发刷新时覆盖用户正在输入的地址
     addressInput.addEventListener('focus', () => {
@@ -1241,21 +1252,39 @@
         extensionsBtn.title = '未加载扩展插件';
       }
       
-      if (env.fp) {
-        const cores = env.fp.navigator?.hardwareConcurrency || '?';
-        const mem = env.fp.navigator?.deviceMemory || '?';
-        const lang = env.language || 'en-US';
-        const tz = env.timezone || env.fp?.timezone || 'America/New_York';
-        hwBadge.textContent = `${cores}C/${mem}G · ${tz} · ${lang}`;
-        hwBadge.title = `硬件与环境指纹: ${cores}核心 / ${mem}GB | 时区: ${tz} | 语言: ${lang}`;
+      if (chkUseProxy && typeof data.userWantsProxy === 'boolean' && chkUseProxy.checked !== data.userWantsProxy) {
+        chkUseProxy.checked = data.userWantsProxy;
       }
 
-      if (env.proxy && env.proxy.enabled && env.proxy.host) {
-        proxyBadge.textContent = `${env.proxy.type.toUpperCase()}: ${env.proxy.host}:${env.proxy.port}`;
-        proxyBadge.className = 'badge orange';
-      } else {
+      // 代理信息逻辑：如果浏览器使用了代理，则显示直连，否则显示代理IP地址
+      const isUsingProxy = Boolean(data.isUsingProxy);
+      const proxyHost = data.proxyHost || (env.proxy && env.proxy.host ? `${env.proxy.host}:${env.proxy.port}` : '');
+
+      if (isUsingProxy) {
         proxyBadge.textContent = '直连';
         proxyBadge.className = 'badge blue';
+        proxyBadge.title = '当前网络: 正在通过代理转发上网';
+      } else {
+        proxyBadge.textContent = proxyHost ? proxyHost : '未配置代理';
+        proxyBadge.className = 'badge orange';
+        proxyBadge.title = proxyHost ? `当前网络: 本地直连模式 (代理IP: ${proxyHost})` : '当前网络: 本地直连模式 (未配置代理)';
+      }
+
+      // 同步器主从角色徽章状态展示
+      if (syncBadge) {
+        if (data.isSyncMaster) {
+          syncBadge.style.display = 'inline-flex';
+          syncBadge.textContent = '⚡ 同步主控';
+          syncBadge.className = 'badge orange';
+          syncBadge.title = '当前窗口是键鼠同步主控端：操作将实时镜像广播至其他窗口';
+        } else if (data.isSyncSlave) {
+          syncBadge.style.display = 'inline-flex';
+          syncBadge.textContent = '⚡ 镜像从属';
+          syncBadge.className = 'badge purple';
+          syncBadge.title = '当前窗口是键鼠同步从属端：正在实时接收并执行主控端操作';
+        } else {
+          syncBadge.style.display = 'none';
+        }
       }
 
       // 渲染标签与动态加载状态

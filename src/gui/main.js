@@ -17,12 +17,14 @@ if (isBrowserProcess) {
 }
 
 function runManager() {
-  const { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage } = require('electron');
+  const { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, screen, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const store = require('../manager/store');
 const processManager = require('../manager/process-manager');
 const systemSettings = require('../manager/system-settings');
+const ipcHub = require('../manager/ipc-hub');
+const { parseCookies, exportAsJson, exportAsNetscape } = require('../shared/cookie-helper');
 
 // 核心修复：彻底根除 Chromium 在 Windows 双屏跨屏移动、高刷新率/DPI差异、睡眠唤醒下的 UI 偶发黑屏
 app.disableHardwareAcceleration();
@@ -490,6 +492,244 @@ app.whenReady().then(() => {
   ipcMain.handle('get-next-port', async () => await store.getNextAvailablePort());
   ipcMain.handle('check-port-available', async (_e, port) => await store.isPortAvailable(port));
 
+  // 启动多窗口中枢 Named Pipe 服务 (平铺控制器、实时Cookie交换与键鼠同步)
+  try {
+    ipcHub.start();
+  } catch (hubErr) {
+    console.warn('[IPC Hub Start Warning]', hubErr.message);
+  }
+
+  // 1. 多窗口一键批量排列与平铺控制器 (Tile / Grid / Cascade)
+  ipcMain.handle('arrange-windows', async (_e, { layout = 'grid', envIds = [] } = {}) => {
+    const runningStatus = processManager.getRunningStatus();
+    let targetIds = (Array.isArray(envIds) && envIds.length > 0)
+      ? envIds.filter(id => runningStatus[id])
+      : Object.keys(runningStatus);
+
+    if (targetIds.length === 0) {
+      return { success: false, message: '当前没有正在运行的浏览器窗口！' };
+    }
+
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { x: workX, y: workY, width: workW, height: workH } = primaryDisplay.workArea;
+    const count = targetIds.length;
+    const boundsList = [];
+
+    if (layout === 'grid') {
+      const cols = Math.ceil(Math.sqrt(count));
+      const rows = Math.ceil(count / cols);
+      const cellW = Math.floor(workW / cols);
+      const cellH = Math.floor(workH / rows);
+
+      for (let i = 0; i < count; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        boundsList.push({
+          envId: targetIds[i],
+          bounds: {
+            x: workX + col * cellW,
+            y: workY + row * cellH,
+            width: cellW,
+            height: cellH
+          }
+        });
+      }
+    } else if (layout === 'horizontal' || layout === 'tile-h') {
+      const cellW = Math.floor(workW / count);
+      for (let i = 0; i < count; i++) {
+        boundsList.push({
+          envId: targetIds[i],
+          bounds: {
+            x: workX + i * cellW,
+            y: workY,
+            width: cellW,
+            height: workH
+          }
+        });
+      }
+    } else if (layout === 'vertical' || layout === 'tile-v') {
+      const cellH = Math.floor(workH / count);
+      for (let i = 0; i < count; i++) {
+        boundsList.push({
+          envId: targetIds[i],
+          bounds: {
+            x: workX,
+            y: workY + i * cellH,
+            width: workW,
+            height: cellH
+          }
+        });
+      }
+    } else if (layout === 'cascade') {
+      const defaultW = Math.min(1200, Math.max(800, Math.floor(workW * 0.7)));
+      const defaultH = Math.min(800, Math.max(550, Math.floor(workH * 0.7)));
+      const offsetStep = 32;
+      for (let i = 0; i < count; i++) {
+        const maxXOffset = Math.max(0, workW - defaultW);
+        const maxYOffset = Math.max(0, workH - defaultH);
+        const offsetX = (i * offsetStep) % (maxXOffset || 1);
+        const offsetY = (i * offsetStep) % (maxYOffset || 1);
+        boundsList.push({
+          envId: targetIds[i],
+          bounds: {
+            x: workX + offsetX,
+            y: workY + offsetY,
+            width: defaultW,
+            height: defaultH
+          }
+        });
+      }
+    }
+
+    let dispatched = 0;
+    for (const item of boundsList) {
+      if (ipcHub.setWindowBounds(item.envId, item.bounds)) {
+        dispatched++;
+      }
+    }
+
+    return {
+      success: true,
+      count,
+      dispatched,
+      layout,
+      message: `已为 ${count} 个运行中窗口应用【${layout}】排列`
+    };
+  });
+
+  // 2. 多窗口键鼠镜像同步器 (Mouse & Keyboard Synchronizer)
+  ipcMain.handle('set-window-sync', (_e, { enabled, masterId, slaveIds = [] } = {}) => {
+    ipcHub.setSyncConfig({
+      enabled: Boolean(enabled),
+      masterId: masterId || null,
+      slaveIds: Array.isArray(slaveIds) ? slaveIds : []
+    });
+    return ipcHub.getSyncStatus();
+  });
+
+  ipcMain.handle('get-sync-status', () => {
+    return ipcHub.getSyncStatus();
+  });
+
+  // 3. Cookie / 网站数据一键导入导出 (JSON & Netscape 格式，支持热写入与离线写入)
+  ipcMain.handle('import-cookies', async (_e, { envId, rawData, format = 'auto' }) => {
+    if (!envId) return { success: false, error: '未指定环境ID' };
+    const { cookies, error } = parseCookies(rawData, format);
+    if (error || !cookies || cookies.length === 0) {
+      return { success: false, error: error || '未能从输入中解析出任何有效Cookie' };
+    }
+
+    const isRunning = processManager.isRunning(envId);
+    if (isRunning && ipcHub.isClientConnected(envId)) {
+      try {
+        const res = await ipcHub.injectCookies(envId, cookies);
+        return {
+          success: true,
+          count: cookies.length,
+          hot: true,
+          message: `已成功将 ${cookies.length} 条 Cookie 实时注入到运行中的浏览器！`
+        };
+      } catch (hotErr) {
+        return { success: false, error: `实时注入失败: ${hotErr.message}` };
+      }
+    } else {
+      // 离线写入 profiles/<envId>/pending_cookies.json
+      try {
+        const envDir = path.join(store.PROFILES_DIR, envId);
+        if (!fs.existsSync(envDir)) fs.mkdirSync(envDir, { recursive: true });
+        const pendingFile = path.join(envDir, 'pending_cookies.json');
+        fs.writeFileSync(pendingFile, JSON.stringify(cookies, null, 2), 'utf8');
+        return {
+          success: true,
+          count: cookies.length,
+          hot: false,
+          message: `已保存 ${cookies.length} 条 Cookie 至该环境离线待注入文件，下次启动该环境时将自动静默载入！`
+        };
+      } catch (fileErr) {
+        return { success: false, error: `离线保存 Cookie 失败: ${fileErr.message}` };
+      }
+    }
+  });
+
+  ipcMain.handle('export-cookies', async (_e, { envId, format = 'json' }) => {
+    if (!envId) return { success: false, error: '未指定环境ID' };
+    const isRunning = processManager.isRunning(envId);
+    let cookies = [];
+
+    if (isRunning && ipcHub.isClientConnected(envId)) {
+      try {
+        cookies = await ipcHub.requestCookies(envId);
+      } catch (err) {
+        return { success: false, error: `实时读取Cookie失败: ${err.message}` };
+      }
+    } else {
+      const envDir = path.join(store.PROFILES_DIR, envId);
+      const pendingFile = path.join(envDir, 'pending_cookies.json');
+      if (fs.existsSync(pendingFile)) {
+        try {
+          cookies = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+        } catch (_) {}
+      }
+      if (!cookies || cookies.length === 0) {
+        return {
+          success: false,
+          error: '浏览器当前未运行。实时 Cookie 存储在 Chromium 独立底层数据库中，请先启动该环境后再导出最新实时 Cookie。'
+        };
+      }
+    }
+
+    if (!Array.isArray(cookies) || cookies.length === 0) {
+      return { success: false, error: '当前环境中没有任何可导出的 Cookie 数据。' };
+    }
+
+    let exportedText = '';
+    if (format === 'netscape') {
+      exportedText = exportAsNetscape(cookies);
+    } else {
+      exportedText = exportAsJson(cookies);
+    }
+
+    return {
+      success: true,
+      count: cookies.length,
+      format,
+      data: exportedText
+    };
+  });
+
+  ipcMain.handle('select-cookie-file', async () => {
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: '选择 Cookie 文件',
+      filters: [
+        { name: 'Cookie 文件 (*.json, *.txt)', extensions: ['json', 'txt'] },
+        { name: '所有文件 (*.*)', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    });
+    if (!res.canceled && res.filePaths && res.filePaths.length > 0) {
+      const filePath = res.filePaths[0];
+      const content = fs.readFileSync(filePath, 'utf8');
+      return { success: true, filePath, content };
+    }
+    return { success: false };
+  });
+
+  ipcMain.handle('save-cookie-file', async (_e, { content, defaultName = 'cookies.json' }) => {
+    const res = await dialog.showSaveDialog(mainWindow, {
+      title: '导出保存 Cookie 文件',
+      defaultPath: defaultName,
+      filters: [
+        { name: 'Cookie 文件', extensions: ['json', 'txt'] },
+        { name: '所有文件 (*.*)', extensions: ['*'] }
+      ]
+    });
+    if (!res.canceled && res.filePath) {
+      fs.writeFileSync(res.filePath, content, 'utf8');
+      return { success: true, filePath: res.filePath };
+    }
+    return { success: false };
+  });
+
   // 定时向前端推送运行状态更新
   setInterval(() => {
     broadcastState();
@@ -501,6 +741,9 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
+  try {
+    ipcHub.stop();
+  } catch (_) {}
   if (tray && !tray.isDestroyed()) {
     try {
       tray.destroy();

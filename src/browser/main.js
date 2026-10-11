@@ -4,8 +4,11 @@ const { app, BaseWindow, WebContentsView, ipcMain, session, Menu } = require('el
 const fs = require('node:fs');
 const path = require('node:path');
 const url = require('node:url');
+const net = require('node:net');
 const { getEnvironment, loadAll, getSettings, getActiveFontInfo, ROOT_DIR, DATA_DIR, PROFILES_DIR, loadBookmarks, saveBookmarks } = require('../manager/store');
-const { applyProxy } = require('./proxy-helper');
+const { applyProxy, closeCurrentBridge } = require('./proxy-helper');
+const { PIPE_PATH } = require('../manager/ipc-hub');
+const { buildCookieUrl } = require('../shared/cookie-helper');
 
 const LOCAL_TEST_PAGE_PATH = path.join(__dirname, 'testing', 'index.html');
 const LOCAL_TEST_PAGE_URL = url.pathToFileURL(LOCAL_TEST_PAGE_PATH).href;
@@ -208,50 +211,24 @@ function urlsMatch(u1, u2) {
   return clean(u1) === clean(u2);
 }
 
-// 递归与子树全框架加载完成检测：防止网页内有多重嵌套/动态 iframe 时提前误判加载完成
+// 快速、平滑加载完成检测：优先保证主文档 DOM 与主体内容就绪，不被死链或挂起的跨域广告框架阻塞
 async function checkTabFramesComplete(tab) {
-  if (!tab || !tabs.includes(tab) || !tab.view || !tab.view.webContents || tab.view.webContents.isDestroyed()) return false;
+  if (!tab || !tabs.includes(tab) || !tab.view || !tab.view.webContents || tab.view.webContents.isDestroyed()) return true;
   const wc = tab.view.webContents;
   if (wc.isLoading()) return false;
 
   const main = wc.mainFrame;
-  if (!main) return false;
+  if (!main) return true;
 
-  // 1. 检查主文档 DOM 就绪状态以及同源内嵌框架就绪状态
   try {
-    const domReady = await wc.executeJavaScript(`
-      (() => {
-        if (document.readyState !== 'complete') return false;
-        const iframes = Array.from(document.querySelectorAll('iframe, frame'));
-        for (const ifr of iframes) {
-          try {
-            if (ifr.contentDocument && ifr.contentDocument.readyState !== 'complete') {
-              return false;
-            }
-          } catch (_) {}
-        }
-        return true;
-      })()
-    `, true);
-    if (!domReady) return false;
-  } catch (_) {
-    return false;
-  }
-
-  // 2. 检查跨域及所有进程子树框架 (WebFrameMain.framesInSubtree)
-  const frames = main.framesInSubtree || [];
-  for (const f of frames) {
-    if (f.detached || (typeof f.isDestroyed === 'function' && f.isDestroyed())) continue;
-    try {
-      const rs = await f.executeJavaScript('document.readyState', true);
-      if (rs !== 'complete') return false;
-    } catch (_) {
-      // 框架如果正在跳转、加载或未准备就绪，则判定为尚未完成
-      return false;
+    const readyState = await wc.executeJavaScript('document.readyState', true);
+    if (readyState === 'complete' || readyState === 'interactive') {
+      return true;
     }
+  } catch (_) {
+    return true;
   }
-
-  return true;
+  return false;
 }
 
 function markTabLoading(tab, pendingUrl = null) {
@@ -265,7 +242,7 @@ function markTabLoading(tab, pendingUrl = null) {
     clearTimeout(tab.checkTimer);
     tab.checkTimer = null;
   }
-  // 安全保护超时：若页面内存在死链或挂起的第三方跟踪 iframe，防止状态永久卡在加载中 (25秒兜底)
+  // 安全保护超时：若页面内存在死链或挂起的第三方跟踪 iframe，防止状态永久卡在加载中 (15秒兜底)
   if (tab.safetyTimer) clearTimeout(tab.safetyTimer);
   tab.safetyTimer = setTimeout(() => {
     if (tab && tab.isLoading) {
@@ -273,7 +250,7 @@ function markTabLoading(tab, pendingUrl = null) {
       tab.pendingNavUrl = null;
       notifyShell();
     }
-  }, 25000);
+  }, 15000);
 
   if (!wasLoading) {
     notifyShell();
@@ -286,7 +263,7 @@ function scheduleTabLoadingCheck(tab) {
   tab.checkTimer = setTimeout(async () => {
     tab.checkTimer = null;
     const isComplete = await checkTabFramesComplete(tab);
-    if (isComplete) {
+    if (isComplete || (tab.checkCount || 0) >= 4) {
       if (tab.safetyTimer) {
         clearTimeout(tab.safetyTimer);
         tab.safetyTimer = null;
@@ -297,28 +274,34 @@ function scheduleTabLoadingCheck(tab) {
       notifyShell();
     } else {
       tab.checkCount = (tab.checkCount || 0) + 1;
-      // 页面中仍有部分子框架尚未完全加载完毕，持续轮询 (上限30次约5秒，防止第三方死循环iframe消耗CPU)
-      if (tab.isLoading && tab.checkCount < 30) {
+      if (tab.isLoading) {
         scheduleTabLoadingCheck(tab);
-      } else if (tab.checkCount >= 30) {
-        if (tab.safetyTimer) {
-          clearTimeout(tab.safetyTimer);
-          tab.safetyTimer = null;
-        }
-        tab.isLoading = false;
-        tab.pendingNavUrl = null;
-        notifyShell();
       }
     }
-  }, 160);
+  }, 100);
 }
 
 function notifyShell() {
   if (!shellView || shellView.webContents.isDestroyed()) return;
   const isLocalTest = (u) => Boolean(u && (u === LOCAL_TEST_PAGE_URL || (u.startsWith('file:') && u.includes('testing/index.html'))));
 
+  // 关键保护：彻底过滤掉已被销毁的标签页，杜绝 CDP / Playwright 关闭时引发 destroyed 异常
+  tabs = tabs.filter(t => t.view && t.view.webContents && !t.view.webContents.isDestroyed());
+
   const tabStates = tabs.map(t => {
-    const curUrl = t.view.webContents.getURL() || t.initialUrl;
+    let curUrl = t.initialUrl || '';
+    let pageTitle = '新标签页';
+    let canGoBack = false;
+    let canGoForward = false;
+    try {
+      if (t.view && t.view.webContents && !t.view.webContents.isDestroyed()) {
+        curUrl = t.view.webContents.getURL() || t.initialUrl || '';
+        pageTitle = t.view.webContents.getTitle() || (isLocalTest(curUrl) ? '本地指纹检测 · 实际读数' : '新标签页');
+        canGoBack = t.view.webContents.navigationHistory?.canGoBack?.() || false;
+        canGoForward = t.view.webContents.navigationHistory?.canGoForward?.() || false;
+      }
+    } catch (_) {}
+
     const effectiveUrl = t.pendingNavUrl || curUrl;
     const displayUrl = isLocalTest(effectiveUrl) ? 'dt://fingerprint-test' : effectiveUrl;
     const displayActual = isLocalTest(curUrl) ? 'dt://fingerprint-test' : curUrl;
@@ -327,14 +310,15 @@ function notifyShell() {
       url: displayUrl,
       actualUrl: displayActual,
       pendingUrl: t.pendingNavUrl ? (isLocalTest(t.pendingNavUrl) ? 'dt://fingerprint-test' : t.pendingNavUrl) : null,
-      title: t.view.webContents.getTitle() || (isLocalTest(curUrl) ? '本地指纹检测 · 实际读数' : '新标签页'),
-      canGoBack: t.view.webContents.navigationHistory?.canGoBack?.() || false,
-      canGoForward: t.view.webContents.navigationHistory?.canGoForward?.() || false,
+      title: pageTitle,
+      canGoBack,
+      canGoForward,
       isLoading: Boolean(t.isLoading)
     };
   });
 
   const fontInfo = typeof getActiveFontInfo === 'function' ? getActiveFontInfo() : null;
+  const proxyHost = (currentEnv.proxy && currentEnv.proxy.host) ? `${currentEnv.proxy.host}:${currentEnv.proxy.port}` : '';
   shellView.webContents.send('update-state', {
     env: currentEnv,
     tabs: tabStates,
@@ -344,7 +328,12 @@ function notifyShell() {
     isMaximized: mainWindow && !mainWindow.isDestroyed() ? mainWindow.isMaximized() : false,
     defaultTheme: initialTheme,
     fontInfo,
-    bookmarks: getBookmarks()
+    bookmarks: getBookmarks(),
+    isUsingProxy: isCurrentlyUsingProxy,
+    proxyHost: proxyHost,
+    userWantsProxy: userWantsProxy,
+    isSyncMaster: Boolean(isSyncMaster),
+    isSyncSlave: Boolean(isSyncSlave)
   });
 }
 
@@ -396,6 +385,20 @@ function setupTabListeners(tabItem) {
       if (shellView && !shellView.webContents.isDestroyed()) {
         shellView.webContents.send('trigger-bookmark-current');
       }
+    }
+
+    // 键鼠同步器：主控窗口按键广播
+    if (isSyncMaster && !isCtrl && input.key) {
+      sendHubMessage({
+        action: 'sync-event',
+        envId: currentEnv.id,
+        payload: {
+          type: 'key',
+          keyCode: input.key,
+          isDown: input.type === 'keyDown',
+          text: input.key
+        }
+      });
     }
   });
 
@@ -615,7 +618,43 @@ async function dispatchNativePhysicalClick(wc, x, y) {
       } catch (err) {
         console.warn('[DT Click Error]', err.message);
       }
+    } else if (rawMsg && rawMsg.startsWith('__DT_SYNC_CLICK__:')) {
+      if (isSyncMaster) {
+        try {
+          const p = JSON.parse(rawMsg.slice('__DT_SYNC_CLICK__:'.length));
+          sendHubMessage({ action: 'sync-event', envId: currentEnv.id, payload: { type: 'click', ...p } });
+        } catch (_) {}
+      }
+    } else if (rawMsg && rawMsg.startsWith('__DT_SYNC_WHEEL__:')) {
+      if (isSyncMaster) {
+        try {
+          const p = JSON.parse(rawMsg.slice('__DT_SYNC_WHEEL__:'.length));
+          sendHubMessage({ action: 'sync-event', envId: currentEnv.id, payload: { type: 'scroll', ...p } });
+        } catch (_) {}
+      }
     }
+  });
+
+  // 页面注入轻量同步捕获脚本
+  view.webContents.on('dom-ready', () => {
+    view.webContents.executeJavaScript(`
+      (() => {
+        if (window.__dt_sync_listener_set) return;
+        window.__dt_sync_listener_set = true;
+        window.addEventListener('click', (e) => {
+          if (!e.isTrusted) return;
+          const xRatio = e.clientX / Math.max(1, window.innerWidth);
+          const yRatio = e.clientY / Math.max(1, window.innerHeight);
+          console.log('__DT_SYNC_CLICK__:' + JSON.stringify({ xRatio, yRatio }));
+        }, true);
+        window.addEventListener('wheel', (e) => {
+          if (!e.isTrusted) return;
+          const xRatio = e.clientX / Math.max(1, window.innerWidth);
+          const yRatio = e.clientY / Math.max(1, window.innerHeight);
+          console.log('__DT_SYNC_WHEEL__:' + JSON.stringify({ xRatio, yRatio, deltaX: e.deltaX, deltaY: e.deltaY }));
+        }, { passive: true, capture: true });
+      })();
+    `, true).catch(() => {});
   });
 
   // 监听导航和加载事件：支持多框架递归彻底完成检测
@@ -644,6 +683,9 @@ async function dispatchNativePhysicalClick(wc, x, y) {
     if (tabItem.pendingNavUrl && urlsMatch(navUrl, tabItem.pendingNavUrl)) {
       tabItem.pendingNavUrl = null;
     }
+    if (isSyncMaster && navUrl && !navUrl.startsWith('devtools://')) {
+      sendHubMessage({ action: 'sync-event', envId: currentEnv.id, payload: { type: 'navigate', url: navUrl } });
+    }
     notifyShell();
     scheduleTabLoadingCheck(tabItem);
   });
@@ -651,11 +693,19 @@ async function dispatchNativePhysicalClick(wc, x, y) {
     if (tabItem.pendingNavUrl && urlsMatch(navUrl, tabItem.pendingNavUrl)) {
       tabItem.pendingNavUrl = null;
     }
+    if (isSyncMaster && navUrl && !navUrl.startsWith('devtools://')) {
+      sendHubMessage({ action: 'sync-event', envId: currentEnv.id, payload: { type: 'navigate', url: navUrl } });
+    }
     notifyShell();
     scheduleTabLoadingCheck(tabItem);
   });
   view.webContents.on('page-title-updated', () => {
     notifyShell();
+  });
+
+  // 自动化工具 (CDP / Playwright / Puppeteer) 或页面脚本自关闭保护
+  view.webContents.once('destroyed', () => {
+    closeTab(tabId, true);
   });
 }
 
@@ -716,15 +766,23 @@ function switchTab(tabId) {
   notifyShell();
 }
 
-function closeTab(tabId) {
+function closeTab(tabId, alreadyDestroyed = false) {
   const index = tabs.findIndex(t => t.id === tabId);
   if (index === -1) return;
   const tab = tabs[index];
   if (tab.checkTimer) clearTimeout(tab.checkTimer);
   if (tab.safetyTimer) clearTimeout(tab.safetyTimer);
-  mainWindow.contentView.removeChildView(tab.view);
-  if (tab.view && tab.view.webContents && !tab.view.webContents.isDestroyed()) {
-    tab.view.webContents.close();
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    try {
+      mainWindow.contentView.removeChildView(tab.view);
+    } catch (_) {}
+  }
+
+  if (!alreadyDestroyed && tab.view && tab.view.webContents && !tab.view.webContents.isDestroyed()) {
+    try {
+      tab.view.webContents.close();
+    } catch (_) {}
   }
   tabs.splice(index, 1);
 
@@ -742,7 +800,8 @@ function closeTab(tabId) {
   }
 }
 
-let proxyBridge = null;
+let userWantsProxy = true; // 顶栏选择框：默认勾选使用代理
+let isCurrentlyUsingProxy = false; // 当前 Session 是否实际使用了代理
 
 // 统一采用环境专属持久化 Session 分区隔离 (确保存储、Cookie 与指纹时区内核完全生效)
 let envSession = null;
@@ -754,36 +813,250 @@ function getEnvSession() {
   return envSession;
 }
 
+// 动态应用/切换代理
+async function updateSessionProxy() {
+  const sessions = [session.defaultSession, getEnvSession()];
+  const hasProxyConfig = Boolean(currentEnv.proxy && currentEnv.proxy.host && currentEnv.proxy.port);
+
+  if (userWantsProxy && hasProxyConfig) {
+    for (const ses of sessions) {
+      await applyProxy(ses, currentEnv.proxy);
+    }
+    isCurrentlyUsingProxy = true;
+    console.log(`[Proxy] 已切换为代理上网: ${currentEnv.proxy.host}:${currentEnv.proxy.port}`);
+  } else {
+    closeCurrentBridge();
+    for (const ses of sessions) {
+      await ses.setProxy({ mode: 'direct' });
+    }
+    isCurrentlyUsingProxy = false;
+    console.log(`[Proxy] 已切换为本地直连模式`);
+  }
+}
+
 // 5. 应用指纹与代理到 Session
 async function configureSession(ses, config) {
   if (typeof ses.setFingerprintConfig !== 'function') {
     throw new Error('当前内核未提供 setFingerprintConfig，必须使用定制 electron.exe 启动！');
   }
 
-  // 配置代理 (自动识别4种格式，SOCKS5认证自动使用本地透明中转)
-  if (!proxyBridge) {
-    proxyBridge = await applyProxy(ses, config.proxy);
-  } else {
+  // 配置代理
+  const hasProxyConfig = Boolean(config.proxy && config.proxy.host && config.proxy.port);
+  if (userWantsProxy && hasProxyConfig) {
     await applyProxy(ses, config.proxy);
+    isCurrentlyUsingProxy = true;
+  } else {
+    closeCurrentBridge();
+    await ses.setProxy({ mode: 'direct' });
+    isCurrentlyUsingProxy = false;
   }
 
-  // 配置 UA 与语言
+  // 配置 UA 与语言 (优先自定义 UA)
+  const effectiveUa = config.customUa || config.fp?.uaString;
   const languages = config.fp?.navigator?.languages || ['en-US', 'en'];
-  ses.setUserAgent(config.fp.uaString, languages.join(','));
+  ses.setUserAgent(effectiveUa, languages.join(','));
 
   // 注入指纹内核核心配置 (含 timezone 地区时区，触发内核 SetTimeZoneOverride)
   ses.setFingerprintConfig(JSON.stringify(config.fp));
 
-  // WebRTC 策略安全化
+  // WebRTC 策略安全化：禁止非代理 UDP，防止 STUN 泄露宿主真实公网/局域网 IP
+  try {
+    if (typeof ses.setWebRTCIPHandlingPolicy === 'function') {
+      ses.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
+    }
+  } catch (_) {}
+
   ses.setPermissionCheckHandler(() => false);
+
+  // 注入待应用的导入 Cookie
+  await applyPendingCookies(ses, config.id || currentEnv.id);
+}
+
+// 检查并自动导入待处理 Cookie
+async function applyPendingCookies(ses, envId) {
+  if (!envId) return;
+  const pendingFile = path.join(PROFILES_DIR, envId, 'pending_cookies.json');
+  if (!fs.existsSync(pendingFile)) return;
+  try {
+    const raw = fs.readFileSync(pendingFile, 'utf8');
+    const cookies = JSON.parse(raw);
+    if (Array.isArray(cookies) && cookies.length > 0) {
+      for (const c of cookies) {
+        try {
+          await ses.cookies.set({
+            url: buildCookieUrl(c),
+            name: c.name,
+            value: c.value,
+            domain: c.domain,
+            path: c.path || '/',
+            secure: Boolean(c.secure),
+            httpOnly: Boolean(c.httpOnly),
+            expirationDate: c.expirationDate
+          });
+        } catch (_) {}
+      }
+      console.log(`[Cookie Import] 环境 ${envId} 启动时已自动导入 ${cookies.length} 条 Cookie`);
+    }
+    fs.unlinkSync(pendingFile);
+  } catch (e) {
+    console.warn('[Cookie Import Error]', e.message);
+  }
+}
+
+let isSyncMaster = false;
+let isSyncSlave = false;
+let hubSocket = null;
+
+function sendHubMessage(msg) {
+  if (hubSocket && !hubSocket.destroyed) {
+    try {
+      hubSocket.write(JSON.stringify(msg) + '\n');
+    } catch (_) {}
+  }
+}
+
+function connectToHub() {
+  try {
+    hubSocket = net.connect(PIPE_PATH, () => {
+      sendHubMessage({
+        action: 'register',
+        envId: currentEnv.id
+      });
+    });
+
+    let buffer = '';
+    hubSocket.on('data', (chunk) => {
+      buffer += chunk.toString('utf8');
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          handleHubMessage(msg);
+        } catch (_) {}
+      }
+    });
+
+    hubSocket.on('error', () => {
+      hubSocket = null;
+      setTimeout(connectToHub, 2500);
+    });
+
+    hubSocket.on('close', () => {
+      hubSocket = null;
+      setTimeout(connectToHub, 2500);
+    });
+  } catch (_) {
+    setTimeout(connectToHub, 2500);
+  }
+}
+
+async function handleHubMessage(msg) {
+  const { action, msgId, bounds, payload, isMaster, isSlave } = msg;
+
+  if (action === 'set-bounds') {
+    if (mainWindow && !mainWindow.isDestroyed() && bounds) {
+      if (mainWindow.isMaximized()) {
+        mainWindow.unmaximize();
+      }
+      mainWindow.setBounds(bounds);
+      resizeViews();
+    }
+  } else if (action === 'get-cookies') {
+    try {
+      const ses = getEnvSession();
+      const cookies = await ses.cookies.get({});
+      sendHubMessage({ msgId, payload: cookies });
+    } catch (err) {
+      sendHubMessage({ msgId, error: err.message });
+    }
+  } else if (action === 'set-cookies') {
+    try {
+      const ses = getEnvSession();
+      const cookies = payload || [];
+      for (const c of cookies) {
+        try {
+          await ses.cookies.set({
+            url: buildCookieUrl(c),
+            name: c.name,
+            value: c.value,
+            domain: c.domain,
+            path: c.path || '/',
+            secure: Boolean(c.secure),
+            httpOnly: Boolean(c.httpOnly),
+            expirationDate: c.expirationDate
+          });
+        } catch (_) {}
+      }
+      sendHubMessage({ msgId, payload: { success: true, count: cookies.length } });
+    } catch (err) {
+      sendHubMessage({ msgId, error: err.message });
+    }
+  } else if (action === 'set-sync-role' || action === 'register-ack') {
+    isSyncMaster = Boolean(isMaster);
+    isSyncSlave = Boolean(isSlave);
+    notifyShell();
+  } else if (action === 'dispatch-sync-event') {
+    handleDispatchedSyncEvent(msg.event);
+  }
+}
+
+async function handleDispatchedSyncEvent(evt) {
+  if (!evt) return;
+  const activeTab = tabs.find(t => t.id === activeTabId);
+  if (!activeTab || !activeTab.view || !activeTab.view.webContents || activeTab.view.webContents.isDestroyed()) return;
+  const wc = activeTab.view.webContents;
+
+  if (evt.type === 'navigate' && evt.url) {
+    activeTab.pendingNavUrl = evt.url;
+    markTabLoading(activeTab, evt.url);
+    notifyShell();
+    wc.loadURL(evt.url).catch(() => {});
+  } else if (evt.type === 'reload') {
+    markTabLoading(activeTab);
+    wc.reload();
+  } else if (evt.type === 'scroll') {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const [width, height] = mainWindow.getContentSize();
+      wc.sendInputEvent({
+        type: 'mouseWheel',
+        x: Math.round(evt.xRatio * width),
+        y: Math.round(evt.yRatio * (height - SHELL_HEIGHT)),
+        deltaX: evt.deltaX,
+        deltaY: evt.deltaY
+      });
+    }
+  } else if (evt.type === 'click') {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const [width, height] = mainWindow.getContentSize();
+      const targetX = Math.round(evt.xRatio * width);
+      const targetY = Math.round(evt.yRatio * (height - SHELL_HEIGHT));
+      dispatchNativePhysicalClick(wc, targetX, targetY);
+    }
+  } else if (evt.type === 'key') {
+    wc.sendInputEvent({
+      type: evt.isDown ? 'keyDown' : 'keyUp',
+      keyCode: evt.keyCode
+    });
+    if (evt.isDown && evt.text && evt.text.length === 1) {
+      wc.sendInputEvent({
+        type: 'char',
+        keyCode: evt.text
+      });
+    }
+  }
 }
 
 // 6. 热更新指纹
 async function applyHotFingerprint(newFp) {
   currentEnv.fp = newFp;
+  // 如果当前环境设置了自定义 UA，指纹热更新时 UA 保持自定义不变
+  const effectiveUa = currentEnv.customUa || newFp.uaString;
   for (const s of [session.defaultSession, getEnvSession()]) {
     const languages = newFp.navigator?.languages || ['en-US', 'en'];
-    s.setUserAgent(newFp.uaString, languages.join(','));
+    s.setUserAgent(effectiveUa, languages.join(','));
     s.setFingerprintConfig(JSON.stringify(newFp));
   }
 
@@ -930,16 +1203,78 @@ if (typeof chrome !== 'undefined') {
       break;
     }
   }
-  mainWindow = new BaseWindow({
-    width: 1360,
-    height: 860,
+  const stateFile = path.join(absUserData, 'window-state.json');
+  let savedState = null;
+  try {
+    if (fs.existsSync(stateFile)) {
+      savedState = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+    }
+  } catch (_) {}
+
+  const winBounds = {
+    width: (savedState && savedState.width) ? savedState.width : 1360,
+    height: (savedState && savedState.height) ? savedState.height : 860,
     minWidth: 800,
     minHeight: 500,
     frame: false, // 彻底移除系统默认边框与双层标题栏，实现现代沉浸式无边框外观
     title: `${currentEnv.name} - DT 指纹浏览器`,
     icon: (iconPath && fs.existsSync(iconPath)) ? iconPath : undefined,
     show: !isHeadless
+  };
+
+  // 恢复关闭前的位置 (带屏幕越界保护，防止外接显示器断开后窗口移到屏幕外)
+  if (savedState && typeof savedState.x === 'number' && typeof savedState.y === 'number') {
+    const { screen } = require('electron');
+    const displays = screen.getAllDisplays();
+    const isVisible = displays.some(d => {
+      const b = d.bounds;
+      return savedState.x >= b.x - 200 &&
+             savedState.x < b.x + b.width &&
+             savedState.y >= b.y - 100 &&
+             savedState.y < b.y + b.height;
+    });
+    if (isVisible) {
+      winBounds.x = savedState.x;
+      winBounds.y = savedState.y;
+    }
+  }
+
+  mainWindow = new BaseWindow(winBounds);
+
+  if (savedState && savedState.isMaximized) {
+    mainWindow.maximize();
+  }
+
+  // 窗口位置与尺寸记忆防抖保存
+  let stateSaveTimer = null;
+  function scheduleSaveWindowState() {
+    if (stateSaveTimer) clearTimeout(stateSaveTimer);
+    stateSaveTimer = setTimeout(saveWindowState, 300);
+  }
+
+  function saveWindowState() {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      const isMaximized = mainWindow.isMaximized();
+      const bounds = isMaximized ? mainWindow.getNormalBounds() : mainWindow.getBounds();
+      const state = {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        isMaximized
+      };
+      if (!fs.existsSync(absUserData)) fs.mkdirSync(absUserData, { recursive: true });
+      fs.writeFileSync(stateFile, JSON.stringify(state, null, 2), 'utf8');
+    } catch (_) {}
+  }
+
+  mainWindow.on('resize', () => {
+    resizeViews();
+    scheduleSaveWindowState();
   });
+  mainWindow.on('move', scheduleSaveWindowState);
+  mainWindow.on('close', saveWindowState);
 
   if (typeof mainWindow.setMenu === 'function') mainWindow.setMenu(null);
   if (typeof mainWindow.setMenuBarVisibility === 'function') mainWindow.setMenuBarVisibility(false);
@@ -977,6 +1312,9 @@ if (typeof chrome !== 'undefined') {
 
       markTabLoading(activeTab, url);
       notifyShell();
+      if (isSyncMaster && url && !url.startsWith('devtools://')) {
+        sendHubMessage({ action: 'sync-event', envId: currentEnv.id, payload: { type: 'navigate', url } });
+      }
       activeTab.view.webContents.loadURL(url).catch(err => {
         if (activeTab.navSeq !== currentSeq) {
           return; // 已被新导航替代，忽略上一导航中断
@@ -1009,6 +1347,9 @@ if (typeof chrome !== 'undefined') {
     const activeTab = tabs.find(t => t.id === activeTabId);
     if (activeTab && activeTab.view && activeTab.view.webContents && !activeTab.view.webContents.isDestroyed()) {
       markTabLoading(activeTab);
+      if (isSyncMaster) {
+        sendHubMessage({ action: 'sync-event', envId: currentEnv.id, payload: { type: 'reload' } });
+      }
       activeTab.view.webContents.reload();
     }
   });
@@ -1054,6 +1395,12 @@ if (typeof chrome !== 'undefined') {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.close();
     }
+  });
+
+  ipcMain.on('action-toggle-proxy', async (_event, useProxy) => {
+    userWantsProxy = Boolean(useProxy);
+    await updateSessionProxy();
+    notifyShell();
   });
 
   ipcMain.on('action-open-extension-page', (_event, targetUrl) => {
@@ -1342,15 +1689,16 @@ if (typeof chrome !== 'undefined') {
   mainWindow.on('maximize', notifyShell);
   mainWindow.on('unmaximize', notifyShell);
   mainWindow.on('closed', () => {
-    if (proxyBridge && proxyBridge.server) {
-      try { proxyBridge.server.close(); } catch {}
-    }
+    closeCurrentBridge();
     app.quit();
   });
 
   // 5. 初始同步 Shell 状态与布局
   resizeViews();
   notifyShell();
+
+  // 6. 连接至管理器 IPC Hub 接收平铺控制、Cookie交换与键鼠同步广播
+  connectToHub();
 
   // 6. 热更新检查优化：通过 mtimeMs 避免无意义的高频磁盘读取
   const { CONFIG_FILE } = require('../manager/store');

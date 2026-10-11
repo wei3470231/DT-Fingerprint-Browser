@@ -10,8 +10,8 @@
 > 欢迎进群交流指纹对抗技术、提交 BUG 与功能建议、获取最新编译发布的便携包与安装包！
 >
 > 📥 **Release 官方最新版本下载（纯英文标准命名，含版本号）**：
-> - 📦 **独立安装向导包**：[`DT-Fingerprint-Browser-v2.1-Setup.exe`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（自动配置用户 PATH 环境变量与开机自启）
-> - 🗜️ **绿色便携压缩包**：[`DT-Fingerprint-Browser-v2.1-Portable.zip`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（解压即用，无任何绝对路径依赖）
+> - 📦 **独立安装向导包**：[`DT-Fingerprint-Browser-v2.2-Setup.exe`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（自动配置用户 PATH 环境变量与开机自启）
+> - 🗜️ **绿色便携压缩包**：[`DT-Fingerprint-Browser-v2.2-Portable.zip`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（解压即用，无任何绝对路径依赖）
 > - 🌐 **GitHub Releases 发布页面**：[https://github.com/wei3470231/DT-Fingerprint-Browser/releases](https://github.com/wei3470231/DT-Fingerprint-Browser/releases)
 
 ---
@@ -114,7 +114,7 @@ node scripts/test-portable.js
 * 验证精简系统兜底字体库 `Fonts/`；
 * 验证 CLI Chrome Drop-in 模式（`--version`、`--product-version`）；
 * 验证 CLI JSON 管理指令（`list`、`font status`、`theme status`、`settings get`）；
-* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.1-Portable.zip`。
+* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.2-Portable.zip`。
 
 ### 2.2 一键生成便携包与商业安装程序
 在项目根目录下执行：
@@ -124,8 +124,8 @@ node scripts/build-installer.js
 构建脚本将全自动完成：
 1. **源码脱敏加密**：使用 Terser 进行变量混淆并打包进虚拟归档 `app.asar`；
 2. **生成便携目录**：在 `dist/payload/` 编译生成原生无黑框启动器与 CLI 工具；
-3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.1-Portable.zip`（约 200 MB，无中文字符，解压即用）；
-4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v2.1-Setup.exe`（自动配置用户 PATH 与开机自启）。
+3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.2-Portable.zip`（约 200 MB，无中文字符，解压即用）；
+4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v2.2-Setup.exe`（自动配置用户 PATH 与开机自启）。
 
 ### 2.3 根目录快捷调用机制
 在根目录下提供了 `dt-cli.cmd` 与 `dt.cmd` 包装脚本：
@@ -222,7 +222,7 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 * **居中纯免费标语**：醒目标注 `🛡️ 商业级对抗内核 · 永久纯免费 · 100%完全开源 · 拒绝收费套路`，宣告拒绝商业割韭菜。
 
 ### 3.18 GitHub Releases 实时版本检测与在线更新提醒
-* **右下角版本感知**：管理器右下角自动展示当前客户端版本号（`v2.1`）；
+* **右下角版本感知**：管理器右下角自动展示当前客户端版本号（`v2.2`）；
 * **静默异步版本探测**：启动时自动异步请求 GitHub Releases API（`wei3470231/DT-Fingerprint-Browser`）；
 * **一键直达新版本**：若检测到线上存在高于本地的最新版本，右下角将以高亮橙色徽章提示 `发现新版本: vX.X.X (点击更新)`，点击后立即通过系统默认浏览器打开 GitHub Release 发布页面，轻松下载最新便携包。
 
@@ -230,6 +230,43 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 * **开箱即用默认自测首页**：所有新建指纹环境默认首页统一接入 `dt://fingerprint-test` 本地离线指纹实验室，启动即可实时测试 Canvas/Audio/WebGL/Client Hints/时区真实数据；
 * **随机时区默认纽约**：随机指纹算法默认时区由随机模式收敛为稳定美国纽约（`America/New_York`），真实模拟海外跨境与出海业务环境；
 * **真实时间穿透**：时区设置不仅改变 `Intl.DateTimeFormat`，更深层联动底层时间偏移量计算，使得网页获取的系统时间直接呈现为纽约当地准确时间，同时不修改宿主操作系统的底层时钟。
+
+### 3.20 Cookie / 网站数据一键导入导出（JSON & Netscape TXT 格式）
+* **双向格式兼容**：原生支持 EditThisCookie / Cookie-Editor / Puppeteer 标准 JSON 数组格式，以及 cURL / wget 标准 Netscape HTTP Cookie 文本格式（制表符分隔行）；
+* **实时热写入与离线持久化双通道**：若目标浏览器环境正在运行，直接通过 IPC 管道毫秒级热注入至运行中会话；若未运行，则安全写入离线待注入文件，下次启动该环境时自动静默载入；
+* **便捷桌面管理面板**：每个环境专属 `🍪 Cookie` 快捷按钮，支持一键导出到剪贴板、保存为文件、从本地文件载入与智能格式嗅探。
+
+### 3.21 多窗口一键批量排列与平铺控制器（Tile / Grid 排列）
+* **超低延迟具名管道通讯**：基于 Windows 原生 Named Pipe（`\\.\pipe\dt-fingerprint-hub`）构建多进程控制中枢，零网络端口占用，天然免受代理影响；
+* **四种智能屏幕平铺布局**：
+  * **🔲 网格平铺 (Grid)**：根据当前运行的窗口数量自动计算最佳行列数（$N \times M$），均匀平铺占满屏幕工作区；
+  * **⏸️ 水平平铺 (左右横向)**：所有窗口横向等宽排开；
+  * **⏩ 垂直平铺 (上下纵向)**：所有窗口纵向等高排开；
+  * **📑 层叠排列 (Cascade)**：按固定偏移量层叠排列；
+* **工作区智能适配**：自动获取主显示器工作区边界，精准扣除任务栏高度与坐标偏移，并自动解除最大化状态。
+
+### 3.22 多窗口键鼠镜像同步器（Mouse & Keyboard Synchronizer）
+* **毫秒级事件广播**：支持自由指定一台运行中的浏览器为**主控端**（Master），勾选多台**从属端**（Slaves）；
+* **全事件镜像派发**：
+  * **鼠标真实物理点击**：采用底层 CDP 级真实物理点击穿透（支持跨域 iframe / Turnstile 验证码）并按窗口尺寸比例自适应缩放坐标；
+  * **鼠标滚轮滚动**：比例坐标映射派发 `mouseWheel`；
+  * **键盘按键与输入**：实时派发 `keyDown`、`keyUp` 与文本字符输入；
+  * **页面导航与刷新**：主控端跳转或刷新时从属端同步导航至相同页面；
+* **视觉徽章动态指示**：主控端顶栏醒目提示橙色 `⚡ 同步主控` 徽章，从属端醒目提示粉紫色 `⚡ 镜像从属` 徽章。
+
+### 3.23 浏览器关闭记忆窗口位置与下次启动原位恢复
+* **全生命周期位置追踪**：监听窗口 `move`、`resize` 与 `close` 事件，防抖保存窗口坐标（`x`、`y`）、尺寸（`width`、`height`）及最大化状态至配置目录的 `window-state.json`；
+* **多屏拔出防越界纠偏**：启动时检测所有当前连接的显示器物理边界，若先前所在的外接屏幕已拔出，自动纠偏回当前主屏可见工作区，杜绝窗口飞出屏幕外。
+
+### 3.24 自定义 UA 预设库支持与随机指纹防覆盖保护
+* **主流现代浏览器 UA 库**：内置近几代主流版本的 macOS / Windows Chrome（132~134）、Firefox（134~135）及 Safari 预设；
+* **自定义 UA 随机指纹锁定**：用户手动指定自定义 UA 或选择预设后，在执行“一键改指纹 / 随机指纹”时，自定义 UA 严格保持锁定，不被通用随机指纹库覆写。
+
+### 3.25 代理直连一键切换与网络安全增强
+* **顶栏代理快速开关**：浏览器顶部导航栏新增 `[✓] 使用代理` 复选框（默认勾选），支持在不重启浏览器的情况下无缝热切换代理与本地直连网络；
+* **WebRTC 真实 IP 防泄漏**：Chromium 会话强制启用 `disable_non_proxied_udp` 策略，杜绝通过 WebRTC STUN 协议嗅探泄露本地物理公网 IP；
+* **SOCKS5 外网真实连通性探测**：通过向外网目标发送 SOCKS5 CONNECT 握手确认连通，彻底消除假阳性问题；
+* **CDP 批量关闭标签页稳定性提升**：完善 WebContents 销毁监听防护，彻底杜绝自动化并发快速关闭标签页时的底层崩溃。
 
 ---
 
@@ -1037,10 +1074,10 @@ node scripts/build-installer.js
 
 构建完成后将在 `dist/` 目录下生成两类产物（文件名均为标准纯英文并带版本号，兼容 GitHub Releases 上传与海外环境）：
 1. **独立单文件安装程序**：
-   * 路径：`dist\DT-Fingerprint-Browser-v2.1-Setup.exe`（约 200 MB）
+   * 路径：`dist\DT-Fingerprint-Browser-v2.2-Setup.exe`（约 200 MB）
    * 适用场景：GitHub Release 发布、对外分享的标准安装包，带安装向导界面、开机自启复选框、PATH 自动注册与控制面板卸载项。
 2. **便携即用免安装包与目录**：
-   * 压缩包路径：`dist\DT-Fingerprint-Browser-v2.1-Portable.zip`（约 200 MB，解压即用）
+   * 压缩包路径：`dist\DT-Fingerprint-Browser-v2.2-Portable.zip`（约 200 MB，解压即用）
    * 运行目录：`dist\payload\`
    * 适用场景：GitHub Release 发布、解压即用的免安装绿色便携版，直接双击 `DT-Fingerprint-Browser.exe` 或 `DT - 指纹浏览器.exe` 即可运行。
 

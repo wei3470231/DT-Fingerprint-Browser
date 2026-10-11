@@ -45,15 +45,25 @@ async function applyProxy(ses, proxyConfig) {
 
   // 如果是 SOCKS5 且包含密码认证，通过本地 Loopback Bridge 进行协议转换
   if (proto === 'socks5' && username) {
-    try {
-      bridge = await createSocks5AuthBridge(host, port, username, password);
+    const bridgeKey = `${host}:${port}:${username}:${password}`;
+    if (activeBridge && activeBridgeKey === bridgeKey) {
+      bridge = activeBridge;
       effectiveEndpoint = `socks5://127.0.0.1:${bridge.port}`;
-      console.log(`[Proxy] SOCKS5 认证中转已就绪: 127.0.0.1:${bridge.port} -> ${host}:${port}`);
-    } catch (e) {
-      console.error('[Proxy] 启动本地 SOCKS5 中转失败:', e.message);
-      effectiveEndpoint = `socks5://${host}:${port}`;
+    } else {
+      closeCurrentBridge();
+      try {
+        bridge = await createSocks5AuthBridge(host, port, username, password);
+        activeBridge = bridge;
+        activeBridgeKey = bridgeKey;
+        effectiveEndpoint = `socks5://127.0.0.1:${bridge.port}`;
+        console.log(`[Proxy] SOCKS5 认证中转已就绪: 127.0.0.1:${bridge.port} -> ${host}:${port}`);
+      } catch (e) {
+        console.error('[Proxy] 启动本地 SOCKS5 中转失败:', e.message);
+        effectiveEndpoint = `socks5://${host}:${port}`;
+      }
     }
   } else {
+    closeCurrentBridge();
     effectiveEndpoint = `${proto}://${host}:${port}`;
   }
 
@@ -97,4 +107,17 @@ async function applyProxy(ses, proxyConfig) {
   return bridge;
 }
 
-module.exports = { applyProxy };
+let activeBridge = null;
+let activeBridgeKey = null;
+
+function closeCurrentBridge() {
+  if (activeBridge && activeBridge.server) {
+    try {
+      activeBridge.server.close();
+    } catch (_) {}
+    activeBridge = null;
+    activeBridgeKey = null;
+  }
+}
+
+module.exports = { applyProxy, closeCurrentBridge };

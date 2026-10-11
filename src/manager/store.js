@@ -251,6 +251,14 @@ function normalizeRecord(env) {
   if (!env.url) {
     env.url = 'dt://fingerprint-test';
   }
+  if (env.customUa === undefined) {
+    env.customUa = '';
+  } else if (typeof env.customUa === 'string') {
+    env.customUa = env.customUa.trim();
+  }
+  if (env.customUa && env.fp) {
+    env.fp.uaString = env.customUa;
+  }
   return env;
 }
 
@@ -385,17 +393,22 @@ function loadAll() {
 function safeWriteJsonSync(targetFile, data) {
   ensureDirs();
   const content = JSON.stringify(data, null, 2);
+  const dir = path.dirname(targetFile);
+  const tmp = path.join(dir, `.${path.basename(targetFile)}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`);
   try {
-    fs.writeFileSync(targetFile, content, 'utf8');
-  } catch (err) {
-    const tmp = targetFile + '.' + process.pid + '.' + Date.now() + '.tmp';
+    fs.writeFileSync(tmp, content, 'utf8');
     try {
-      fs.writeFileSync(tmp, content, 'utf8');
+      fs.renameSync(tmp, targetFile);
+    } catch (_) {
+      // Windows 平台跨卷或被占用重试复制再清理
       fs.copyFileSync(tmp, targetFile);
       try { fs.unlinkSync(tmp); } catch (_) {}
-    } catch (_) {
-      try { fs.renameSync(tmp, targetFile); } catch (e) { throw e; }
     }
+  } catch (err) {
+    try {
+      fs.writeFileSync(targetFile, content, 'utf8');
+    } catch (_) {}
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {}
   }
 }
 
@@ -423,7 +436,11 @@ function createRecord(data = {}) {
     userDataDir = path.join('data', 'profiles', id);
   }
 
+  const customUa = (typeof data.customUa === 'string') ? data.customUa.trim() : '';
   const fp = data.fp || generateFingerprint({ language, timezone });
+  if (customUa) {
+    fp.uaString = customUa;
+  }
 
   return {
     id,
@@ -436,6 +453,7 @@ function createRecord(data = {}) {
     customArgs: data.customArgs || '',
     language,
     timezone,
+    customUa,
     proxy: parseAndBuildProxyConfig(data.proxy),
     extensions: data.extensions || '',
     userDataDir,
@@ -563,6 +581,14 @@ function updateEnvironment(id, updates) {
     updates.proxy = parseAndBuildProxyConfig(updates.proxy);
   }
 
+  if (updates.customUa !== undefined) {
+    const trimmedUa = typeof updates.customUa === 'string' ? updates.customUa.trim() : '';
+    updates.customUa = trimmedUa;
+    if (trimmedUa && list[index].fp) {
+      list[index].fp.uaString = trimmedUa;
+    }
+  }
+
   list[index] = {
     ...list[index],
     ...updates,
@@ -624,6 +650,7 @@ function cloneEnvironment(id, newName) {
     name,
     remotePort: getNextAvailablePortSync(),
     userDataDir: undefined, // 自动生成新目录
+    customUa: original.customUa || '',
     // 复制时自动重新随机指纹
     fp: generateFingerprint({ language: original.language, timezone: original.timezone })
   });
@@ -641,6 +668,10 @@ function regenerateFp(id, customTimezone) {
   const tz = customTimezone || env.timezone || 'America/New_York';
   env.timezone = tz;
   const newFp = generateFingerprint({ language: env.language, timezone: tz });
+  // 关键规则：自定义 UA 在随机生成指纹时不被随机覆盖
+  if (env.customUa && env.customUa.trim()) {
+    newFp.uaString = env.customUa.trim();
+  }
   env.fp = newFp;
   env.updatedAt = new Date().toISOString();
   saveAll(list);
@@ -829,6 +860,7 @@ module.exports = {
   loadAll,
   saveAll,
   getEnvironment,
+  createRecord,
   addEnvironment,
   updateEnvironment,
   deleteEnvironment,
