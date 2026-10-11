@@ -1,5 +1,16 @@
 'use strict';
 
+// 全局异常防护：拦截窗口关闭与页面析构时 Chromium/Electron 内部产生的瞬态销毁异常，杜绝报错弹窗
+process.on('uncaughtException', (err) => {
+  const msg = err && err.message ? err.message : String(err);
+  if (msg.includes('Object has been destroyed') || msg.includes('render frame was disposed')) {
+    return;
+  }
+  console.error('[Browser Uncaught Exception]', err);
+});
+
+let isWindowClosing = false;
+
 const { app, BaseWindow, WebContentsView, ipcMain, session, Menu } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -291,7 +302,8 @@ function notifyShell() {
 }
 
 function doNotifyShell() {
-  if (!shellView || shellView.webContents.isDestroyed()) return;
+  if (isWindowClosing || !mainWindow || mainWindow.isDestroyed()) return;
+  if (!shellView || !shellView.webContents || shellView.webContents.isDestroyed()) return;
   const isLocalTest = (u) => Boolean(u && (u === LOCAL_TEST_PAGE_URL || (u.startsWith('file:') && u.includes('testing/index.html'))));
 
   // 关键保护：彻底过滤掉已被销毁的标签页，杜绝 CDP / Playwright 关闭时引发 destroyed 异常
@@ -328,40 +340,47 @@ function doNotifyShell() {
 
   const fontInfo = typeof getActiveFontInfo === 'function' ? getActiveFontInfo() : null;
   const proxyHost = (currentEnv.proxy && currentEnv.proxy.host) ? `${currentEnv.proxy.host}:${currentEnv.proxy.port}` : '';
-  shellView.webContents.send('update-state', {
-    env: currentEnv,
-    tabs: tabStates,
-    activeId: activeTabId,
-    port: currentEnv.remotePortEnabled ? currentEnv.remotePort : null,
-    extensions: loadedExtensions,
-    isMaximized: mainWindow && !mainWindow.isDestroyed() ? mainWindow.isMaximized() : false,
-    defaultTheme: initialTheme,
-    fontInfo,
-    bookmarks: getBookmarks(),
-    isUsingProxy: isCurrentlyUsingProxy,
-    proxyHost: proxyHost,
-    userWantsProxy: userWantsProxy,
-    isSyncMaster: Boolean(isSyncMaster),
-    isSyncSlave: Boolean(isSyncSlave)
-  });
+  try {
+    shellView.webContents.send('update-state', {
+      env: currentEnv,
+      tabs: tabStates,
+      activeId: activeTabId,
+      port: currentEnv.remotePortEnabled ? currentEnv.remotePort : null,
+      extensions: loadedExtensions,
+      isMaximized: mainWindow && !mainWindow.isDestroyed() ? mainWindow.isMaximized() : false,
+      defaultTheme: initialTheme,
+      fontInfo,
+      bookmarks: getBookmarks(),
+      isUsingProxy: isCurrentlyUsingProxy,
+      proxyHost: proxyHost,
+      userWantsProxy: userWantsProxy,
+      isSyncMaster: Boolean(isSyncMaster),
+      isSyncSlave: Boolean(isSyncSlave)
+    });
+  } catch (_) {}
 }
 
 function resizeViews() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const [width, height] = mainWindow.getContentSize();
-  if (shellView) {
-    shellView.setBounds({ x: 0, y: 0, width, height: SHELL_HEIGHT });
-  }
-
-  const contentHeight = Math.max(1, height - SHELL_HEIGHT);
-  for (const tab of tabs) {
-    if (tab.id === activeTabId) {
-      tab.view.setVisible(true);
-      tab.view.setBounds({ x: 0, y: SHELL_HEIGHT, width, height: contentHeight });
-    } else {
-      tab.view.setVisible(false);
+  if (isWindowClosing || !mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const [width, height] = mainWindow.getContentSize();
+    if (shellView && shellView.webContents && !shellView.webContents.isDestroyed()) {
+      shellView.setBounds({ x: 0, y: 0, width, height: SHELL_HEIGHT });
     }
-  }
+
+    const contentHeight = Math.max(1, height - SHELL_HEIGHT);
+    for (const tab of tabs) {
+      if (!tab.view || !tab.view.webContents || tab.view.webContents.isDestroyed()) continue;
+      try {
+        if (tab.id === activeTabId) {
+          tab.view.setVisible(true);
+          tab.view.setBounds({ x: 0, y: SHELL_HEIGHT, width, height: contentHeight });
+        } else {
+          tab.view.setVisible(false);
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
 }
 
 // 4. 为标签页配置快捷键、右键菜单、真实物理点击及加载事件监听
@@ -725,7 +744,10 @@ async function dispatchNativePhysicalClick(wc, x, y) {
 
   // 自动化工具 (CDP / Playwright / Puppeteer) 或页面脚本自关闭保护
   view.webContents.once('destroyed', () => {
-    closeTab(tabId, true);
+    if (isWindowClosing || !mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      closeTab(tabId, true);
+    } catch (_) {}
   });
 }
 
@@ -781,43 +803,53 @@ async function createTab(targetUrl) {
 }
 
 function switchTab(tabId) {
+  if (isWindowClosing || !mainWindow || mainWindow.isDestroyed()) return;
   activeTabId = tabId;
   resizeViews();
   notifyShell();
 }
 
 function closeTab(tabId, alreadyDestroyed = false) {
-  const index = tabs.findIndex(t => t.id === tabId);
-  if (index === -1) return;
-  const tab = tabs[index];
-  if (tab.checkTimer) clearTimeout(tab.checkTimer);
-  if (tab.safetyTimer) clearTimeout(tab.safetyTimer);
+  if (isWindowClosing || !mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const index = tabs.findIndex(t => t.id === tabId);
+    if (index === -1) return;
+    const tab = tabs[index];
+    if (tab.checkTimer) clearTimeout(tab.checkTimer);
+    if (tab.safetyTimer) clearTimeout(tab.safetyTimer);
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    try {
-      mainWindow.contentView.removeChildView(tab.view);
-    } catch (_) {}
-  }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        mainWindow.contentView.removeChildView(tab.view);
+      } catch (_) {}
+    }
 
-  if (!alreadyDestroyed && tab.view && tab.view.webContents && !tab.view.webContents.isDestroyed()) {
-    try {
-      tab.view.webContents.close();
-    } catch (_) {}
-  }
-  tabs.splice(index, 1);
+    if (!alreadyDestroyed && tab.view && tab.view.webContents && !tab.view.webContents.isDestroyed()) {
+      try {
+        tab.view.webContents.close();
+      } catch (_) {}
+    }
+    tabs.splice(index, 1);
 
-  if (tabs.length === 0) {
-    // 若标签全被关闭，则关闭整个窗口
-    mainWindow.close();
-    return;
-  }
+    if (tabs.length === 0) {
+      // 若标签全被关闭，且窗口未处于退出过程中，关闭整个窗口
+      if (!isWindowClosing && mainWindow && !mainWindow.isDestroyed()) {
+        try {
+          mainWindow.close();
+        } catch (_) {}
+      }
+      return;
+    }
 
-  if (activeTabId === tabId) {
-    const nextTab = tabs[Math.max(0, index - 1)];
-    switchTab(nextTab.id);
-  } else {
-    notifyShell();
-  }
+    if (!isWindowClosing && mainWindow && !mainWindow.isDestroyed()) {
+      if (activeTabId === tabId) {
+        const nextTab = tabs[Math.max(0, index - 1)];
+        if (nextTab) switchTab(nextTab.id);
+      } else {
+        notifyShell();
+      }
+    }
+  } catch (_) {}
 }
 
 let userWantsProxy = true; // 顶栏选择框：默认勾选使用代理
@@ -1329,7 +1361,10 @@ if (typeof chrome !== 'undefined') {
     scheduleSaveWindowState();
   });
   mainWindow.on('move', scheduleSaveWindowState);
-  mainWindow.on('close', saveWindowState);
+  mainWindow.on('close', () => {
+    isWindowClosing = true;
+    saveWindowState();
+  });
 
   if (typeof mainWindow.setMenu === 'function') mainWindow.setMenu(null);
   if (typeof mainWindow.setMenuBarVisibility === 'function') mainWindow.setMenuBarVisibility(false);
@@ -1740,10 +1775,23 @@ if (typeof chrome !== 'undefined') {
     });
   });
 
+  app.on('before-quit', () => {
+    isWindowClosing = true;
+  });
+
   mainWindow.on('resize', resizeViews);
   mainWindow.on('maximize', notifyShell);
   mainWindow.on('unmaximize', notifyShell);
   mainWindow.on('closed', () => {
+    isWindowClosing = true;
+    if (hubReconnectTimer) {
+      clearTimeout(hubReconnectTimer);
+      hubReconnectTimer = null;
+    }
+    if (hubSocket) {
+      try { hubSocket.destroy(); } catch (_) {}
+      hubSocket = null;
+    }
     closeCurrentBridge();
     app.quit();
   });
