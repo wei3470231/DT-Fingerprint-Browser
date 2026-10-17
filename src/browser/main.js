@@ -13,9 +13,11 @@ let isWindowClosing = false;
 
 const { app, BaseWindow, WebContentsView, ipcMain, session, Menu } = require('electron');
 
-// 系统稳定性强化：防止部分老旧显卡驱动因硬件加速超时(TDR)引发 Windows 蓝屏死机或锁死
+// 系统稳定性与证书安全放行：防止显卡驱动超时(TDR)引发蓝屏，放行代理中间人/自签名证书杜绝页面加载白屏
 app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+app.commandLine.appendSwitch('ignore-certificate-errors');
+app.commandLine.appendSwitch('allow-running-insecure-content');
 const fs = require('node:fs');
 const path = require('node:path');
 const url = require('node:url');
@@ -28,11 +30,32 @@ const { buildCookieUrl } = require('../shared/cookie-helper');
 const LOCAL_TEST_PAGE_PATH = path.join(__dirname, 'testing', 'index.html');
 const LOCAL_TEST_PAGE_URL = url.pathToFileURL(LOCAL_TEST_PAGE_PATH).href;
 
+// 智能网址解析器：自动补全协议头、解析域名与回退搜索引擎，彻底杜绝无协议头传参导致 ERR_INVALID_URL 页面白板
 function resolveNavUrl(rawUrl) {
   if (!rawUrl) return LOCAL_TEST_PAGE_URL;
-  const s = String(rawUrl).trim();
+  let s = String(rawUrl).trim();
   if (s === 'dt://fingerprint-test' || s === 'dt://test' || s === 'about:fingerprint' || s === '') {
     return LOCAL_TEST_PAGE_URL;
+  }
+  // 已包含已知合法协议头或 about: 页面
+  if (/^(https?|about|chrome-extension|file|dt|data|blob):\/\//i.test(s) || s === 'about:blank') {
+    return s;
+  }
+  // 本地回路 IP 或 localhost
+  if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/.*)?$/i.test(s)) {
+    return 'http://' + s;
+  }
+  // IPv4 地址格式：xxx.xxx.xxx.xxx(:port)?(/path)?
+  if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/.*)?$/.test(s)) {
+    return 'http://' + s;
+  }
+  // 常见主域名格式：如 baidu.com, www.google.com, whoer.net/zh, test.co.uk:8080
+  if (/^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/.*)?$/i.test(s)) {
+    return 'https://' + s;
+  }
+  // 搜索词回退
+  if (!s.includes('://')) {
+    return 'https://www.google.com/search?q=' + encodeURIComponent(s);
   }
   return s;
 }
@@ -716,11 +739,22 @@ async function dispatchNativePhysicalClick(wc, x, y) {
   view.webContents.on('did-frame-finish-load', () => {
     scheduleTabLoadingCheck(tabItem);
   });
-  view.webContents.on('did-fail-load', (_event, errorCode) => {
+  view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     if (errorCode === -3) {
       return; // ERR_ABORTED: 正常被 stop() 中止，绝不误清除新导航的 pendingNavUrl
     }
     scheduleTabLoadingCheck(tabItem);
+
+    // 关键优化：若非内部自测页，加载失败时自动展示友好诊断页，彻底杜绝一片白板
+    if (validatedURL && !validatedURL.includes('testing/index.html') && !validatedURL.startsWith('devtools://') && !validatedURL.startsWith('data:')) {
+      const escapedUrl = validatedURL.replace(/[<>"']/g, '');
+      const isProxyUsed = isCurrentlyUsingProxy;
+      const proxyInfo = currentEnv.proxy && currentEnv.proxy.host ? `${currentEnv.proxy.type}://${currentEnv.proxy.host}:${currentEnv.proxy.port}` : '直连';
+      const errorHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>无法访问此网站</title><style>body{margin:0;padding:40px 24px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f172a;color:#f1f5f9;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;box-sizing:border-box}.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;max-width:580px;width:100%;box-shadow:0 10px 25px -5px rgba(0,0,0,0.5)}h2{margin:0 0 12px;font-size:20px;color:#f87171;display:flex;align-items:center;gap:8px}p{margin:0 0 16px;font-size:14px;color:#94a3b8;line-height:1.6}.url-box{background:#090d16;border:1px solid #1e293b;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:13px;color:#38bdf8;word-break:break-all;margin-bottom:20px}.info-badge{display:inline-block;padding:4px 10px;background:rgba(56,189,248,0.12);color:#38bdf8;border-radius:4px;font-size:12px;margin-bottom:20px}.btn-group{display:flex;gap:12px}button{background:#2563eb;color:#fff;border:none;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;transition:background 0.15s}button:hover{background:#1d4ed8}button.sec{background:#334155;color:#e2e8f0}button.sec:hover{background:#475569}</style></head><body><div class="card"><h2>⚠️ 无法连接到此网站</h2><div class="url-box">${escapedUrl}</div><p>网络错误代码：<strong>${errorDescription || '连接超时或未响应'}</strong> (${errorCode})</p><div class="info-badge">当前网络模式：${isProxyUsed ? '代理通道 (' + proxyInfo + ')' : '本地直连'}</div><p>排查建议：<br>1. 若开启了代理，请检查顶栏代理开关是否可用，可临时取消勾选【使用代理】尝试直连；<br>2. 检查网络连通性或域名拼写是否正确。</p><div class="btn-group"><button onclick="location.reload()">🔄 重新加载</button><button class="sec" onclick="location.href='dt://fingerprint-test'">🏠 返回本地指纹自测页</button></div></div></body></html>`;
+      try {
+        view.webContents.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(errorHtml));
+      } catch (_) {}
+    }
   });
   view.webContents.on('did-navigate', (_event, navUrl) => {
     if (tabItem.pendingNavUrl && urlsMatch(navUrl, tabItem.pendingNavUrl)) {
@@ -810,6 +844,7 @@ function switchTab(tabId) {
   if (isWindowClosing || !mainWindow || mainWindow.isDestroyed()) return;
   activeTabId = tabId;
   resizeViews();
+  setImmediate(resizeViews);
   notifyShell();
 }
 
@@ -1171,6 +1206,12 @@ app.whenReady().then(async () => {
       event.preventDefault();
       callback(currentEnv.proxy.username, currentEnv.proxy.password || '');
     }
+  });
+
+  // 放行自签名证书与代理中间人证书，杜绝因证书不受信任导致页面一片白板
+  app.on('certificate-error', (event, _webContents, _url, _error, _certificate, callback) => {
+    event.preventDefault();
+    callback(true);
   });
 
 // 插件兼容性安全预处理 (解决部分 Chrome 插件因包含 Electron 不支持的权限导致 Chromium C++ FATAL DCHECK 崩溃)

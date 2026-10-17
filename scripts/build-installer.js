@@ -9,7 +9,7 @@ const DIST = path.join(ROOT, 'dist');
 const STAGING = path.join(DIST, 'staging');
 const PAYLOAD = path.join(DIST, 'payload');
 const ZIP_FILE = path.join(DIST, 'payload.zip');
-const VERSION = 'v2.2';
+const VERSION = 'v2.3';
 const SETUP_EXE = path.join(DIST, `DT-Fingerprint-Browser-${VERSION}-Setup.exe`);
 const PORTABLE_ZIP = path.join(DIST, `DT-Fingerprint-Browser-${VERSION}-Portable.zip`);
 
@@ -143,7 +143,7 @@ async function main() {
   // 创建精简 package.json (以 index.js 为主入口，实现管理器与指纹浏览器多进程分流)
   const pkgJson = {
     name: 'dt-fingerprint-browser',
-    version: '2.2.0',
+    version: '2.3.0',
     description: 'DT Fingerprint Browser Commercial Standard Edition',
     main: 'index.js'
   };

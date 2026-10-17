@@ -10,8 +10,8 @@
 > 欢迎进群交流指纹对抗技术、提交 BUG 与功能建议、获取最新编译发布的便携包与安装包！
 >
 > 📥 **Release 官方最新版本下载（纯英文标准命名，含版本号）**：
-> - 📦 **独立安装向导包**：[`DT-Fingerprint-Browser-v2.2-Setup.exe`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（自动配置用户 PATH 环境变量与开机自启）
-> - 🗜️ **绿色便携压缩包**：[`DT-Fingerprint-Browser-v2.2-Portable.zip`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（解压即用，无任何绝对路径依赖）
+> - 📦 **独立安装向导包**：[`DT-Fingerprint-Browser-v2.3-Setup.exe`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（自动配置用户 PATH 环境变量与开机自启）
+> - 🗜️ **绿色便携压缩包**：[`DT-Fingerprint-Browser-v2.3-Portable.zip`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（解压即用，无任何绝对路径依赖）
 > - 🌐 **GitHub Releases 发布页面**：[https://github.com/wei3470231/DT-Fingerprint-Browser/releases](https://github.com/wei3470231/DT-Fingerprint-Browser/releases)
 
 ---
@@ -114,7 +114,7 @@ node scripts/test-portable.js
 * 验证精简系统兜底字体库 `Fonts/`；
 * 验证 CLI Chrome Drop-in 模式（`--version`、`--product-version`）；
 * 验证 CLI JSON 管理指令（`list`、`font status`、`theme status`、`settings get`）；
-* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.2-Portable.zip`。
+* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.3-Portable.zip`。
 
 ### 2.2 一键生成便携包与商业安装程序
 在项目根目录下执行：
@@ -124,8 +124,8 @@ node scripts/build-installer.js
 构建脚本将全自动完成：
 1. **源码脱敏加密**：使用 Terser 进行变量混淆并打包进虚拟归档 `app.asar`；
 2. **生成便携目录**：在 `dist/payload/` 编译生成原生无黑框启动器与 CLI 工具；
-3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.2-Portable.zip`（约 200 MB，无中文字符，解压即用）；
-4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v2.2-Setup.exe`（自动配置用户 PATH 与开机自启）。
+3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.3-Portable.zip`（约 200 MB，无中文字符，解压即用）；
+4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v2.3-Setup.exe`（自动配置用户 PATH 与开机自启）。
 
 ### 2.3 根目录快捷调用机制
 在根目录下提供了 `dt-cli.cmd` 与 `dt.cmd` 包装脚本：
@@ -222,7 +222,7 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 * **居中纯免费标语**：醒目标注 `🛡️ 商业级对抗内核 · 永久纯免费 · 100%完全开源 · 拒绝收费套路`，宣告拒绝商业割韭菜。
 
 ### 3.18 GitHub Releases 实时版本检测与在线更新提醒
-* **右下角版本感知**：管理器右下角自动展示当前客户端版本号（`v2.2`）；
+* **右下角版本感知**：管理器右下角自动展示当前客户端版本号（`v2.3`）；
 * **静默异步版本探测**：启动时自动异步请求 GitHub Releases API（`wei3470231/DT-Fingerprint-Browser`）；
 * **一键直达新版本**：若检测到线上存在高于本地的最新版本，右下角将以高亮橙色徽章提示 `发现新版本: vX.X.X (点击更新)`，点击后立即通过系统默认浏览器打开 GitHub Release 发布页面，轻松下载最新便携包。
 
@@ -1074,10 +1074,10 @@ node scripts/build-installer.js
 
 构建完成后将在 `dist/` 目录下生成两类产物（文件名均为标准纯英文并带版本号，兼容 GitHub Releases 上传与海外环境）：
 1. **独立单文件安装程序**：
-   * 路径：`dist\DT-Fingerprint-Browser-v2.2-Setup.exe`（约 200 MB）
+   * 路径：`dist\DT-Fingerprint-Browser-v2.3-Setup.exe`（约 200 MB）
    * 适用场景：GitHub Release 发布、对外分享的标准安装包，带安装向导界面、开机自启复选框、PATH 自动注册与控制面板卸载项。
 2. **便携即用免安装包与目录**：
-   * 压缩包路径：`dist\DT-Fingerprint-Browser-v2.2-Portable.zip`（约 200 MB，解压即用）
+   * 压缩包路径：`dist\DT-Fingerprint-Browser-v2.3-Portable.zip`（约 200 MB，解压即用）
    * 运行目录：`dist\payload\`
    * 适用场景：GitHub Release 发布、解压即用的免安装绿色便携版，直接双击 `DT-Fingerprint-Browser.exe` 或 `DT - 指纹浏览器.exe` 即可运行。
 

@@ -135,12 +135,17 @@ class IpcHub extends EventEmitter {
   }
 
   /**
-   * 设置多窗口键鼠同步状态
+   * 设置多窗口键鼠同步状态 (同时兼容 masterId/slaveIds 与 masterEnvId/slaveEnvIds)
    */
-  setSyncConfig({ enabled, masterEnvId, slaveEnvIds = [] }) {
+  setSyncConfig({ enabled, masterId, slaveIds, masterEnvId, slaveEnvIds } = {}) {
+    const finalMaster = masterId || masterEnvId || null;
+    const finalSlaves = Array.isArray(slaveIds) ? slaveIds : (Array.isArray(slaveEnvIds) ? slaveEnvIds : []);
+
     this.syncConfig.enabled = Boolean(enabled);
-    this.syncConfig.masterEnvId = masterEnvId || null;
-    this.syncConfig.slaveEnvIds = Array.isArray(slaveEnvIds) ? slaveEnvIds : [];
+    this.syncConfig.masterEnvId = finalMaster;
+    this.syncConfig.masterId = finalMaster;
+    this.syncConfig.slaveEnvIds = finalSlaves;
+    this.syncConfig.slaveIds = finalSlaves;
 
     // 通知所有连接的窗口更新其角色 (是否是主控/是否是从属)
     for (const [envId, socket] of this.clients.entries()) {
@@ -150,16 +155,47 @@ class IpcHub extends EventEmitter {
         action: 'set-sync-role',
         isMaster,
         isSlave,
-        syncConfig: this.syncConfig
+        syncConfig: this.getSyncStatus()
       });
     }
 
-    this.emit('sync-state-changed', this.syncConfig);
-    return this.syncConfig;
+    this.emit('sync-state-changed', this.getSyncStatus());
+    return this.getSyncStatus();
+  }
+
+  getSyncStatus() {
+    return {
+      enabled: Boolean(this.syncConfig.enabled),
+      masterId: this.syncConfig.masterEnvId || this.syncConfig.masterId || null,
+      masterEnvId: this.syncConfig.masterEnvId || this.syncConfig.masterId || null,
+      slaveIds: this.syncConfig.slaveEnvIds || this.syncConfig.slaveIds || [],
+      slaveEnvIds: this.syncConfig.slaveEnvIds || this.syncConfig.slaveIds || [],
+      connectedCount: this.clients.size,
+      connectedEnvIds: Array.from(this.clients.keys())
+    };
   }
 
   getSyncConfig() {
-    return { ...this.syncConfig };
+    return this.getSyncStatus();
+  }
+
+  /**
+   * 优雅安全关闭 IPC 服务通道
+   */
+  stop() {
+    if (this.server) {
+      try {
+        this.server.close();
+      } catch (_) {}
+      this.server = null;
+    }
+    for (const socket of this.clients.values()) {
+      try {
+        socket.destroy();
+      } catch (_) {}
+    }
+    this.clients.clear();
+    this.pendingCallbacks.clear();
   }
 
   /**
@@ -240,8 +276,8 @@ class IpcHub extends EventEmitter {
 }
 
 const hubInstance = new IpcHub();
+hubInstance.ipcHub = hubInstance;
+hubInstance.PIPE_PATH = PIPE_PATH;
+hubInstance.IpcHub = IpcHub;
 
-module.exports = {
-  ipcHub: hubInstance,
-  PIPE_PATH
-};
+module.exports = hubInstance;

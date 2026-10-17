@@ -354,7 +354,7 @@ function loadAll() {
           if (bContent) {
             const bParsed = JSON.parse(bContent);
             if (Array.isArray(bParsed) && bParsed.length > 0) {
-              console.log(`[Store] 成功从备份 ${path.basename(bkp)} 自动恢复 ${bParsed.length} 个配置！`);
+              console.error(`[Store] 成功从备份 ${path.basename(bkp)} 自动恢复 ${bParsed.length} 个配置！`);
               list = bParsed;
               loaded = true;
               saveAll(list);
@@ -373,7 +373,7 @@ function loadAll() {
         const entries = fs.readdirSync(PROFILES_DIR, { withFileTypes: true });
         const existingDirs = entries.filter(d => d.isDirectory() && (d.name.startsWith('env-') || d.name.length >= 4)).map(d => d.name);
         if (existingDirs.length > 0) {
-          console.log(`[Store] 检测到 ${existingDirs.length} 个历史 Profile 缓存目录，正在自动恢复环境列表...`);
+          console.error(`[Store] 检测到 ${existingDirs.length} 个历史 Profile 缓存目录，正在自动恢复环境列表...`);
           let portOffset = 0;
           for (const dirName of existingDirs) {
             const rec = createRecord({
@@ -407,7 +407,7 @@ function loadAll() {
             if (raw) {
               const parsed = JSON.parse(raw);
               if (Array.isArray(parsed) && parsed.length > 0) {
-                console.log(`[Store] 成功从历史安装位置 ${hDir} 无损继承 ${parsed.length} 个指纹环境配置！`);
+                console.error(`[Store] 成功从历史安装位置 ${hDir} 无损继承 ${parsed.length} 个指纹环境配置！`);
                 list = parsed;
                 loaded = true;
                 saveAll(list);
