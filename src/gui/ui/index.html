@@ -978,9 +978,62 @@
       cursor: not-allowed;
       background: rgba(255, 255, 255, 0.03);
     }
-    input, textarea, select, .input-box {
-      user-select: text !important;
-      -webkit-user-select: text !important;
+    select option {
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+
+    /* 键鼠同步器专属卡片与列表 */
+    .sync-master-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-sub);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      user-select: none;
+    }
+    .sync-master-card:hover {
+      border-color: #ec4899;
+      background: rgba(236, 72, 153, 0.08);
+    }
+    .sync-master-card.active {
+      border-color: #ec4899;
+      background: rgba(236, 72, 153, 0.15);
+      box-shadow: 0 0 0 1px #ec4899;
+    }
+    .sync-master-radio {
+      accent-color: #ec4899;
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+    .sync-slave-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: 6px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-sub);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .sync-slave-item:hover {
+      border-color: #3b82f6;
+      background: rgba(59, 130, 246, 0.08);
+    }
+    .sync-slave-chk {
+      accent-color: #3b82f6;
+      cursor: pointer;
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
     }
 
     /* 指纹预览卡片 */
@@ -1675,7 +1728,7 @@
 
   <!-- Modal: 多窗口键鼠镜像同步器 (syncModal) -->
   <div class="modal-overlay" id="syncModal">
-    <div class="modal-card" style="width: 580px; max-height: 85vh;">
+    <div class="modal-card" style="width: 620px; max-height: 88vh;">
       <div class="modal-header">
         <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
           <span>⚡ 多窗口键鼠镜像同步器 (Synchronizer)</span>
@@ -1689,22 +1742,34 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>1. 设定主控浏览器 (Master) *</span>
-            <span id="syncRunningCountTip" style="font-size: 11px; color: var(--text-muted); font-weight: normal;"></span>
-          </label>
-          <select class="form-input" id="selectSyncMaster" style="cursor: pointer; font-weight: 500;">
-            <option value="">-- 请选择主控窗口 (需先启动) --</option>
-          </select>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+            <label class="form-label" style="font-weight: 600; color: var(--text-main); margin-bottom: 0;">
+              👑 1. 选择主控端浏览器 (Master) *
+            </label>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="syncRunningCountTip" style="font-size: 11px; color: var(--text-muted); font-weight: normal;"></span>
+              <button class="btn btn-secondary btn-sm" id="btnRefreshSyncList" style="padding: 2px 8px; font-size: 11px;" title="重新扫描并刷新运行中的浏览器窗口">🔄 刷新窗口</button>
+            </div>
+          </div>
+          <!-- 主控选择区：直观卡片点选（默认自动选中第1个运行中窗口） -->
+          <div id="syncMasterContainer" style="display: flex; flex-direction: column; gap: 6px; max-height: 155px; overflow-y: auto; padding: 6px; border-radius: 8px; background: var(--bg-input); border: 1px solid var(--border-sub);">
+            <!-- 动态生成主控卡片 -->
+          </div>
+          <select class="form-input" id="selectSyncMaster" style="display: none;"></select>
         </div>
 
         <div class="form-group">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-            <label class="form-label" style="margin-bottom: 0;">2. 勾选跟随镜像同步的从属窗口 (Slaves) *</label>
-            <button class="btn btn-secondary btn-sm" id="btnSelectAllSlaves" style="padding: 2px 8px; font-size: 11px;">全选从属窗口</button>
+            <label class="form-label" style="margin-bottom: 0; font-weight: 600; color: var(--text-main);">
+              👥 2. 勾选跟随镜像同步的从属窗口 (Slaves) *
+            </label>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-secondary btn-sm" id="btnSelectAllSlaves" style="padding: 2px 8px; font-size: 11px;">全选从属</button>
+              <button class="btn btn-secondary btn-sm" id="btnInverseSlaves" style="padding: 2px 8px; font-size: 11px;">反选</button>
+            </div>
           </div>
-          <div id="syncSlavesContainer" style="max-height: 160px; overflow-y: auto; background: var(--bg-input); border: 1px solid var(--border-sub); border-radius: 6px; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px;">
-            <!-- 动态生成复选框 -->
+          <div id="syncSlavesContainer" style="max-height: 155px; overflow-y: auto; background: var(--bg-input); border: 1px solid var(--border-sub); border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 6px;">
+            <!-- 动态生成复选卡片 -->
           </div>
         </div>
 
@@ -3680,15 +3745,25 @@
     const btnSyncCtrl = document.getElementById('btnSyncCtrl');
     const syncStatusDot = document.getElementById('syncStatusDot');
     const selectSyncMaster = document.getElementById('selectSyncMaster');
+    const syncMasterContainer = document.getElementById('syncMasterContainer');
     const syncRunningCountTip = document.getElementById('syncRunningCountTip');
     const syncSlavesContainer = document.getElementById('syncSlavesContainer');
+    const btnRefreshSyncList = document.getElementById('btnRefreshSyncList');
     const btnSelectAllSlaves = document.getElementById('btnSelectAllSlaves');
+    const btnInverseSlaves = document.getElementById('btnInverseSlaves');
     const syncStatusBadge = document.getElementById('syncStatusBadge');
     const btnStartSync = document.getElementById('btnStartSync');
     const btnStopSync = document.getElementById('btnStopSync');
 
+    let currentSelectedMasterId = null;
+    let syncModalPollTimer = null;
+
     function closeSyncModal() {
       if (syncModal) syncModal.classList.remove('show');
+      if (syncModalPollTimer) {
+        clearInterval(syncModalPollTimer);
+        syncModalPollTimer = null;
+      }
     }
 
     if (syncModalClose) syncModalClose.addEventListener('click', closeSyncModal);
@@ -3719,89 +3794,228 @@
       }
     }
 
-    async function openSyncModal() {
-      const runningIds = Object.keys(runningStatus);
-      const syncStatus = await updateSyncUI();
+    // 核心函数：刷新键鼠同步弹窗内的数据与DOM
+    async function refreshSyncModalData() {
+      try {
+        // 关键：强制拉取后台真实全量状态与运行中实例
+        const [state, syncStatus] = await Promise.all([
+          ipcRenderer.invoke('get-state'),
+          ipcRenderer.invoke('get-sync-status')
+        ]);
 
-      selectSyncMaster.innerHTML = '<option value="">-- 请选择主控窗口 (需先启动) --</option>';
-      syncSlavesContainer.innerHTML = '';
-      syncRunningCountTip.textContent = `当前运行中: ${runningIds.length} 个窗口`;
+        if (state) {
+          allEnvironments = state.environments || [];
+          runningStatus = state.running || {};
+        }
+
+        const runningIds = Object.keys(runningStatus || {});
+        if (syncRunningCountTip) {
+          syncRunningCountTip.textContent = `当前运行中: ${runningIds.length} 个窗口`;
+        }
+
+        // 维护当前选中的 MasterId
+        if (syncStatus && syncStatus.enabled && syncStatus.masterId && runningIds.includes(syncStatus.masterId)) {
+          currentSelectedMasterId = syncStatus.masterId;
+        } else if (!currentSelectedMasterId || !runningIds.includes(currentSelectedMasterId)) {
+          // 智能默认选中第 1 个运行中窗口！
+          currentSelectedMasterId = runningIds.length > 0 ? runningIds[0] : null;
+        }
+
+        renderMasterSection(runningIds, syncStatus);
+        renderSlavesSection(runningIds, syncStatus);
+        await updateSyncUI();
+      } catch (err) {
+        console.error('刷新同步窗口数据失败:', err);
+      }
+    }
+
+    // 渲染主控端选择区域
+    function renderMasterSection(runningIds, syncStatus) {
+      if (!syncMasterContainer) return;
+      syncMasterContainer.innerHTML = '';
+      if (selectSyncMaster) selectSyncMaster.innerHTML = '';
 
       if (runningIds.length === 0) {
-        syncSlavesContainer.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 10px;">当前暂无运行中的浏览器窗口，请先启动至少 2 个窗口！</div>';
+        syncMasterContainer.innerHTML = `
+          <div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <div>⚠️ 当前暂无运行中的浏览器窗口！请先启动窗口方可进行键鼠同步。</div>
+            <button class="btn btn-primary btn-sm" id="btnSyncQuickStartTwo" style="font-size: 11px; padding: 3px 12px;">🚀 一键启动前 2 个环境</button>
+          </div>
+        `;
+        const btnQuick = document.getElementById('btnSyncQuickStartTwo');
+        if (btnQuick) {
+          btnQuick.addEventListener('click', async () => {
+            if (allEnvironments.length === 0) {
+              alert('当前没有可用的浏览器环境，请先在主界面创建环境！');
+              return;
+            }
+            btnQuick.disabled = true;
+            btnQuick.textContent = '正在启动窗口...';
+            const toStart = allEnvironments.slice(0, 2);
+            for (const env of toStart) {
+              try {
+                await ipcRenderer.invoke('launch-env', env.id);
+              } catch (_) {}
+            }
+            showToast('已下发启动指令，请稍候...');
+            setTimeout(refreshSyncModalData, 1200);
+          });
+        }
+        return;
       }
 
-      runningIds.forEach(id => {
+      runningIds.forEach((id, index) => {
         const env = allEnvironments.find(e => e.id === id);
         const name = env ? env.name : id;
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = `[主控] ${name} (ID: ${id.slice(0, 8)})`;
-        if (syncStatus && syncStatus.masterId === id) {
-          opt.selected = true;
-        }
-        selectSyncMaster.appendChild(opt);
-      });
+        const port = runningStatus[id] ? runningStatus[id].port : '自动分配';
+        const isSelected = currentSelectedMasterId === id;
 
-      function renderSlaveCheckboxes() {
-        const masterId = selectSyncMaster.value;
-        syncSlavesContainer.innerHTML = '';
-        const candidateSlaves = runningIds.filter(id => id !== masterId);
+        // 卡片渲染
+        const card = document.createElement('div');
+        card.className = `sync-master-card ${isSelected ? 'active' : ''}`;
+        card.innerHTML = `
+          <input type="radio" name="syncMasterRadio" class="sync-master-radio" ${isSelected ? 'checked' : ''} />
+          <div style="flex: 1; display: flex; align-items: center; justify-content: space-between; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 6px; overflow: hidden;">
+              <span class="status-dot green"></span>
+              <span style="font-weight: 600; font-size: 12px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(name)}</span>
+              <span style="font-size: 10px; color: var(--text-muted); background: var(--bg-sub); padding: 1px 5px; border-radius: 4px;">#${index + 1}</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); font-family: monospace;">Port: ${port}</div>
+          </div>
+        `;
 
-        if (candidateSlaves.length === 0) {
-          syncSlavesContainer.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 8px;">无其他从属窗口可选</div>';
-          return;
-        }
-
-        candidateSlaves.forEach(id => {
-          const env = allEnvironments.find(e => e.id === id);
-          const name = env ? env.name : id;
-          const label = document.createElement('label');
-          label.style.display = 'flex';
-          label.style.alignItems = 'center';
-          label.style.gap = '8px';
-          label.style.fontSize = '12px';
-          label.style.color = 'var(--text-main)';
-          label.style.cursor = 'pointer';
-
-          const chk = document.createElement('input');
-          chk.type = 'checkbox';
-          chk.value = id;
-          chk.className = 'slave-chk';
-          chk.style.cursor = 'pointer';
-          if (syncStatus && syncStatus.enabled && Array.isArray(syncStatus.slaveIds) && syncStatus.slaveIds.includes(id)) {
-            chk.checked = true;
-          } else if (!syncStatus || !syncStatus.enabled) {
-            chk.checked = true; // 默认勾选全部从属端
-          }
-
-          label.appendChild(chk);
-          label.appendChild(document.createTextNode(`[从属] ${name} (${id.slice(0, 8)})`));
-          syncSlavesContainer.appendChild(label);
+        card.addEventListener('click', () => {
+          currentSelectedMasterId = id;
+          if (selectSyncMaster) selectSyncMaster.value = id;
+          renderMasterSection(runningIds, syncStatus);
+          renderSlavesSection(runningIds, syncStatus);
         });
+
+        syncMasterContainer.appendChild(card);
+
+        // 备用 select
+        if (selectSyncMaster) {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = `[主控] ${name} (Port: ${port})`;
+          if (isSelected) opt.selected = true;
+          selectSyncMaster.appendChild(opt);
+        }
+      });
+    }
+
+    // 渲染从属端多选区域
+    function renderSlavesSection(runningIds, syncStatus) {
+      if (!syncSlavesContainer) return;
+      syncSlavesContainer.innerHTML = '';
+
+      if (runningIds.length === 0) {
+        syncSlavesContainer.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 10px;">暂无可用的从属窗口</div>';
+        return;
       }
 
-      selectSyncMaster.onchange = renderSlaveCheckboxes;
-      renderSlaveCheckboxes();
+      const candidateSlaves = runningIds.filter(id => id !== currentSelectedMasterId);
 
+      if (candidateSlaves.length === 0) {
+        syncSlavesContainer.innerHTML = `
+          <div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 12px 10px; line-height: 1.6;">
+            ⚠️ 当前仅有 1 个运行中的窗口（已设为主控端）。<br>
+            需<b>至少启动 2 个窗口</b>才能进行键鼠镜像同步，请在主界面再启动一个窗口！
+          </div>
+        `;
+        return;
+      }
+
+      candidateSlaves.forEach(id => {
+        const env = allEnvironments.find(e => e.id === id);
+        const name = env ? env.name : id;
+        const port = runningStatus[id] ? runningStatus[id].port : '';
+
+        const item = document.createElement('label');
+        item.className = 'sync-slave-item';
+
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.value = id;
+        chk.className = 'slave-chk sync-slave-chk';
+
+        // 默认全选从属端，或者如果已有同步配置则还原
+        if (syncStatus && syncStatus.enabled && Array.isArray(syncStatus.slaveIds) && syncStatus.slaveIds.includes(id)) {
+          chk.checked = true;
+        } else if (!syncStatus || !syncStatus.enabled) {
+          chk.checked = true; // 开启前默认全部跟随
+        } else {
+          chk.checked = false;
+        }
+
+        item.appendChild(chk);
+        const infoDiv = document.createElement('div');
+        infoDiv.style.cssText = 'flex: 1; display: flex; align-items: center; justify-content: space-between;';
+        infoDiv.innerHTML = `
+          <span style="font-size: 12px; font-weight: 500; color: var(--text-main);">${escapeHtml(name)}</span>
+          <span style="font-size: 11px; color: var(--text-muted); font-family: monospace;">Port: ${port}</span>
+        `;
+        item.appendChild(infoDiv);
+        syncSlavesContainer.appendChild(item);
+      });
+    }
+
+    async function openSyncModal() {
+      await refreshSyncModalData();
       if (syncModal) syncModal.classList.add('show');
+
+      // 弹窗打开期间，每 1.5 秒轻量同步一次，外部新开窗口自动出现在列表中
+      if (syncModalPollTimer) clearInterval(syncModalPollTimer);
+      syncModalPollTimer = setInterval(async () => {
+        if (!syncModal.classList.contains('show')) {
+          clearInterval(syncModalPollTimer);
+          syncModalPollTimer = null;
+          return;
+        }
+        const state = await ipcRenderer.invoke('get-state');
+        if (state) {
+          const newRunning = Object.keys(state.running || {});
+          const oldRunning = Object.keys(runningStatus || {});
+          if (newRunning.length !== oldRunning.length || newRunning.some(id => !oldRunning.includes(id))) {
+            allEnvironments = state.environments || [];
+            runningStatus = state.running || {};
+            await refreshSyncModalData();
+          }
+        }
+      }, 1500);
     }
 
     if (btnSyncCtrl) btnSyncCtrl.addEventListener('click', openSyncModal);
 
+    if (btnRefreshSyncList) {
+      btnRefreshSyncList.addEventListener('click', async () => {
+        btnRefreshSyncList.textContent = '扫描中...';
+        await refreshSyncModalData();
+        showToast('已刷新运行中的窗口列表');
+        setTimeout(() => { btnRefreshSyncList.textContent = '🔄 刷新窗口'; }, 500);
+      });
+    }
+
     if (btnSelectAllSlaves) {
       btnSelectAllSlaves.addEventListener('click', () => {
         const chks = syncSlavesContainer.querySelectorAll('.slave-chk');
-        const allChecked = Array.from(chks).every(c => c.checked);
-        chks.forEach(c => c.checked = !allChecked);
+        chks.forEach(c => c.checked = true);
+      });
+    }
+
+    if (btnInverseSlaves) {
+      btnInverseSlaves.addEventListener('click', () => {
+        const chks = syncSlavesContainer.querySelectorAll('.slave-chk');
+        chks.forEach(c => c.checked = !c.checked);
       });
     }
 
     if (btnStartSync) {
       btnStartSync.addEventListener('click', async () => {
-        const masterId = selectSyncMaster.value;
-        if (!masterId) {
-          alert('请选择主控窗口！');
+        const runningIds = Object.keys(runningStatus || {});
+        if (!currentSelectedMasterId || !runningIds.includes(currentSelectedMasterId)) {
+          alert('请选择一个正在运行中的主控窗口！');
           return;
         }
         const chks = syncSlavesContainer.querySelectorAll('.slave-chk:checked');
@@ -3814,11 +4028,11 @@
         try {
           await ipcRenderer.invoke('set-window-sync', {
             enabled: true,
-            masterId,
+            masterId: currentSelectedMasterId,
             slaveIds
           });
           await updateSyncUI();
-          showToast('已成功开启键鼠镜像同步！');
+          showToast(`已成功开启键鼠镜像同步！(1 主控 + ${slaveIds.length} 从属)`);
           closeSyncModal();
         } catch (err) {
           alert('开启同步异常: ' + err.message);
@@ -3832,6 +4046,7 @@
           await ipcRenderer.invoke('set-window-sync', { enabled: false });
           await updateSyncUI();
           showToast('已停止键鼠镜像同步');
+          await refreshSyncModalData();
         } catch (err) {
           alert('停止同步异常: ' + err.message);
         }

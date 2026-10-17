@@ -273,11 +273,16 @@ class IpcHub extends EventEmitter {
   getConnectedEnvIds() {
     return Array.from(this.clients.keys());
   }
+
+  getSocketPath() {
+    return PIPE_PATH;
+  }
 }
 
 const hubInstance = new IpcHub();
 hubInstance.ipcHub = hubInstance;
 hubInstance.PIPE_PATH = PIPE_PATH;
 hubInstance.IpcHub = IpcHub;
+hubInstance.IPCHub = IpcHub;
 
 module.exports = hubInstance;

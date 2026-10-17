@@ -410,6 +410,128 @@ function resizeViews() {
   } catch (_) {}
 }
 
+let lastNativeClickTime = 0;
+// 派发底层硬件级真实鼠标事件 (isTrusted: true，专用于 Cloudflare Turnstile 验证穿透)
+async function dispatchNativePhysicalClick(wc, x, y) {
+  if (!wc || wc.isDestroyed()) return;
+  const now = Date.now();
+  if (now - lastNativeClickTime < 1500) {
+    return; // 防抖节流，避免多个扩展或并发重复轰炸点击
+  }
+  lastNativeClickTime = now;
+  const clickX = Math.round(x);
+  const clickY = Math.round(y);
+
+  // 优先策略 1: 使用 Electron 内置 Debugger 协议派发底层 Input.dispatchMouseEvent (天然支持跨域 OOPIF Iframe 穿透，isTrusted: true)
+  try {
+    if (!wc.debugger.isAttached()) {
+      try {
+        wc.debugger.attach('1.3');
+      } catch (attErr) {}
+    }
+    if (wc.debugger.isAttached()) {
+      await wc.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: clickX, y: clickY });
+      await new Promise(r => setTimeout(r, 35));
+      await wc.debugger.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        x: clickX,
+        y: clickY,
+        button: 'left',
+        clickCount: 1
+      });
+      await new Promise(r => setTimeout(r, 70 + Math.floor(Math.random() * 40)));
+      await wc.debugger.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x: clickX,
+        y: clickY,
+        button: 'left',
+        clickCount: 1
+      });
+      console.log(`[Turnstile Auto] 宿主 CDP 级真实物理点击已成功勾选 @ (${clickX}, ${clickY})`);
+      return;
+    }
+  } catch (cdpErr) {
+    console.warn('[CDP Dispatch Fallback]', cdpErr.message);
+  }
+
+  // 备用策略 2: sendInputEvent 模拟输入
+  try {
+    wc.sendInputEvent({ type: 'mouseMove', x: clickX, y: clickY });
+    await new Promise(r => setTimeout(r, 35));
+    wc.sendInputEvent({
+      type: 'mouseDown',
+      x: clickX,
+      y: clickY,
+      button: 'left',
+      clickCount: 1
+    });
+    await new Promise(r => setTimeout(r, 80));
+    wc.sendInputEvent({
+      type: 'mouseUp',
+      x: clickX,
+      y: clickY,
+      button: 'left',
+      clickCount: 1
+    });
+    console.log(`[Turnstile Auto] 宿主 sendInputEvent 物理点击已派发 @ (${clickX}, ${clickY})`);
+  } catch (err) {
+    console.warn(`[Turnstile Click Error] 派发失败: ${err.message}`);
+  }
+}
+
+// 派发多窗口键鼠镜像同步鼠标点击 (无 1500ms Turnstile 节流防抖限制，毫秒级响应，真实合成 inputEvent)
+function dispatchSyncClick(wc, x, y) {
+  if (!wc || wc.isDestroyed()) return;
+  const clickX = Math.round(x);
+  const clickY = Math.round(y);
+  try {
+    wc.sendInputEvent({ type: 'mouseMove', x: clickX, y: clickY });
+    wc.sendInputEvent({
+      type: 'mouseDown',
+      x: clickX,
+      y: clickY,
+      button: 'left',
+      clickCount: 1
+    });
+    wc.sendInputEvent({
+      type: 'mouseUp',
+      x: clickX,
+      y: clickY,
+      button: 'left',
+      clickCount: 1
+    });
+  } catch (err) {
+    console.warn('[Sync Click Error]', err.message);
+  }
+}
+
+// 页面按需注入轻量同步捕获脚本 (仅在当前窗口作为主控端时启用，滚轮采用 40ms 严格节流，严禁高频 IPC 洪泛)
+function injectSyncCapture(wc) {
+  if (!isSyncMaster || !wc || wc.isDestroyed()) return;
+  wc.executeJavaScript(`
+    (() => {
+      if (window.__dt_sync_listener_set) return;
+      window.__dt_sync_listener_set = true;
+      window.addEventListener('click', (e) => {
+        if (!e.isTrusted) return;
+        const xRatio = e.clientX / Math.max(1, window.innerWidth);
+        const yRatio = e.clientY / Math.max(1, window.innerHeight);
+        console.log('__DT_SYNC_CLICK__:' + JSON.stringify({ xRatio, yRatio }));
+      }, true);
+      let lastWheel = 0;
+      window.addEventListener('wheel', (e) => {
+        if (!e.isTrusted) return;
+        const now = Date.now();
+        if (now - lastWheel < 40) return;
+        lastWheel = now;
+        const xRatio = e.clientX / Math.max(1, window.innerWidth);
+        const yRatio = e.clientY / Math.max(1, window.innerHeight);
+        console.log('__DT_SYNC_WHEEL__:' + JSON.stringify({ xRatio, yRatio, deltaX: e.deltaX, deltaY: e.deltaY }));
+      }, { passive: true, capture: true });
+    })();
+  `, true).catch(() => {});
+}
+
 // 4. 为标签页配置快捷键、右键菜单、真实物理点击及加载事件监听
 function setupTabListeners(tabItem) {
   const { view, id: tabId } = tabItem;
@@ -581,90 +703,23 @@ function setupTabListeners(tabItem) {
     menu.popup({ window: mainWindow });
   });
 
-let lastNativeClickTime = 0;
-// 派发底层硬件级真实鼠标事件 (isTrusted: true，完全绕过 chrome.debugger 权限缺失)
-async function dispatchNativePhysicalClick(wc, x, y) {
-  if (!wc || wc.isDestroyed()) return;
-  const now = Date.now();
-  if (now - lastNativeClickTime < 1500) {
-    return; // 防抖节流，避免多个扩展或并发重复轰炸点击
-  }
-  lastNativeClickTime = now;
-  const clickX = Math.round(x);
-  const clickY = Math.round(y);
-
-  // 优先策略 1: 使用 Electron 内置 Debugger 协议派发底层 Input.dispatchMouseEvent (天然支持跨域 OOPIF Iframe 穿透，isTrusted: true)
-  try {
-    if (!wc.debugger.isAttached()) {
-      try {
-        wc.debugger.attach('1.3');
-      } catch (attErr) {}
-    }
-    if (wc.debugger.isAttached()) {
-      await wc.debugger.sendCommand('Input.dispatchMouseEvent', { type: 'mouseMoved', x: clickX, y: clickY });
-      await new Promise(r => setTimeout(r, 35));
-      await wc.debugger.sendCommand('Input.dispatchMouseEvent', {
-        type: 'mousePressed',
-        x: clickX,
-        y: clickY,
-        button: 'left',
-        clickCount: 1
-      });
-      await new Promise(r => setTimeout(r, 70 + Math.floor(Math.random() * 40)));
-      await wc.debugger.sendCommand('Input.dispatchMouseEvent', {
-        type: 'mouseReleased',
-        x: clickX,
-        y: clickY,
-        button: 'left',
-        clickCount: 1
-      });
-      console.log(`[Turnstile Auto] 宿主 CDP 级真实物理点击已成功勾选 @ (${clickX}, ${clickY})`);
-      return;
-    }
-  } catch (cdpErr) {
-    console.warn('[CDP Dispatch Fallback]', cdpErr.message);
-  }
-
-  // 备用策略 2: sendInputEvent 模拟输入
-  try {
-    wc.sendInputEvent({ type: 'mouseMove', x: clickX, y: clickY });
-    await new Promise(r => setTimeout(r, 35));
-    wc.sendInputEvent({
-      type: 'mouseDown',
-      x: clickX,
-      y: clickY,
-      button: 'left',
-      clickCount: 1
-    });
-    await new Promise(r => setTimeout(r, 80));
-    wc.sendInputEvent({
-      type: 'mouseUp',
-      x: clickX,
-      y: clickY,
-      button: 'left',
-      clickCount: 1
-    });
-    console.log(`[Turnstile Auto] 宿主 sendInputEvent 物理点击已派发 @ (${clickX}, ${clickY})`);
-  } catch (err) {
-    console.warn(`[Turnstile Click Error] 派发失败: ${err.message}`);
-  }
-}
-
-  // 监听来自扩展插件的底层真实点击请求（全参数安全扫描）
+  // 监听来自扩展插件的底层真实点击请求与同步捕获请求（全参数安全扫描）
   view.webContents.on('console-message', (...args) => {
     let rawMsg = '';
     for (const a of args) {
-      if (typeof a === 'string' && a.startsWith('__DT_PHYSICAL_CLICK__:')) {
+      if (typeof a === 'string' && a.startsWith('__DT_')) {
         rawMsg = a;
         break;
       }
-      if (a && typeof a === 'object' && typeof a.message === 'string' && a.message.startsWith('__DT_PHYSICAL_CLICK__:')) {
+      if (a && typeof a === 'object' && typeof a.message === 'string' && a.message.startsWith('__DT_')) {
         rawMsg = a.message;
         break;
       }
     }
 
-    if (rawMsg && rawMsg.startsWith('__DT_PHYSICAL_CLICK__:')) {
+    if (!rawMsg) return;
+
+    if (rawMsg.startsWith('__DT_PHYSICAL_CLICK__:')) {
       try {
         const payload = JSON.parse(rawMsg.slice('__DT_PHYSICAL_CLICK__:'.length));
         if (typeof payload.x === 'number' && typeof payload.y === 'number') {
@@ -673,14 +728,14 @@ async function dispatchNativePhysicalClick(wc, x, y) {
       } catch (err) {
         console.warn('[DT Click Error]', err.message);
       }
-    } else if (rawMsg && rawMsg.startsWith('__DT_SYNC_CLICK__:')) {
+    } else if (rawMsg.startsWith('__DT_SYNC_CLICK__:')) {
       if (isSyncMaster) {
         try {
           const p = JSON.parse(rawMsg.slice('__DT_SYNC_CLICK__:'.length));
           sendHubMessage({ action: 'sync-event', envId: currentEnv.id, payload: { type: 'click', ...p } });
         } catch (_) {}
       }
-    } else if (rawMsg && rawMsg.startsWith('__DT_SYNC_WHEEL__:')) {
+    } else if (rawMsg.startsWith('__DT_SYNC_WHEEL__:')) {
       if (isSyncMaster) {
         try {
           const p = JSON.parse(rawMsg.slice('__DT_SYNC_WHEEL__:'.length));
@@ -690,34 +745,13 @@ async function dispatchNativePhysicalClick(wc, x, y) {
     }
   });
 
-  // 页面按需注入轻量同步捕获脚本 (仅在当前窗口作为主控端时启用，滚轮采用 50ms 严格节流，严禁高频 IPC 洪泛)
-  function injectSyncCapture(wc) {
-    if (!isSyncMaster || !wc || wc.isDestroyed()) return;
-    wc.executeJavaScript(`
-      (() => {
-        if (window.__dt_sync_listener_set) return;
-        window.__dt_sync_listener_set = true;
-        window.addEventListener('click', (e) => {
-          if (!e.isTrusted) return;
-          const xRatio = e.clientX / Math.max(1, window.innerWidth);
-          const yRatio = e.clientY / Math.max(1, window.innerHeight);
-          console.log('__DT_SYNC_CLICK__:' + JSON.stringify({ xRatio, yRatio }));
-        }, true);
-        let lastWheel = 0;
-        window.addEventListener('wheel', (e) => {
-          if (!e.isTrusted) return;
-          const now = Date.now();
-          if (now - lastWheel < 50) return;
-          lastWheel = now;
-          const xRatio = e.clientX / Math.max(1, window.innerWidth);
-          const yRatio = e.clientY / Math.max(1, window.innerHeight);
-          console.log('__DT_SYNC_WHEEL__:' + JSON.stringify({ xRatio, yRatio, deltaX: e.deltaX, deltaY: e.deltaY }));
-        }, { passive: true, capture: true });
-      })();
-    `, true).catch(() => {});
-  }
-
   view.webContents.on('dom-ready', () => {
+    if (isSyncMaster) {
+      injectSyncCapture(view.webContents);
+    }
+  });
+
+  view.webContents.on('did-finish-load', () => {
     if (isSyncMaster) {
       injectSyncCapture(view.webContents);
     }
@@ -1159,7 +1193,7 @@ async function handleDispatchedSyncEvent(evt) {
       const [width, height] = mainWindow.getContentSize();
       const targetX = Math.round(evt.xRatio * width);
       const targetY = Math.round(evt.yRatio * (height - SHELL_HEIGHT));
-      dispatchNativePhysicalClick(wc, targetX, targetY);
+      dispatchSyncClick(wc, targetX, targetY);
     }
   } else if (evt.type === 'key') {
     wc.sendInputEvent({
