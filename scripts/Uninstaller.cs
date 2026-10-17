@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -10,6 +11,29 @@ namespace BitFPManager
 {
     static class UninstallerProgram
     {
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessageTimeout(
+            IntPtr hWnd,
+            uint Msg,
+            UIntPtr wParam,
+            string lParam,
+            uint fuFlags,
+            uint uTimeout,
+            out UIntPtr lpdwResult);
+
+        private const int HWND_BROADCAST = 0xffff;
+        private const uint WM_SETTINGCHANGE = 0x001A;
+        private const uint SMTO_ABORTIFHUNG = 0x0002;
+
+        private static void BroadcastEnvironmentChange()
+        {
+            try
+            {
+                UIntPtr result;
+                SendMessageTimeout((IntPtr)HWND_BROADCAST, WM_SETTINGCHANGE, UIntPtr.Zero, "Environment", SMTO_ABORTIFHUNG, 3000, out result);
+            }
+            catch {}
+        }
         [STAThread]
         static void Main()
         {
@@ -59,46 +83,33 @@ namespace BitFPManager
                     try { Directory.Delete(startMenu, true); } catch {}
                 }
 
-                // 3. 从系统用户 PATH 环境变量中移除 (统一使用 CMD / reg.exe 核心规范)
+                // 3. 从系统用户 PATH 环境变量中移除 (采用原生注册表安全操作，杜绝命令行转义缺陷)
                 try
                 {
-                    string currentPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? "";
-                    string[] parts = currentPath.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-                    List<string> remaining = new List<string>();
                     string normInstall = (installDir ?? "").Trim().TrimEnd('\\');
-                    foreach (string part in parts)
+                    using (RegistryKey envKey = Registry.CurrentUser.OpenSubKey("Environment", true))
                     {
-                        if (!string.Equals(part.Trim().TrimEnd('\\'), normInstall, StringComparison.OrdinalIgnoreCase))
+                        if (envKey != null)
                         {
-                            remaining.Add(part.Trim());
+                            object rawPathObj = envKey.GetValue("Path", "", RegistryValueOptions.DoNotExpandEnvironmentNames);
+                            string currentPath = (rawPathObj != null) ? rawPathObj.ToString() : "";
+                            string[] parts = currentPath.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                            List<string> remaining = new List<string>();
+                            foreach (string part in parts)
+                            {
+                                if (!string.Equals(part.Trim().TrimEnd('\\'), normInstall, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    remaining.Add(part.Trim());
+                                }
+                            }
+                            string remainingPath = string.Join(";", remaining.ToArray());
+                            envKey.SetValue("Path", remainingPath, RegistryValueKind.ExpandString);
+
+                            if (envKey.GetValue("DT_BROWSER_DIR") != null) envKey.DeleteValue("DT_BROWSER_DIR", false);
+                            if (envKey.GetValue("DT_CLI_PATH") != null) envKey.DeleteValue("DT_CLI_PATH", false);
                         }
                     }
-                    string remainingPath = string.Join(";", remaining.ToArray());
-                    try { Environment.SetEnvironmentVariable("Path", remainingPath, EnvironmentVariableTarget.User); } catch {}
-                    try
-                    {
-                        ProcessStartInfo regPsi = new ProcessStartInfo("reg.exe", "add \"HKCU\\Environment\" /v Path /t REG_EXPAND_SZ /d \"" + remainingPath + "\" /f");
-                        regPsi.CreateNoWindow = true;
-                        regPsi.UseShellExecute = false;
-                        using (Process p = Process.Start(regPsi)) { if (p != null) p.WaitForExit(3000); }
-                    }
-                    catch {}
-                    try
-                    {
-                        ProcessStartInfo psi1 = new ProcessStartInfo("reg.exe", "delete \"HKCU\\Environment\" /v DT_BROWSER_DIR /f");
-                        psi1.CreateNoWindow = true;
-                        psi1.UseShellExecute = false;
-                        using (Process p = Process.Start(psi1)) { if (p != null) p.WaitForExit(3000); }
-                    }
-                    catch {}
-                    try
-                    {
-                        ProcessStartInfo psi2 = new ProcessStartInfo("reg.exe", "delete \"HKCU\\Environment\" /v DT_CLI_PATH /f");
-                        psi2.CreateNoWindow = true;
-                        psi2.UseShellExecute = false;
-                        using (Process p = Process.Start(psi2)) { if (p != null) p.WaitForExit(3000); }
-                    }
-                    catch {}
+                    BroadcastEnvironmentChange();
                 }
                 catch {}
 
@@ -138,24 +149,36 @@ namespace BitFPManager
                     deleteUserData = (resData == DialogResult.Yes);
                 }
 
-                // 7. 调度自删除命令并退出
-                string cmdArgs;
-                if (deleteUserData)
-                {
-                    cmdArgs = string.Format("/c timeout /t 1 /nobreak >nul & rd /s /q \"{0}\"", installDir);
-                }
-                else
-                {
-                    // 仅删除除 data 以外的文件
-                    cmdArgs = string.Format("/c timeout /t 1 /nobreak >nul & for /d %i in (\"{0}\\*\") do (if /i not \"%~nxi\"==\"data\" rd /s /q \"%i\") & for %i in (\"{0}\\*\") do (del /f /q \"%i\")", installDir);
-                }
+                // 7. 调度自删除命令并退出 (附带系统根目录与系统保护目录绝对防线熔断机制)
+                string fullNorm = Path.GetFullPath(installDir).TrimEnd('\\');
+                string rootNorm = Path.GetPathRoot(fullNorm).TrimEnd('\\');
 
-                ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
+                // 绝对防线：严禁对盘符根目录、Windows、System32 等执行 rd /s /q
+                bool isRootOrSys = string.Equals(fullNorm, rootNorm, StringComparison.OrdinalIgnoreCase) ||
+                                   fullNorm.Length <= 3 ||
+                                   fullNorm.IndexOf("Windows", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                   fullNorm.IndexOf("System32", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (!isRootOrSys && File.Exists(Path.Combine(installDir, "Uninstall.exe")))
                 {
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                };
-                Process.Start(psi);
+                    string cmdArgs;
+                    if (deleteUserData)
+                    {
+                        cmdArgs = string.Format("/c timeout /t 1 /nobreak >nul & rd /s /q \"{0}\"", installDir);
+                    }
+                    else
+                    {
+                        // 仅删除除 data 以外的文件
+                        cmdArgs = string.Format("/c timeout /t 1 /nobreak >nul & for /d %i in (\"{0}\\*\") do (if /i not \"%~nxi\"==\"data\" rd /s /q \"%i\") & for %i in (\"{0}\\*\") do (del /f /q \"%i\")", installDir);
+                    }
+
+                    ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
+                    {
+                        CreateNoWindow = true,
+                        UseShellExecute = false
+                    };
+                    Process.Start(psi);
+                }
 
                 MessageBox.Show(
                     "DT - 指纹浏览器 已成功从您的计算机卸载！",

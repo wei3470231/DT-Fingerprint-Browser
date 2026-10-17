@@ -31,6 +31,63 @@ namespace BitFPManager
 
         private string finalInstallDir = "";
 
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessageTimeout(
+            IntPtr hWnd,
+            uint Msg,
+            UIntPtr wParam,
+            string lParam,
+            uint fuFlags,
+            uint uTimeout,
+            out UIntPtr lpdwResult);
+
+        private const int HWND_BROADCAST = 0xffff;
+        private const uint WM_SETTINGCHANGE = 0x001A;
+        private const uint SMTO_ABORTIFHUNG = 0x0002;
+
+        private static void BroadcastEnvironmentChange()
+        {
+            try
+            {
+                UIntPtr result;
+                SendMessageTimeout((IntPtr)HWND_BROADCAST, WM_SETTINGCHANGE, UIntPtr.Zero, "Environment", SMTO_ABORTIFHUNG, 3000, out result);
+            }
+            catch {}
+        }
+
+        private static bool IsDangerousSystemPath(string dir)
+        {
+            if (string.IsNullOrWhiteSpace(dir)) return true;
+            try
+            {
+                string full = Path.GetFullPath(dir).TrimEnd('\\');
+                string root = Path.GetPathRoot(full).TrimEnd('\\');
+                if (string.Equals(full, root, StringComparison.OrdinalIgnoreCase)) return true;
+
+                string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows).TrimEnd('\\');
+                if (!string.IsNullOrEmpty(winDir) && (string.Equals(full, winDir, StringComparison.OrdinalIgnoreCase) || full.StartsWith(winDir + "\\", StringComparison.OrdinalIgnoreCase))) return true;
+
+                string sysDir = Environment.GetFolderPath(Environment.SpecialFolder.System).TrimEnd('\\');
+                if (!string.IsNullOrEmpty(sysDir) && (string.Equals(full, sysDir, StringComparison.OrdinalIgnoreCase) || full.StartsWith(sysDir + "\\", StringComparison.OrdinalIgnoreCase))) return true;
+
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles).TrimEnd('\\');
+                if (!string.IsNullOrEmpty(progFiles) && string.Equals(full, progFiles, StringComparison.OrdinalIgnoreCase)) return true;
+
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86).TrimEnd('\\');
+                if (!string.IsNullOrEmpty(progFilesX86) && string.Equals(full, progFilesX86, StringComparison.OrdinalIgnoreCase)) return true;
+
+                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('\\');
+                if (!string.IsNullOrEmpty(userProfile))
+                {
+                    if (string.Equals(full, userProfile, StringComparison.OrdinalIgnoreCase)) return true;
+                    string usersParent = Path.GetDirectoryName(userProfile);
+                    if (!string.IsNullOrEmpty(usersParent) && string.Equals(full, usersParent.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+            catch {}
+            return false;
+        }
+
         public InstallerForm()
         {
             InitializeComponent();
@@ -332,7 +389,19 @@ namespace BitFPManager
                 return;
             }
 
-            finalInstallDir = Path.GetFullPath(installPath);
+            string resolvedPath = Path.GetFullPath(installPath);
+            if (IsDangerousSystemPath(resolvedPath))
+            {
+                resolvedPath = Path.Combine(resolvedPath, "DT-Fingerprint-Browser");
+                txtInstallPath.Text = resolvedPath;
+                MessageBox.Show(
+                    "为保障 Windows 系统引导与核心文件安全，严禁直接安装在驱动器根目录或系统核心保护目录下！\n\n已自动为您优化安装路径为：\n" + resolvedPath,
+                    "安全防护提醒",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+
+            finalInstallDir = resolvedPath;
 
             // 禁用表单
             txtInstallPath.Enabled = false;
@@ -594,66 +663,39 @@ namespace BitFPManager
                 lblStatus.Text = "正在配置系统环境与快捷方式...";
             }));
 
-            // 3. 自动配置用户 PATH 环境变量 (统一采用 CMD / reg.exe 核心工具链，兼容精简版系统与无 PowerShell 环境)
+            // 3. 自动配置用户 PATH 环境变量 (采用原生注册表安全写入与 Win32 消息广播，杜绝 setx 1024 截断与转义缺陷)
             if (addPath)
             {
                 try
                 {
-                    string currentPath = Environment.GetEnvironmentVariable("Path", EnvironmentVariableTarget.User) ?? "";
-                    string[] parts = currentPath.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-                    bool alreadyExists = false;
-                    foreach (string p in parts)
+                    string normInstall = installDir.TrimEnd('\\');
+                    using (RegistryKey envKey = Registry.CurrentUser.OpenSubKey("Environment", true))
                     {
-                        if (string.Equals(p.Trim().TrimEnd('\\'), installDir.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                        if (envKey != null)
                         {
-                            alreadyExists = true;
-                            break;
+                            object rawPathObj = envKey.GetValue("Path", "", RegistryValueOptions.DoNotExpandEnvironmentNames);
+                            string currentPath = (rawPathObj != null) ? rawPathObj.ToString() : "";
+                            string[] parts = currentPath.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                            bool alreadyExists = false;
+                            foreach (string p in parts)
+                            {
+                                if (string.Equals(p.Trim().TrimEnd('\\'), normInstall, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    alreadyExists = true;
+                                    break;
+                                }
+                            }
+                            if (!alreadyExists)
+                            {
+                                string newPath = (currentPath.TrimEnd(';') + ";" + normInstall).Trim(';');
+                                envKey.SetValue("Path", newPath, RegistryValueKind.ExpandString);
+                            }
+
+                            envKey.SetValue("DT_BROWSER_DIR", installDir, RegistryValueKind.String);
+                            envKey.SetValue("DT_CLI_PATH", Path.Combine(installDir, "DT-CLI.exe"), RegistryValueKind.String);
                         }
                     }
-                    string newPath = currentPath;
-                    if (!alreadyExists)
-                    {
-                        newPath = (currentPath.TrimEnd(';') + ";" + installDir).Trim(';');
-                        try { Environment.SetEnvironmentVariable("Path", newPath, EnvironmentVariableTarget.User); } catch {}
-                    }
-
-                    // CMD 原生 reg.exe 双重保障
-                    try
-                    {
-                        ProcessStartInfo psi = new ProcessStartInfo("reg.exe", "add \"HKCU\\Environment\" /v Path /t REG_EXPAND_SZ /d \"" + newPath + "\" /f");
-                        psi.CreateNoWindow = true;
-                        psi.UseShellExecute = false;
-                        using (Process p = Process.Start(psi)) { if (p != null) p.WaitForExit(3000); }
-                    }
-                    catch {}
-
-                    try
-                    {
-                        ProcessStartInfo psiDir = new ProcessStartInfo("reg.exe", "add \"HKCU\\Environment\" /v DT_BROWSER_DIR /t REG_SZ /d \"" + installDir + "\" /f");
-                        psiDir.CreateNoWindow = true;
-                        psiDir.UseShellExecute = false;
-                        using (Process p = Process.Start(psiDir)) { if (p != null) p.WaitForExit(3000); }
-                    }
-                    catch {}
-
-                    try
-                    {
-                        string cliExe = Path.Combine(installDir, "DT-CLI.exe");
-                        ProcessStartInfo psiCli = new ProcessStartInfo("reg.exe", "add \"HKCU\\Environment\" /v DT_CLI_PATH /t REG_SZ /d \"" + cliExe + "\" /f");
-                        psiCli.CreateNoWindow = true;
-                        psiCli.UseShellExecute = false;
-                        using (Process p = Process.Start(psiCli)) { if (p != null) p.WaitForExit(3000); }
-                    }
-                    catch {}
-
-                    try
-                    {
-                        ProcessStartInfo psiBrd = new ProcessStartInfo("cmd.exe", "/c setx DT_ENV_BROADCAST 1 >nul 2>&1 & reg delete HKCU\\Environment /v DT_ENV_BROADCAST /f >nul 2>&1");
-                        psiBrd.CreateNoWindow = true;
-                        psiBrd.UseShellExecute = false;
-                        using (Process p = Process.Start(psiBrd)) { if (p != null) p.WaitForExit(3000); }
-                    }
-                    catch {}
+                    BroadcastEnvironmentChange();
                 }
                 catch {}
             }

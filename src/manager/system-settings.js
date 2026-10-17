@@ -199,10 +199,12 @@ function setPathEnvironment(enabled) {
     } catch (_) {}
   }
 
-  // 3. 通过 CMD 原生 setx 触发系统全局 WM_SETTINGCHANGE 广播通知 (无需 PowerShell 参与)
+  // 3. 安全广播系统全局 WM_SETTINGCHANGE 通知 (彻底杜绝 setx 命令引发的 1024 字符截断缺陷)
   try {
-    cp.execSync('cmd.exe /c setx DT_ENV_BROADCAST 1 >nul 2>&1 & reg delete HKCU\\Environment /v DT_ENV_BROADCAST /f >nul 2>&1', {
-      stdio: 'ignore'
+    const psScript = `Add-Type -Namespace Win32 -Name NativeMethods -MemberDefinition '[DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out UIntPtr lpdwResult);'; $res = [UIntPtr]::Zero; [Win32.NativeMethods]::SendMessageTimeout([IntPtr]0xffff, 0x001A, [UIntPtr]::Zero, 'Environment', 2, 3000, [ref]$res);`;
+    cp.execSync(`powershell.exe -NoProfile -NonInteractive -Command "${psScript}"`, {
+      stdio: 'ignore',
+      timeout: 4000
     });
   } catch (_) {}
 

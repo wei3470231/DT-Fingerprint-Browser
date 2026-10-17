@@ -12,6 +12,10 @@ process.on('uncaughtException', (err) => {
 let isWindowClosing = false;
 
 const { app, BaseWindow, WebContentsView, ipcMain, session, Menu } = require('electron');
+
+// 系统稳定性强化：防止部分老旧显卡驱动因硬件加速超时(TDR)引发 Windows 蓝屏死机或锁死
+app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 const fs = require('node:fs');
 const path = require('node:path');
 const url = require('node:url');
