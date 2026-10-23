@@ -132,6 +132,20 @@ async function launch(idOrName, options = {}) {
   if (options.headless) {
     args.push('--headless');
   }
+  if (options.rotatingFile) {
+    args.push(`--rotating-file=${options.rotatingFile}`);
+  }
+  if (options.rotatingRules) {
+    args.push(`--rotating-rules=${options.rotatingRules}`);
+  }
+  if (options.rotatingMode) {
+    args.push(`--rotating-mode=${options.rotatingMode}`);
+  }
+  if (options.blockDialogs === true) {
+    args.push('--block-dialogs');
+  } else if (options.blockDialogs === false) {
+    args.push('--no-block-dialogs');
+  }
   if (options.args) {
     args.push(options.args);
   }

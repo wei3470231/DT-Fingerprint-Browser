@@ -9,7 +9,7 @@ const { electronPath } = require('./scripts/runtime-path');
 const KNOWN_COMMANDS = new Set([
   'list', 'start', 'open', 'stop', 'close', 'status',
   'get', 'info', 'update', 'edit',
-  'random-fp', 'set-proxy', 'set-ext', 'test-proxy',
+  'random-fp', 'set-proxy', 'set-rotating', 'set-rotating-proxy', 'set-dialogs', 'set-ext', 'test-proxy',
   'create', 'clone', 'delete', 'clear-cache', 'clean-cache',
   'group', 'set-group',
   'bookmark', 'bookmarks',
@@ -32,7 +32,7 @@ function printUsage() {
 
 常用管理命令 (支持 --json 结构化输出供自动化脚本解析):
   [环境启动与控制]
-    dt-cli start --name "环境名" [--url 网址] [--headless] [--json] 启动浏览器并等待CDP就绪
+    dt-cli start --name "环境名" [--url 网址] [--headless] [--rotating-file 文件] [--rotating-rules 规则] [--block-dialogs] [--json] 启动浏览器并等待CDP就绪
     dt-cli start --id "env-xxxx" [--url 网址] [--json]              按环境ID启动
     dt-cli start --group "分组名" [--headless] [--json]             批量启动指定分组下的所有环境
     dt-cli start --names "A,B,C" [--headless] [--json]              批量启动指定名称或ID的环境
@@ -45,8 +45,8 @@ function printUsage() {
   [环境配置与 CRUD]
     dt-cli list [--group 组名] [--search 关键词] [--running] [--json] 列出环境配置及其实时运行状态
     dt-cli get --name "环境名" [--json]                             查看环境完整配置与指纹详情 (别名: info)
-    dt-cli create --name "新环境" [--group 组名] [--proxy 代理] [--proxy-scope all|rules] [--proxy-rules 规则] [--port 9222] [--url 网址] [--ext 插件] [--lang en-US] 创建新环境
-    dt-cli update --name "环境名" [--new-name 新名] [--url 网址] [--group 组] [--port 端口] [--proxy 代理] [--proxy-scope 范围] [--proxy-rules 规则] [--ext 插件] 修改环境配置
+    dt-cli create --name "新环境" [--group 组名] [--proxy 代理] [--proxy-scope all|rules] [--proxy-rules 规则] [--rotating-file 文件.txt] [--rotating-rules 规则] [--block-dialogs] [--port 9222] [--url 网址] [--ext 插件] [--lang en-US] 创建新环境
+    dt-cli update --name "环境名" [--new-name 新名] [--url 网址] [--group 组] [--port 端口] [--proxy 代理] [--proxy-scope 范围] [--proxy-rules 规则] [--rotating-file 文件] [--rotating-rules 规则] [--clear-rotating] [--block-dialogs] [--no-block-dialogs] [--ext 插件] 修改环境配置
     dt-cli clone --name "已有环境" [--new-name "新名"] [--json]     快速克隆环境 (继承设置并分配新端口与新指纹)
     dt-cli delete --name "环境名" [--json]                          删除环境配置
     dt-cli clear-cache [--name "环境名"|--group 组|--names A,B|--all] [--json] 深度清理环境用户缓存数据 (Cookies/Cache/LevelDB)
@@ -55,6 +55,9 @@ function printUsage() {
     dt-cli random-fp --name "环境名" [--json]                       一键随机重置硬件指纹 (运行中1秒内热生效)
     dt-cli set-proxy --name "环境名" --proxy "代理串" [--json]      设置代理 (自动识别4种主流代理格式)
     dt-cli set-proxy --name "环境名" --clear [--json]               清除代理 (切换为直连模式)
+    dt-cli set-rotating --name "环境名" --file "代理.txt" --rules "域名1;域名2" [--mode random|round-robin] [--json] 配置目标多域名动态轮换代理池 (每次连接必换IP)
+    dt-cli set-rotating --name "环境名" --clear [--json]            清除动态轮换代理池
+    dt-cli set-dialogs --name "环境名" [--block|--allow] [--json]    开启或关闭屏蔽网页弹窗 (window.alert/confirm)
     dt-cli test-proxy --proxy "代理串" [--json]                     独立测试代理服务器连通性与网络延迟
     dt-cli test-proxy --name "环境名" [--json]                      测试已配置环境的代理连通性
     dt-cli set-ext --name "环境名" --ext "插件路径" [--json]        设置加载扩展插件 (支持多路径分号分割)
@@ -244,12 +247,14 @@ async function main() {
         const fp = env.fp || {};
         const hwStr = `${fp.navigator?.hardwareConcurrency || '?'}核 / ${fp.navigator?.deviceMemory || '?'}G / ${fp.webgl?.renderer ? fp.webgl.renderer.slice(0, 30) + '...' : '默认显卡'}`;
         const proxyStr = env.proxy?.enabled ? `${env.proxy.type.toUpperCase()}://${env.proxy.host}:${env.proxy.port}` : '直连';
+        const rotStr = env.rotatingProxy?.enabled ? ` | ⚡动态代理池: ${env.rotatingProxy.rules}` : '';
+        const dialogStr = env.blockDialogs ? ' | 🛡️屏蔽弹窗' : '';
 
         console.log(`\n[${index + 1}] ${env.name} (ID: ${env.id}) [分组: ${env.group || '默认分组'}]`);
         console.log(`    状态: ${statusStr}`);
         console.log(`    调试端口: ${env.remotePortEnabled ? env.remotePort : '关闭'} | 语言: ${env.language}`);
         console.log(`    硬件指纹: ${hwStr}`);
-        console.log(`    代理: ${proxyStr}`);
+        console.log(`    代理: ${proxyStr}${rotStr}${dialogStr}`);
         console.log(`    插件: ${env.extensions || '未配置'}`);
         console.log(`    目标网址: ${env.url}`);
         console.log(`    数据目录: ${env.userDataDir}`);
@@ -298,6 +303,13 @@ async function main() {
       console.log(`  备注说明: ${env.notes || '(无)'}`);
       const proxyStr = env.proxy?.enabled ? `${env.proxy.type.toUpperCase()}://${env.proxy.host}:${env.proxy.port} (范围: ${env.proxy.scope === 'rules' ? '指定URL' : '全局'})` : '直连 (未启用)';
       console.log(`  代理设置: ${proxyStr}`);
+      const rot = env.rotatingProxy;
+      if (rot && rot.enabled) {
+        console.log(`  动态代理池: ⚡开启 [文件: ${rot.filePath}] [规则: ${rot.rules || '*'}] [模式: ${rot.mode || 'random'}]`);
+      }
+      if (env.blockDialogs) {
+        console.log(`  弹窗拦截: 🛡️已启用 (静默阻止 window.alert / window.confirm)`);
+      }
       console.log(`  扩展插件: ${env.extensions || '未配置'}`);
       console.log(`  数据目录: ${env.userDataDir}`);
       if (env.customArgs) console.log(`  自定义开关: ${env.customArgs}`);
@@ -314,16 +326,27 @@ async function main() {
 
     case 'open':
     case 'start': {
+      const rotFile = options['rotating-file'] || options['rotating-proxy-file'] || options.file;
+      const rotRules = options['rotating-rules'] || options['rotating-proxy-rules'] || options.rules;
+      const rotMode = options['rotating-mode'] || options.mode;
+      const blockDialogs = options['block-dialogs'] ? true : (options['no-block-dialogs'] ? false : undefined);
+
+      const commonLaunchOpts = {
+        url: options.url || undefined,
+        headless: Boolean(options.headless),
+        rotatingFile: rotFile ? (path.isAbsolute(rotFile) ? rotFile : path.resolve(process.cwd(), rotFile)) : undefined,
+        rotatingRules: rotRules || undefined,
+        rotatingMode: rotMode || undefined,
+        blockDialogs,
+        args: options.args || undefined
+      };
+
       if (options.group) {
         const allEnvs = store.loadAll().filter(e => (e.group || '默认分组') === options.group);
         const results = [];
         for (const e of allEnvs) {
           try {
-            const r = await processManager.launch(e.id, {
-              url: options.url || undefined,
-              headless: Boolean(options.headless),
-              args: options.args || undefined
-            });
+            const r = await processManager.launch(e.id, commonLaunchOpts);
             results.push({ name: e.name, id: e.id, success: true, pid: r.pid, port: r.port });
           } catch (err) {
             results.push({ name: e.name, id: e.id, success: false, error: err.message });
@@ -344,11 +367,7 @@ async function main() {
         const results = [];
         for (const e of allEnvs) {
           try {
-            const r = await processManager.launch(e.id, {
-              url: options.url || undefined,
-              headless: Boolean(options.headless),
-              args: options.args || undefined
-            });
+            const r = await processManager.launch(e.id, commonLaunchOpts);
             results.push({ name: e.name, id: e.id, success: true, pid: r.pid, port: r.port });
           } catch (err) {
             results.push({ name: e.name, id: e.id, success: false, error: err.message });
@@ -372,12 +391,7 @@ async function main() {
         process.exit(1);
       }
       try {
-        const launchOpts = {
-          url: options.url || undefined,
-          headless: Boolean(options.headless),
-          args: options.args || undefined
-        };
-        const res = await processManager.launch(nameOrId, launchOpts);
+        const res = await processManager.launch(nameOrId, commonLaunchOpts);
 
         if (isJson) {
           console.log(JSON.stringify({
@@ -715,6 +729,127 @@ async function main() {
       break;
     }
 
+    case 'set-rotating':
+    case 'set-rotating-proxy': {
+      if (!nameOrId) {
+        const msg = '请提供 --name 或 --id 参数指定环境';
+        if (isJson) {
+          console.log(JSON.stringify({ code: 1, success: false, message: msg }));
+        } else {
+          console.error(`【错误】${msg}`);
+        }
+        process.exit(1);
+      }
+      const env = store.getEnvironment(nameOrId);
+      if (!env) {
+        const msg = `未找到环境: ${nameOrId}`;
+        if (isJson) console.log(JSON.stringify({ code: 1, success: false, message: msg }));
+        else console.error(`❌ ${msg}`);
+        process.exit(1);
+      }
+
+      if (options.clear) {
+        const updated = store.updateEnvironment(env.id, {
+          rotatingProxy: { enabled: false, filePath: '', rules: '', mode: 'random' }
+        });
+        if (isJson) {
+          console.log(JSON.stringify({ code: 0, success: true, message: `已关闭环境 "${updated.name}" 的动态轮换代理池`, data: updated.rotatingProxy }, null, 2));
+        } else {
+          console.log(`⚡ 已关闭环境 "${updated.name}" 的动态轮换代理池`);
+        }
+        break;
+      }
+
+      const filePathRaw = options.file || options['rotating-file'] || options.path;
+      const rules = options.rules || options['rotating-rules'] || options.rule;
+      const mode = options.mode || options['rotating-mode'] || 'random';
+
+      if (!filePathRaw) {
+        const msg = '请提供 --file <路径> 指定包含代理列表的本地 .txt 文件路径，或使用 --clear 关闭动态代理池';
+        if (isJson) console.log(JSON.stringify({ code: 1, success: false, message: msg }));
+        else console.error(`【错误】${msg}`);
+        process.exit(1);
+      }
+
+      const resolvedPath = path.isAbsolute(filePathRaw) ? filePathRaw : path.resolve(process.cwd(), filePathRaw);
+      const fs = require('node:fs');
+      if (!fs.existsSync(resolvedPath)) {
+        const msg = `指定的本地代理文档不存在: ${resolvedPath}`;
+        if (isJson) console.log(JSON.stringify({ code: 1, success: false, message: msg }));
+        else console.error(`❌ ${msg}`);
+        process.exit(1);
+      }
+
+      if (!rules) {
+        const msg = '请提供 --rules <域名规则> 指定走动态代理的目标域名 (支持多域名分号分隔，例如：challenges.cloudflare.com;*.turnstile.com)';
+        if (isJson) console.log(JSON.stringify({ code: 1, success: false, message: msg }));
+        else console.error(`【错误】${msg}`);
+        process.exit(1);
+      }
+
+      const { RotatingProxyPool } = require('./src/browser/rotating-proxy/proxy-pool');
+      const pool = new RotatingProxyPool();
+      const loadRes = pool.loadFromFile(resolvedPath);
+      if (!loadRes.success || pool.proxies.length === 0) {
+        const msg = loadRes.error || `代理文档中未解析到有效的代理记录 (支持4种单行格式: host:port, host:port:u:p, http://u:p@host:port, socks5://u:p@host:port)`;
+        if (isJson) console.log(JSON.stringify({ code: 1, success: false, message: msg }));
+        else console.error(`❌ ${msg}`);
+        process.exit(1);
+      }
+
+      const updated = store.updateEnvironment(env.id, {
+        rotatingProxy: {
+          enabled: true,
+          filePath: resolvedPath,
+          rules,
+          mode: mode === 'round-robin' ? 'round-robin' : 'random'
+        }
+      });
+
+      if (isJson) {
+        console.log(JSON.stringify({
+          code: 0,
+          success: true,
+          message: `已为 "${updated.name}" 配置动态轮换代理池 (共解析出 ${pool.proxies.length} 条有效代理)`,
+          data: {
+            ...updated.rotatingProxy,
+            loadedCount: pool.proxies.length
+          }
+        }, null, 2));
+      } else {
+        console.log(`⚡ 已成功为 "${updated.name}" 配置动态轮换代理池:`);
+        console.log(`   文档路径: ${updated.rotatingProxy.filePath}`);
+        console.log(`   可用代理: ${pool.proxies.length} 条有效代理 (每次连接新建并随机/轮换)`);
+        console.log(`   目标域名: ${updated.rotatingProxy.rules}`);
+        console.log(`   抽取模式: ${updated.rotatingProxy.mode === 'round-robin' ? '按序轮询' : '任意随机'}`);
+      }
+      break;
+    }
+
+    case 'set-dialogs': {
+      if (!nameOrId) {
+        const msg = '请提供 --name 或 --id 参数指定环境';
+        if (isJson) console.log(JSON.stringify({ code: 1, success: false, message: msg }));
+        else console.error(`【错误】${msg}`);
+        process.exit(1);
+      }
+      const env = store.getEnvironment(nameOrId);
+      if (!env) {
+        const msg = `未找到环境: ${nameOrId}`;
+        if (isJson) console.log(JSON.stringify({ code: 1, success: false, message: msg }));
+        else console.error(`❌ ${msg}`);
+        process.exit(1);
+      }
+      const block = options.block !== undefined ? Boolean(options.block) : (options.allow ? false : true);
+      const updated = store.updateEnvironment(env.id, { blockDialogs: block });
+      if (isJson) {
+        console.log(JSON.stringify({ code: 0, success: true, data: { blockDialogs: updated.blockDialogs } }, null, 2));
+      } else {
+        console.log(`🛡️ 已为 "${updated.name}" ${updated.blockDialogs ? '开启' : '关闭'} 弹窗屏蔽 (window.alert/confirm)`);
+      }
+      break;
+    }
+
     case 'test-proxy': {
       let proxyTarget = options.proxy;
       if (!proxyTarget && nameOrId) {
@@ -840,6 +975,20 @@ async function main() {
             proxyConfig = parsed;
           }
         }
+
+        let rotatingProxy = undefined;
+        const rotFile = options['rotating-file'] || options['rotating-proxy-file'] || options['rot-file'];
+        if (rotFile) {
+          const resolvedPath = path.isAbsolute(rotFile) ? rotFile : path.resolve(process.cwd(), rotFile);
+          rotatingProxy = {
+            enabled: true,
+            filePath: resolvedPath,
+            rules: options['rotating-rules'] || options['rotating-proxy-rules'] || options['rot-rules'] || '',
+            mode: options['rotating-mode'] || 'random'
+          };
+        }
+        const blockDialogs = Boolean(options['block-dialogs']);
+
         const created = store.addEnvironment({
           name: options.name,
           group: options.group || '默认分组',
@@ -850,6 +999,8 @@ async function main() {
           language: options.lang || 'en-US',
           timezone: options.timezone || 'America/New_York',
           proxy: proxyConfig,
+          rotatingProxy,
+          blockDialogs,
           extensions: extVal || undefined,
           customArgs: options.args || undefined
         });
@@ -863,6 +1014,12 @@ async function main() {
             if (created.proxy.scope === 'rules' && created.proxy.rules) {
               console.log(`   代理生效规则: ${created.proxy.rules}`);
             }
+          }
+          if (created.rotatingProxy && created.rotatingProxy.enabled) {
+            console.log(`   ⚡ 动态轮换代理池: ${created.rotatingProxy.filePath} (规则: ${created.rotatingProxy.rules})`);
+          }
+          if (created.blockDialogs) {
+            console.log(`   🛡️ 弹窗拦截: 已启用 (屏蔽 window.alert / window.confirm)`);
           }
           if (created.extensions) {
             console.log(`   扩展插件: ${created.extensions}`);
@@ -928,6 +1085,28 @@ async function main() {
           if (options['proxy-scope']) curProxy.scope = options['proxy-scope'];
           if (options['proxy-rules'] !== undefined) curProxy.rules = options['proxy-rules'];
           updates.proxy = curProxy;
+        }
+
+        // 动态代理池更新
+        if (options['clear-rotating']) {
+          updates.rotatingProxy = { enabled: false, filePath: '', rules: '', mode: 'random' };
+        } else if (options['rotating-file'] || options['rotating-rules'] || options['rotating-mode']) {
+          const curRot = env.rotatingProxy ? { ...env.rotatingProxy } : { enabled: true, filePath: '', rules: '', mode: 'random' };
+          curRot.enabled = true;
+          if (options['rotating-file']) {
+            const rf = options['rotating-file'];
+            curRot.filePath = path.isAbsolute(rf) ? rf : path.resolve(process.cwd(), rf);
+          }
+          if (options['rotating-rules']) curRot.rules = options['rotating-rules'];
+          if (options['rotating-mode']) curRot.mode = options['rotating-mode'];
+          updates.rotatingProxy = curRot;
+        }
+
+        // 弹窗拦截更新
+        if (options['block-dialogs']) {
+          updates.blockDialogs = true;
+        } else if (options['no-block-dialogs'] || options['allow-dialogs']) {
+          updates.blockDialogs = false;
         }
 
         const updated = store.updateEnvironment(env.id, updates);

@@ -1227,7 +1227,7 @@
     </div>
     <div class="footer-right">
       <div id="btnVersionCheck" class="footer-tag" title="点击检查更新或前往 GitHub Releases 页面">
-        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v2.3</b></span>
+        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v2.5</b></span>
         <span class="footer-version-badge" id="versionBadge">
           <span class="status-dot green" id="versionDot"></span>
           <span id="versionStatusText">检测更新中...</span>
@@ -1537,6 +1537,58 @@
             <label class="form-label">指定 URL 规则 (以分号分隔)</label>
             <input type="text" class="form-input" id="formProxyRules" placeholder="例如：*.browserscan.net;*google.com">
           </div>
+        </div>
+
+        <!-- ⚡ 目标多域名动态轮换代理池 (每连接换 IP) -->
+        <div style="background: var(--bg-sub); padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="font-size: 12px; font-weight: 600; color: #ec4899; display: inline-flex; align-items: center; gap: 6px;">
+              ⚡ 目标多域名动态轮换代理池 (每连接新建并换新 IP)
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <input type="checkbox" id="formRotatingEnabled" style="cursor: pointer;">
+              <label for="formRotatingEnabled" style="font-size: 12px; cursor: pointer;">启用动态代理池</label>
+            </div>
+          </div>
+          <div id="rotatingProxyPanel" style="display: none; flex-direction: column; gap: 10px; margin-top: 6px;">
+            <div class="form-group">
+              <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>选择本地代理文档 (.txt 文件，一行一个代理，支持 4 种格式) *</span>
+                <span id="rotatingFileStats" style="font-size: 11px; color: #10b981; font-weight: 500;"></span>
+              </label>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" class="form-input" id="formRotatingFilePath" style="flex: 1;" placeholder="请选择或输入本地代理文档路径，如 D:\proxies.txt">
+                <button type="button" class="btn btn-secondary btn-sm" id="btnSelectRotatingFile" style="height: 34px; white-space: nowrap;">📂 选择 .txt 文件</button>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex: 2;">
+                <label class="form-label">指定目标域名/URL 规则 (支持多个域名分号 ; 分隔) *</label>
+                <input type="text" class="form-input" id="formRotatingRules" placeholder="例如：challenges.cloudflare.com;*.turnstile.com;api.target.com">
+              </div>
+              <div class="form-group" style="flex: 1; max-width: 150px;">
+                <label class="form-label">抽取模式</label>
+                <select class="form-input" id="formRotatingMode">
+                  <option value="random">任意随机 (推荐)</option>
+                  <option value="round-robin">按序轮询</option>
+                </select>
+              </div>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5; background: var(--bg-hover); padding: 6px 10px; border-radius: 4px;">
+              💡 <b>运作机制：</b>针对上述指定域名的网络访问，每次有新连接创建时立即从代理池中抽取不同 IP；自动切断长连接复用保证每次刷新或点击必定换新 IP；未匹配的其余流量正常走基础代理或直连。
+            </div>
+          </div>
+        </div>
+
+        <!-- 🛡️ 网页交互行为控制：屏蔽弹窗 -->
+        <div style="background: var(--bg-sub); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="formBlockDialogs" style="width: 15px; height: 15px; cursor: pointer;">
+            <label for="formBlockDialogs" style="font-size: 12px; font-weight: 500; color: var(--text-main); cursor: pointer;">
+              屏蔽浏览器网页弹窗 (静默阻止 window.alert / window.confirm，避免自动化脚本卡死)
+            </label>
+          </div>
+          <span style="font-size: 11px; color: var(--text-muted);">(默认不勾选)</span>
         </div>
 
         <!-- Chrome 扩展插件设置 -->
@@ -2357,6 +2409,25 @@
         document.getElementById('formProxyRules').value = proxy.rules || '';
         proxyRulesRow.style.display = (proxy.scope === 'rules') ? 'block' : 'none';
 
+        // 动态代理池回显与联动
+        const rot = env?.rotatingProxy || {};
+        const formRotatingEnabled = document.getElementById('formRotatingEnabled');
+        const rotatingProxyPanel = document.getElementById('rotatingProxyPanel');
+        const formRotatingFilePath = document.getElementById('formRotatingFilePath');
+        const formRotatingRules = document.getElementById('formRotatingRules');
+        const formRotatingMode = document.getElementById('formRotatingMode');
+        const rotatingFileStats = document.getElementById('rotatingFileStats');
+
+        formRotatingEnabled.checked = Boolean(rot.enabled);
+        rotatingProxyPanel.style.display = rot.enabled ? 'flex' : 'none';
+        formRotatingFilePath.value = rot.filePath || '';
+        formRotatingRules.value = rot.rules || '';
+        formRotatingMode.value = rot.mode || 'random';
+        rotatingFileStats.textContent = '';
+
+        // 屏蔽弹窗回显
+        document.getElementById('formBlockDialogs').checked = Boolean(env?.blockDialogs);
+
         // 扩展插件
         document.getElementById('formExtensions').value = env ? (env.extensions || '') : '';
 
@@ -2469,6 +2540,29 @@
 
     document.getElementById('btnProxyAutoParse').addEventListener('click', doAutoParseProxy);
     document.getElementById('formProxyQuickPaste').addEventListener('change', doAutoParseProxy);
+
+    // 动态代理池事件联动与文件选择
+    document.getElementById('formRotatingEnabled').addEventListener('change', () => {
+      const isRot = document.getElementById('formRotatingEnabled').checked;
+      document.getElementById('rotatingProxyPanel').style.display = isRot ? 'flex' : 'none';
+    });
+
+    document.getElementById('btnSelectRotatingFile').addEventListener('click', async () => {
+      try {
+        const res = await ipcRenderer.invoke('select-proxy-file');
+        if (res && res.success && res.filePath) {
+          document.getElementById('formRotatingFilePath').value = res.filePath;
+          const statsEl = document.getElementById('rotatingFileStats');
+          if (statsEl) {
+            statsEl.textContent = `已识别 ${res.count || 0} 条单行代理`;
+          }
+          showToast(`已选择代理文档 (${res.count || 0} 条代理)`);
+        }
+      } catch (err) {
+        console.error('选择代理文档失败:', err);
+        alert('选择代理文档异常: ' + err.message);
+      }
+    });
 
     // 测试代理连接
     document.getElementById('btnProxyTest').addEventListener('click', async () => {
@@ -2584,6 +2678,25 @@
         }
       }
 
+      // 动态代理池校验
+      const isRotatingEnabled = document.getElementById('formRotatingEnabled').checked;
+      const rotatingFilePath = document.getElementById('formRotatingFilePath').value.trim();
+      const rotatingRules = document.getElementById('formRotatingRules').value.trim();
+      const rotatingMode = document.getElementById('formRotatingMode').value || 'random';
+
+      if (isRotatingEnabled) {
+        if (!rotatingFilePath) {
+          alert('启用动态轮换代理池时，必须选择或填写本地代理文档 (.txt) 路径！');
+          return;
+        }
+        if (!rotatingRules) {
+          alert('启用动态轮换代理池时，必须指定至少一个目标域名或规则（以分号 ; 分隔，例如：challenges.cloudflare.com;*.turnstile.com）！');
+          return;
+        }
+      }
+
+      const isBlockDialogs = document.getElementById('formBlockDialogs').checked;
+
       const tzVal = document.getElementById('formTimezone').value || 'America/New_York';
       const customUa = document.getElementById('formCustomUa').value.trim();
       const data = {
@@ -2608,6 +2721,13 @@
           scope: document.getElementById('formProxyScope').value,
           rules: document.getElementById('formProxyRules').value.trim()
         },
+        rotatingProxy: {
+          enabled: isRotatingEnabled,
+          filePath: rotatingFilePath,
+          rules: rotatingRules,
+          mode: rotatingMode
+        },
+        blockDialogs: isBlockDialogs,
         extensions: document.getElementById('formExtensions').value.trim()
       };
 
@@ -3419,7 +3539,7 @@
     const QQ_GROUP_NUMBER = '328399769';
     const GITHUB_REPO_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser';
     const GITHUB_RELEASES_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser/releases';
-    const APP_CURRENT_VERSION = '2.3';
+    const APP_CURRENT_VERSION = '2.5';
 
     const btnCopyQQ = document.getElementById('btnCopyQQ');
     const badgeCopyQQ = document.getElementById('badgeCopyQQ');

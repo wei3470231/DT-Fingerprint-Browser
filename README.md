@@ -10,8 +10,8 @@
 > 欢迎进群交流指纹对抗技术、提交 BUG 与功能建议、获取最新编译发布的便携包与安装包！
 >
 > 📥 **Release 官方最新版本下载（纯英文标准命名，含版本号）**：
-> - 📦 **独立安装向导包**：[`DT-Fingerprint-Browser-v2.3-Setup.exe`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（自动配置用户 PATH 环境变量与开机自启）
-> - 🗜️ **绿色便携压缩包**：[`DT-Fingerprint-Browser-v2.3-Portable.zip`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（解压即用，无任何绝对路径依赖）
+> - 📦 **独立安装向导包**：[`DT-Fingerprint-Browser-v2.5-Setup.exe`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（自动配置用户 PATH 环境变量与开机自启）
+> - 🗜️ **绿色便携压缩包**：[`DT-Fingerprint-Browser-v2.5-Portable.zip`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（解压即用，无任何绝对路径依赖）
 > - 🌐 **GitHub Releases 发布页面**：[https://github.com/wei3470231/DT-Fingerprint-Browser/releases](https://github.com/wei3470231/DT-Fingerprint-Browser/releases)
 
 ---
@@ -114,7 +114,7 @@ node scripts/test-portable.js
 * 验证精简系统兜底字体库 `Fonts/`；
 * 验证 CLI Chrome Drop-in 模式（`--version`、`--product-version`）；
 * 验证 CLI JSON 管理指令（`list`、`font status`、`theme status`、`settings get`）；
-* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.3-Portable.zip`。
+* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.5-Portable.zip`。
 
 ### 2.2 一键生成便携包与商业安装程序
 在项目根目录下执行：
@@ -124,8 +124,8 @@ node scripts/build-installer.js
 构建脚本将全自动完成：
 1. **源码脱敏加密**：使用 Terser 进行变量混淆并打包进虚拟归档 `app.asar`；
 2. **生成便携目录**：在 `dist/payload/` 编译生成原生无黑框启动器与 CLI 工具；
-3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.3-Portable.zip`（约 200 MB，无中文字符，解压即用）；
-4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v2.3-Setup.exe`（自动配置用户 PATH 与开机自启）。
+3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.5-Portable.zip`（约 200 MB，无中文字符，解压即用）；
+4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v2.5-Setup.exe`（自动配置用户 PATH 与开机自启）。
 
 ### 2.3 根目录快捷调用机制
 在根目录下提供了 `dt-cli.cmd` 与 `dt.cmd` 包装脚本：
@@ -222,7 +222,7 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 * **居中纯免费标语**：醒目标注 `🛡️ 商业级对抗内核 · 永久纯免费 · 100%完全开源 · 拒绝收费套路`，宣告拒绝商业割韭菜。
 
 ### 3.18 GitHub Releases 实时版本检测与在线更新提醒
-* **右下角版本感知**：管理器右下角自动展示当前客户端版本号（`v2.3`）；
+* **右下角版本感知**：管理器右下角自动展示当前客户端版本号（`v2.5`）；
 * **静默异步版本探测**：启动时自动异步请求 GitHub Releases API（`wei3470231/DT-Fingerprint-Browser`）；
 * **一键直达新版本**：若检测到线上存在高于本地的最新版本，右下角将以高亮橙色徽章提示 `发现新版本: vX.X.X (点击更新)`，点击后立即通过系统默认浏览器打开 GitHub Release 发布页面，轻松下载最新便携包。
 
@@ -267,6 +267,37 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 * **WebRTC 真实 IP 防泄漏**：Chromium 会话强制启用 `disable_non_proxied_udp` 策略，杜绝通过 WebRTC STUN 协议嗅探泄露本地物理公网 IP；
 * **SOCKS5 外网真实连通性探测**：通过向外网目标发送 SOCKS5 CONNECT 握手确认连通，彻底消除假阳性问题；
 * **CDP 批量关闭标签页稳定性提升**：完善 WebContents 销毁监听防护，彻底杜绝自动化并发快速关闭标签页时的底层崩溃。
+
+### 3.26 目标多域名动态轮换代理池（每连接换新 IP）
+* **大容量本地文档加载**：支持在界面直接选择或 CLI 传入本地 `.txt` 代理文件，一行一个，可轻松容纳成百上千条海量代理节点；
+* **主流 4 种单行代理格式全兼容**：
+  1. `IP:端口`（如 `1.2.3.4:8080`）
+  2. `IP:端口:账号:密码`（如 `1.2.3.4:1080:user:pass`）
+  3. `http://账号:密码@IP:端口`（如 `http://admin:123456@1.2.3.4:8080`）
+  4. `socks5://账号:密码@IP:端口`（如 `socks5://u:p@1.2.3.4:1080`）
+* **微秒级无感调度分发中枢**：内置轻量透明代理分发器（`RotatingDispatcherServer`），在 TCP/CONNECT 握手层工作，为每次外发的新连接**即时抽取独立代理**；
+* **确保同一个页面多次刷新或点击绝对换新 IP**：自动阻断长连接（Keep-Alive）复用，确保对目标域名的任何一次点击、刷新或异步请求，都强制建立新 TCP 连接并分配全新的代理 IP；
+* **多域名精准分流与回退保护**：支持配置多个目标域名/URL 规则（以分号 `;` 分隔，支持 `*` 通配符）。命中规则的访问走动态轮换代理池，其余流量平滑回退至基础代理或直连；
+* **多重故障快速重试**：当抽取的上游代理网络抖动超时时，调度器自动在 300ms 内快速切换备用候选节点重试，杜绝页面卡死。
+
+### 3.27 子 iframe 报错隔离防护机制（彻底根除 Cloudflare Turnstile 导致主页被错误页覆盖的假死 Bug）
+* **问题根因定位**：当网页内嵌三方域名验证码（如 Cloudflare Turnstile `challenges.cloudflare.com/...`）或跨域 iframe 时，由于网络抖动或代理限制可能触发 `-120 ERR_SOCKS_CONNECTION_FAILED` 等网络错误。旧版代码在 `did-fail-load` 事件中未甄别触发源是否为顶层主窗口，导致子框架报错直接把整个主网页整页替换成了 `data:text/html,...` 离线错误提示卡片，主页被吞掉且重试无果；
+* **多层级静默隔离加固**：重构 `did-fail-load` 监听器，严密校验 `isMainFrame` 状态。非顶层主框架（`isMainFrame === false`）报错时，**立即静默就地隔离并拦截错误页渲染**，确保主网页及其交互功能完好无损，自动化流程稳健运行。
+
+### 3.28 可配置网页弹窗拦截（屏蔽 window.alert / window.confirm）
+* **自动化脚本卡死痛点根治**：在无人值守或自动化脚本任务中，某些网页可能频繁弹出阻塞式的原生对话框（`alert`、`confirm`），导致整个渲染进程暂停响应；
+* **界面与 CLI 独立配置开关**：在环境编辑弹窗与 CLI 中新增“🛡️ 屏蔽浏览器网页弹窗”选项（默认不勾选，保持原生行为）；
+* **无死角注入覆盖**：开启后，浏览器在 `preload` 初始化阶段及 `dom-ready` 节点自动注入：
+  ```javascript
+  window.alert = () => true;
+  window.confirm = () => true;
+  ```
+  静默阻止所有阻塞式弹窗，确保自动化脚本持续流畅执行。
+
+### 3.29 DT-CLI 商业控制台深度支持动态代理池与弹窗屏蔽
+* **`set-rotating` 专享指令**：支持通过命令行快速为指定环境绑定本地 `.txt` 代理文档，设置目标多域名规则与抽取模式；
+* **全生命周期参数打通**：在 `create`、`update`、`start` 等核心指令中无缝支持 `--rotating-file`、`--rotating-rules`、`--rotating-mode` 以及 `--block-dialogs`；
+* **自动化直通模式兼容**：支持在直调启动时通过参数临时覆盖代理文档路径与生效规则，无需手动修改预存配置。
 
 ---
 
@@ -327,7 +358,9 @@ dt-cli --remote-debugging-port=9222 --user-data-dir="data\profiles\direct-test" 
 | | `dt-cli clear-cache` | 深度清理 Cookies、缓存与垃圾 (保留指纹与配置) | `--name`, `--id`, `--all`, `--json` |
 | **指纹与代理** | `dt-cli random-fp` | 随机重置硬件指纹 (运行中1秒热生效) | `--name`, `--id`, `--json` |
 | | `dt-cli batch-random-fp` | 批量重置多个环境的硬件指纹 | `--group`, `--all`, `--names`, `--json` |
-| | `dt-cli set-proxy` | 快速设置或清除代理 (切换直连) | `--name`, `--proxy "ip:port"`, `--clear`, `--json` |
+| | `dt-cli set-proxy` | 快速设置或清除基础固定代理 (切换直连) | `--name`, `--proxy "ip:port"`, `--clear`, `--json` |
+| | `dt-cli set-rotating` | 配置目标多域名动态轮换代理池 (每连接必换IP) | `--name`, `--file "path.txt"`, `--rules "域名1;域名2"`, `--mode random\|round-robin`, `--clear`, `--json` |
+| | `dt-cli set-dialogs` | 开启或关闭屏蔽网页弹窗 (window.alert/confirm) | `--name`, `--block`, `--allow`, `--json` |
 | | `dt-cli test-proxy` | 独立测试代理连通性与网络延迟 (毫秒) | `--proxy "ip:port"`, `--name`, `--json` |
 | | `dt-cli set-ext` | 快速设置加载的 Chrome 扩展插件 | `--name`, `--ext "插件路径"`, `--json` |
 | **分组与批量** | `dt-cli group list` | 查看所有业务分组与环境统计 | `--json` |
@@ -541,7 +574,46 @@ dt-cli test-proxy --proxy "user:pass@us.proxy.com:6666" --json
 dt-cli test-proxy --name "环境 1 · 纽约" --json
 ```
 
-#### 5. 扩展插件配置 (`set-ext`)
+#### 5. 目标多域名动态轮换代理池 (`set-rotating` / `set-rotating-proxy`)
+> ⚡ **每连接换新 IP 核心特性**：专门用于高频需要更换出口 IP 的特定业务目标（如 Turnstile 验证码、目标 API、三方风控域）。
+> * **本地代理文档**：支持传入本地 `.txt` 文本路径（一行一个，支持数千条海量代理）；
+> * **4 种主流格式全面解析**：`ip:port`、`ip:port:user:pass`、`http://u:p@ip:port`、`socks5://u:p@ip:port`；
+> * **多域名规则路由**：通过 `--rules` 指定生效的目标域名（多个域名以分号 `;` 分隔，支持通配符 `*`）；
+> * **刷新或点击必换 IP**：自动阻断 TCP 长连接复用，确保对目标域名的任何一次刷新、点击或新建连接均强制切换全新随机 IP；未命中的其他流量平滑走环境默认代理或直连；
+> * **抽取模式**：可选 `--mode random`（任意随机，默认推荐）或 `--mode round-robin`（按序轮询）。
+
+```powershell
+# 1. 为指定环境绑定本地代理文档并设定多域名规则 (相对路径或绝对路径均可)
+dt-cli set-rotating --name "环境 1 · 纽约" --file "D:\proxies.txt" --rules "challenges.cloudflare.com;*.turnstile.com;api.target.com"
+
+# 2. 指定轮询模式 (--mode round-robin)
+dt-cli set-rotating --name "环境 1 · 纽约" --file "D:\proxies.txt" --rules "challenges.cloudflare.com" --mode round-robin
+
+# 3. 自动化脚本专用：--json 结构化输出 (返回有效解析的代理总数)
+dt-cli set-rotating --name "环境 1 · 纽约" --file "D:\proxies.txt" --rules "challenges.cloudflare.com" --json
+
+# 4. 关闭该环境的动态轮换代理池 (--clear)
+dt-cli set-rotating --name "环境 1 · 纽约" --clear --json
+```
+
+#### 6. 屏蔽网页原生弹窗 (`set-dialogs` / `update --block-dialogs`)
+> 🛡️ **自动化防卡死保护**：静默阻止 `window.alert()` 与 `window.confirm()`（将其默认返回值设为 `true`），杜绝因不可预期的阻塞弹窗挂起整个自动化流程。默认不勾选。
+
+```powershell
+# 开启弹窗屏蔽
+dt-cli set-dialogs --name "环境 1 · 纽约" --block --json
+
+# 恢复默认允许弹窗
+dt-cli set-dialogs --name "环境 1 · 纽约" --allow --json
+
+# 在新建环境时直接启用弹窗屏蔽与动态代理池
+dt-cli create --name "爬虫自动化环境" --rotating-file "D:\proxies.txt" --rotating-rules "challenges.cloudflare.com" --block-dialogs --json
+
+# 在启动环境时动态覆盖 (临时生效，不修改配置文件)
+dt-cli start --name "环境 1 · 纽约" --rotating-file "D:\proxies.txt" --rotating-rules "challenges.cloudflare.com" --block-dialogs
+```
+
+#### 7. 扩展插件配置 (`set-ext`)
 ```powershell
 dt-cli set-ext --name "环境 1 · 纽约" --ext "chrome"
 ```
@@ -973,6 +1045,30 @@ main();
 * **全局代理模式**：所有网页流量均通过代理服务器发送。
 * **指定 URL 规则模式**：支持填写通配符规则，多个规则以分号 `;` 分隔，例如：`*httpbin.org*;*google.com*`。命中规则的域名走配置的代理，其余网址（如国内直连网站）自动走本地网络直连，极大节省代理流量。
 
+### 8.4 ⚡ 目标多域名动态轮换代理池（本地 .txt 文档，每连接换新 IP）
+* **功能定义**：为指定环境接入一个包含数千条代理的本地 `.txt` 文本，针对设定的多个目标域名（如 `challenges.cloudflare.com;*.turnstile.com`），在每次新建连接时随机/轮询抽取独立上游代理并完成认证隧道。
+* **确保同一个页面多次刷新或点击绝对换新 IP**：
+  * 在底层代理调度器（`RotatingDispatcherServer`）中，为每次到达的客户端 HTTP CONNECT 隧道或原始 Socket 独立分配新代理；
+  * 主动断开并禁用针对目标域名的长连接连接池（Keep-Alive Pooling）复用，确保在同一页面上的每次 AJAX 请求、多次手动刷新、多次点击验证码，均强制发起全新连接并分配不同 IP。
+* **支持的本地代理文档格式**（一行一个，自动过滤注释与空行）：
+  ```text
+  112.45.12.88:8080
+  45.33.18.20:1080:username:password
+  http://admin:pass123@198.51.100.12:8080
+  socks5://u_test:p_test@203.0.113.55:1080
+  ```
+* **多域名规则配置**：使用分号 `;` 分隔多个目标域名，支持 `*` 通配符。例如：`challenges.cloudflare.com;*.turnstile.com;api.target.com`。
+* **回退保护**：非目标域名的常规流量自动走环境基础固定代理或本地直连，实现精确分流。
+
+### 8.5 🛡️ 网页交互行为控制：屏蔽浏览器网页弹窗 (window.alert / window.confirm)
+* **默认行为**：默认不勾选，保持 Chromium 原始原生弹窗行为。
+* **开启后行为**：系统在页面最早期初始化（Preload 与 dom-ready）注入覆盖：
+  ```javascript
+  window.alert = () => true;
+  window.confirm = () => true;
+  ```
+  静默阻止所有阻断式模态对话框，并自动给确认操作返回 `true`，防止自动化脚本因未预期的网页弹窗挂起卡死。
+
 ---
 
 ## 9. Chrome 扩展插件配置与设置指南
@@ -1074,10 +1170,10 @@ node scripts/build-installer.js
 
 构建完成后将在 `dist/` 目录下生成两类产物（文件名均为标准纯英文并带版本号，兼容 GitHub Releases 上传与海外环境）：
 1. **独立单文件安装程序**：
-   * 路径：`dist\DT-Fingerprint-Browser-v2.3-Setup.exe`（约 200 MB）
+   * 路径：`dist\DT-Fingerprint-Browser-v2.5-Setup.exe`（约 200 MB）
    * 适用场景：GitHub Release 发布、对外分享的标准安装包，带安装向导界面、开机自启复选框、PATH 自动注册与控制面板卸载项。
 2. **便携即用免安装包与目录**：
-   * 压缩包路径：`dist\DT-Fingerprint-Browser-v2.3-Portable.zip`（约 200 MB，解压即用）
+   * 压缩包路径：`dist\DT-Fingerprint-Browser-v2.5-Portable.zip`（约 200 MB，解压即用）
    * 运行目录：`dist\payload\`
    * 适用场景：GitHub Release 发布、解压即用的免安装绿色便携版，直接双击 `DT-Fingerprint-Browser.exe` 或 `DT - 指纹浏览器.exe` 即可运行。
 

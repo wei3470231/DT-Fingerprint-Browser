@@ -570,6 +570,13 @@ function createRecord(data = {}) {
     timezone,
     customUa,
     proxy: parseAndBuildProxyConfig(data.proxy),
+    rotatingProxy: {
+      enabled: Boolean(data.rotatingProxy?.enabled),
+      filePath: (data.rotatingProxy?.filePath || '').trim(),
+      rules: (data.rotatingProxy?.rules || '').trim(),
+      mode: data.rotatingProxy?.mode || 'random'
+    },
+    blockDialogs: Boolean(data.blockDialogs),
     extensions: data.extensions || '',
     userDataDir,
     fp,

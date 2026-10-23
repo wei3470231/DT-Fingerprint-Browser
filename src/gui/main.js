@@ -714,6 +714,28 @@ app.whenReady().then(() => {
     return { success: false };
   });
 
+  ipcMain.handle('select-proxy-file', async () => {
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: '选择本地代理文档 (.txt 一行一个)',
+      filters: [
+        { name: '文本文件 (*.txt)', extensions: ['txt'] },
+        { name: '所有文件 (*.*)', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    });
+    if (!res.canceled && res.filePaths && res.filePaths.length > 0) {
+      const filePath = res.filePaths[0];
+      try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const lines = content.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#') && !l.trim().startsWith('//'));
+        return { success: true, filePath, count: lines.length };
+      } catch (err) {
+        return { success: true, filePath, count: 0, error: err.message };
+      }
+    }
+    return { success: false };
+  });
+
   ipcMain.handle('save-cookie-file', async (_e, { content, defaultName = 'cookies.json' }) => {
     const res = await dialog.showSaveDialog(mainWindow, {
       title: '导出保存 Cookie 文件',

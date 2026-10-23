@@ -1,5 +1,6 @@
 # Generated/local artifacts; keep source, lockfiles and selected reports.
 .fp-local.json
+.vscode/
 runtime/
 dist/
 /downloads/

@@ -752,7 +752,7 @@ namespace BitFPManager
                     if (key != null)
                     {
                         key.SetValue("DisplayName", "DT - 指纹浏览器");
-                        key.SetValue("DisplayVersion", "2.3.0");
+                        key.SetValue("DisplayVersion", "2.5.0");
                         key.SetValue("Publisher", "DT Studio");
                         key.SetValue("DisplayIcon", Path.Combine(installDir, "app.ico"));
                         key.SetValue("InstallLocation", installDir);
