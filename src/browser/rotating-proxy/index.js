@@ -45,7 +45,11 @@ async function startRotatingProxy(rotatingConfig) {
     return null;
   }
 
-  const dispatcher = new RotatingDispatcherServer(pool, { portCount: 3 });
+  const dispatcher = new RotatingDispatcherServer(pool, {
+    portCount: 3,
+    connectTimeout: 3000,
+    maxRetries: 3
+  });
   const port = await dispatcher.start();
 
   activePool = pool;

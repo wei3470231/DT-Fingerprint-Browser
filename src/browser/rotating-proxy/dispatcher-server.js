@@ -16,8 +16,9 @@ class RotatingDispatcherServer {
     this.ports = [];
     this.servers = [];
     this.portCount = options.portCount || 3; // 默认开设 3 个独立分发端口，打破 Chromium 单端口连接池复用
-    this.connectTimeout = options.connectTimeout || 4000; // 单个上游连接超时 (毫秒)
-    this.maxRetries = options.maxRetries || 2; // 连接失败自动换新代理重试次数
+    this.connectTimeout = options.connectTimeout || options.handshakeTimeout || 3000; // 单个上游握手超时 3 秒 (3000ms)，超过 3 秒立即切换
+    this.handshakeTimeout = this.connectTimeout;
+    this.maxRetries = options.maxRetries !== undefined ? options.maxRetries : 3; // 默认重试 3 次，每次随机抽取一条
     this.activeConnections = new Set();
   }
 
@@ -154,19 +155,37 @@ class RotatingDispatcherServer {
 
   /**
    * 调度转发核心：为每一次新连接从池中抽取随机代理，并建立上游管道
+   * 支持握手超过 3 秒立即超时并切换池内其他随机 IP，默认重试 3 次
    */
   async dispatchTunnel(clientSocket, targetHost, targetPort, initialPayload, isRawHttp = false) {
-    const candidates = this.pool.getCandidates(this.maxRetries + 1);
-    if (candidates.length === 0) {
+    if (this.pool.getCount() === 0) {
       console.warn('[RotatingDispatcher] 代理池中无可用代理！');
       this.sendHttpError(clientSocket, 502, 'Bad Gateway: Empty Proxy Pool');
       return;
     }
 
+    // 默认重试 3 次 (即首次连接 + 3 次重试 = 最多尝试 4 条候选代理)
+    const maxRetries = this.maxRetries;
+    const totalAttempts = 1 + maxRetries;
+    const candidates = this.pool.getCandidates(totalAttempts);
+
+    // 如果代理池条目较少（例如仅有 2 条），使用 getProxy 补齐候选项，确保完整重试 3 次
+    while (candidates.length < totalAttempts && this.pool.getCount() > 0) {
+      const extra = this.pool.getProxy();
+      if (extra) candidates.push(extra);
+      else break;
+    }
+
     let connected = false;
 
     for (let attempt = 0; attempt < candidates.length; attempt++) {
+      if (clientSocket.destroyed || !clientSocket.writable) {
+        return;
+      }
+
       const upstreamProxy = candidates[attempt];
+      const attemptLabel = attempt === 0 ? '首选尝试' : `第 ${attempt}/${maxRetries} 次重试`;
+
       try {
         const upstreamSocket = await this.connectViaProxy(upstreamProxy, targetHost, targetPort);
         connected = true;
@@ -213,63 +232,91 @@ class RotatingDispatcherServer {
 
         break;
       } catch (err) {
-        console.warn(`[RotatingDispatcher] 代理节点 [${upstreamProxy.type}://${upstreamProxy.host}:${upstreamProxy.port}] 握手失败: ${err.message}，正在尝试换用下一个代理...`);
+        console.warn(`[RotatingDispatcher] 代理节点 [${upstreamProxy.type}://${upstreamProxy.host}:${upstreamProxy.port}] (${attemptLabel}) 握手失败/超时: ${err.message}，立即切换池内其他随机 IP 重试...`);
       }
     }
 
     if (!connected) {
-      this.sendHttpError(clientSocket, 504, 'Gateway Timeout: All Candidate Proxies Failed');
+      this.sendHttpError(clientSocket, 504, 'Gateway Timeout: All Candidate Proxies Failed (握手超时或全部候选项连接断开)');
     }
   }
 
   /**
-   * 向上游代理发起连接并完成协议握手
+   * 向上游代理发起连接并完成协议握手 (握手超过 3 秒立即超时并切换池内其他 IP，绝不无限等待)
    */
   connectViaProxy(proxy, targetHost, targetPort) {
     return new Promise((resolve, reject) => {
       let settled = false;
+      let socket = null;
+
+      // 握手超过 3 秒立即超时并切换，绝不无限等待
       const timeout = setTimeout(() => {
         if (!settled) {
           settled = true;
-          try { socket.destroy(); } catch (_) {}
-          reject(new Error(`连接上游代理超时 (${this.connectTimeout}ms)`));
+          if (socket) {
+            try { socket.destroy(); } catch (_) {}
+          }
+          reject(new Error(`连接与握手超时 (超过 ${this.handshakeTimeout / 1000} 秒)`));
         }
-      }, this.connectTimeout);
+      }, this.handshakeTimeout);
 
-      const socket = net.createConnection({ host: proxy.host, port: Number(proxy.port) }, () => {
-        if (proxy.type === 'socks5') {
-          this.performSocks5Handshake(socket, proxy, targetHost, targetPort, (err) => {
-            clearTimeout(timeout);
-            if (settled) return;
-            settled = true;
-            if (err) {
-              try { socket.destroy(); } catch (_) {}
-              return reject(err);
-            }
-            resolve(socket);
-          });
-        } else {
-          // 默认 HTTP CONNECT 隧道代理
-          this.performHttpConnectHandshake(socket, proxy, targetHost, targetPort, (err) => {
-            clearTimeout(timeout);
-            if (settled) return;
-            settled = true;
-            if (err) {
-              try { socket.destroy(); } catch (_) {}
-              return reject(err);
-            }
-            resolve(socket);
-          });
-        }
-      });
+      try {
+        socket = net.createConnection({ host: proxy.host, port: Number(proxy.port) }, () => {
+          if (settled) {
+            try { socket.destroy(); } catch (_) {}
+            return;
+          }
 
-      socket.once('error', err => {
+          if (proxy.type === 'socks5') {
+            this.performSocks5Handshake(socket, proxy, targetHost, targetPort, (err) => {
+              clearTimeout(timeout);
+              if (settled) return;
+              settled = true;
+              if (err) {
+                try { socket.destroy(); } catch (_) {}
+                return reject(err);
+              }
+              resolve(socket);
+            });
+          } else {
+            // 默认 HTTP CONNECT 隧道代理
+            this.performHttpConnectHandshake(socket, proxy, targetHost, targetPort, (err) => {
+              clearTimeout(timeout);
+              if (settled) return;
+              settled = true;
+              if (err) {
+                try { socket.destroy(); } catch (_) {}
+                return reject(err);
+              }
+              resolve(socket);
+            });
+          }
+        });
+
+        socket.once('error', err => {
+          clearTimeout(timeout);
+          if (!settled) {
+            settled = true;
+            try { socket.destroy(); } catch (_) {}
+            reject(err);
+          }
+        });
+
+        socket.once('close', () => {
+          clearTimeout(timeout);
+          if (!settled) {
+            settled = true;
+            try { socket.destroy(); } catch (_) {}
+            reject(new Error('上游代理连接中断 (Connection closed unexpectedly)'));
+          }
+        });
+      } catch (err) {
         clearTimeout(timeout);
         if (!settled) {
           settled = true;
           reject(err);
         }
-      });
+      }
     });
   }
 

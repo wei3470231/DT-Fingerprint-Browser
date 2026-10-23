@@ -177,6 +177,59 @@ async function runTest() {
   assert(tunnelSuccess, '客户端 CONNECT 隧道请求成功收到 200 Connection Established');
   assert(dataEchoed, '双向数据管道无损互通 (ECHO:HELLO_TURNSTILE)');
 
+  // 6. 测试代理连接断开或握手超时 (3秒) 自动随机重试 3 次切换其他 IP
+  console.log('\n[6/6] 测试轮换代理连接断开或握手超时自动随机重试 (默认 3 次) 切换其他可用 IP...');
+  // 6.1 创建一个故意连接即断开的异常代理
+  const badServer = net.createServer(s => {
+    s.destroy(); // 故意立即销毁连接模拟不稳定坏节点
+  });
+  await new Promise(r => badServer.listen(0, '127.0.0.1', r));
+  const badPort = badServer.address().port;
+
+  // 6.2 创建一个正常的备选代理
+  let goodProxyReached = false;
+  const goodServer = net.createServer(s => {
+    goodProxyReached = true;
+    s.on('data', chunk => {
+      if (chunk.toString().startsWith('CONNECT')) {
+        s.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+      }
+    });
+  });
+  await new Promise(r => goodServer.listen(0, '127.0.0.1', r));
+  const goodPort = goodServer.address().port;
+
+  const retryPool = new RotatingProxyPool();
+  retryPool.loadFromString(`http://127.0.0.1:${badPort}\nhttp://127.0.0.1:${goodPort}`);
+
+  const retryDispatcher = new RotatingDispatcherServer(retryPool, {
+    portCount: 1,
+    connectTimeout: 3000,
+    maxRetries: 3
+  });
+  const retryDispPort = await retryDispatcher.start();
+
+  let retrySuccess = false;
+  const retryClient = net.createConnection({ host: '127.0.0.1', port: retryDispPort }, () => {
+    retryClient.write('CONNECT 2026.ip138.com:443 HTTP/1.1\r\nHost: 2026.ip138.com:443\r\n\r\n');
+  });
+
+  retryClient.on('data', d => {
+    if (d.toString().includes('200 Connection Established')) {
+      retrySuccess = true;
+      retryClient.end();
+    }
+  });
+
+  await new Promise(r => setTimeout(r, 600));
+  retryClient.destroy();
+  retryDispatcher.close();
+  badServer.close();
+  goodServer.close();
+
+  assert(goodProxyReached, '坏代理断开后，调度器立即触发随机重试并成功切换至正常代理节点');
+  assert(retrySuccess, '故障自动重试机制成功保障客户端收到 200 Connection Established');
+
   console.log('\n===============================================================');
   console.log(`动态轮换代理池自动化测试结果: 全部通过 (${passed} passed, ${failed} failed)`);
   console.log('===============================================================\n');
