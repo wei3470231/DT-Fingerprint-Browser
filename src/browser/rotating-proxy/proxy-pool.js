@@ -18,6 +18,28 @@ class RotatingProxyPool {
     this.proxies = [];
     this.currentIndex = 0;
     this.lastLoadedTime = 0;
+    this.lastMtime = 0;
+    this.lastCheckTime = 0;
+  }
+
+  /**
+   * 自动检测本地代理文件是否有修改，若有修改则在运行中无感热重载 (无需重启浏览器)
+   */
+  checkHotReload() {
+    if (!this.filePath) return;
+    const now = Date.now();
+    if (now - this.lastCheckTime < 2000) return; // 节流保护：每 2 秒最多检查一次 mtime
+    this.lastCheckTime = now;
+    try {
+      const resolvedPath = path.resolve(this.filePath);
+      if (fs.existsSync(resolvedPath)) {
+        const stat = fs.statSync(resolvedPath);
+        if (stat.mtimeMs > this.lastMtime) {
+          console.log(`[RotatingProxyPool] ⚡ 检测到本地代理文档已更新，正在无感热重载: ${resolvedPath}`);
+          this.loadFromFile(resolvedPath);
+        }
+      }
+    } catch (_) {}
   }
 
   /**
@@ -36,6 +58,9 @@ class RotatingProxyPool {
     }
 
     try {
+      const stat = fs.statSync(resolvedPath);
+      this.lastMtime = stat.mtimeMs;
+      this.lastCheckTime = Date.now();
       const content = fs.readFileSync(resolvedPath, 'utf8');
       return this.loadFromString(content, resolvedPath);
     } catch (err) {
@@ -99,6 +124,8 @@ class RotatingProxyPool {
    * 优先随机分配，实现“只要有新连接创建，每一次都切换任意一个代理”
    */
   getProxy() {
+    this.checkHotReload();
+
     if (this.proxies.length === 0) {
       return null;
     }
@@ -122,6 +149,8 @@ class RotatingProxyPool {
    * 获取指定数量的不同代理候选项 (供故障自动重试挑选)
    */
   getCandidates(count = 3) {
+    this.checkHotReload();
+
     if (this.proxies.length === 0) return [];
     if (this.proxies.length <= count) return [...this.proxies];
 
