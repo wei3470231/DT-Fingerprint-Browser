@@ -13,32 +13,52 @@ class RotatingDispatcherServer {
   constructor(proxyPool, options = {}) {
     this.pool = proxyPool;
     this.port = 0;
-    this.server = null;
+    this.ports = [];
+    this.servers = [];
+    this.portCount = options.portCount || 3; // 默认开设 3 个独立分发端口，打破 Chromium 单端口连接池复用
     this.connectTimeout = options.connectTimeout || 4000; // 单个上游连接超时 (毫秒)
     this.maxRetries = options.maxRetries || 2; // 连接失败自动换新代理重试次数
     this.activeConnections = new Set();
   }
 
   /**
-   * 启动本地监听
+   * 启动本地监听 (同时开设多个独立端口)
    */
   start() {
     return new Promise((resolve, reject) => {
-      this.server = net.createServer({ pauseOnConnect: false }, clientSocket => {
-        this.handleClientSocket(clientSocket);
-      });
+      this.servers = [];
+      this.ports = [];
+      let startedCount = 0;
+      let hasError = false;
 
-      this.server.on('error', err => {
-        console.error('[RotatingDispatcher] 本地服务异常:', err.message);
-      });
+      for (let i = 0; i < this.portCount; i++) {
+        const server = net.createServer({ pauseOnConnect: false }, clientSocket => {
+          this.handleClientSocket(clientSocket);
+        });
 
-      // 绑定到 127.0.0.1 上的随机可用端口
-      this.server.listen(0, '127.0.0.1', () => {
-        const addr = this.server.address();
-        this.port = addr.port;
-        console.log(`[RotatingDispatcher] 动态轮换代理分发器已就绪 @ 127.0.0.1:${this.port} (已挂载 ${this.pool.getCount()} 条代理)`);
-        resolve(this.port);
-      });
+        server.on('error', err => {
+          console.error('[RotatingDispatcher] 本地服务异常:', err.message);
+          if (!hasError) {
+            hasError = true;
+            reject(err);
+          }
+        });
+
+        // 绑定到 127.0.0.1 上的随机可用端口
+        server.listen(0, '127.0.0.1', () => {
+          const addr = server.address();
+          this.ports.push(addr.port);
+          this.servers.push(server);
+          startedCount++;
+
+          if (startedCount === this.portCount) {
+            this.port = this.ports[0];
+            this.server = this.servers[0];
+            console.log(`[RotatingDispatcher] 动态轮换代理分发器已就绪 @ 127.0.0.1:[${this.ports.join(', ')}] (开设 ${this.ports.length} 个独立分发端口，已挂载 ${this.pool.getCount()} 条代理)`);
+            resolve(this.port);
+          }
+        });
+      }
     });
   }
 
@@ -46,12 +66,15 @@ class RotatingDispatcherServer {
    * 关闭分发器并清理所有正在进行的连接
    */
   close() {
-    if (this.server) {
+    for (const s of this.servers) {
       try {
-        this.server.close();
+        s.close();
       } catch (_) {}
-      this.server = null;
     }
+    this.servers = [];
+    this.ports = [];
+    this.server = null;
+
     for (const socket of this.activeConnections) {
       try {
         socket.destroy();
@@ -149,8 +172,8 @@ class RotatingDispatcherServer {
         connected = true;
 
         if (!isRawHttp) {
-          // HTTPS CONNECT 成功，回复 200 建立隧道
-          clientSocket.write('HTTP/1.1 200 Connection Established\r\nProxy-Agent: DT-Rotating-Dispatcher\r\n\r\n');
+          // HTTPS CONNECT 成功，回复 200 建立隧道并提示关闭长连接
+          clientSocket.write('HTTP/1.1 200 Connection Established\r\nProxy-Agent: DT-Rotating-Dispatcher\r\nProxy-Connection: close\r\nConnection: close\r\n\r\n');
         }
 
         if (initialPayload && initialPayload.length > 0) {
@@ -161,12 +184,32 @@ class RotatingDispatcherServer {
         clientSocket.pipe(upstreamSocket);
         upstreamSocket.pipe(clientSocket);
 
-        upstreamSocket.once('error', () => {
+        // 关键增强：为解决 Chromium HTTP/2 和 Keep-Alive 连接池长久保持导致多标签页/多次刷新复用旧 IP 的问题：
+        // 增加数据活动感应空闲超时计时器 (2000ms)。在网页资源加载完毕空闲 2 秒后，自动优雅断开隧道，
+        // 确保下一次页面刷新、点击或打开新标签页时，强制 Chromium 重新向 3 个端口之一发起新建连接并换用新 IP！
+        let idleTimer = null;
+        const resetIdleTimer = () => {
+          if (idleTimer) clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => {
+            try { clientSocket.end(); } catch (_) {}
+            try { upstreamSocket.end(); } catch (_) {}
+          }, 2000);
+        };
+
+        clientSocket.on('data', resetIdleTimer);
+        upstreamSocket.on('data', resetIdleTimer);
+        resetIdleTimer();
+
+        const cleanPipes = () => {
+          if (idleTimer) clearTimeout(idleTimer);
           try { clientSocket.destroy(); } catch (_) {}
-        });
-        clientSocket.once('error', () => {
           try { upstreamSocket.destroy(); } catch (_) {}
-        });
+        };
+
+        upstreamSocket.once('error', cleanPipes);
+        clientSocket.once('error', cleanPipes);
+        upstreamSocket.once('close', cleanPipes);
+        clientSocket.once('close', cleanPipes);
 
         break;
       } catch (err) {

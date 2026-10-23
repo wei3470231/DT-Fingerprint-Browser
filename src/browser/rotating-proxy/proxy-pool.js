@@ -120,19 +120,30 @@ class RotatingProxyPool {
 
   /**
    * 获取指定数量的不同代理候选项 (供故障自动重试挑选)
+   * 采用 Fisher-Yates 洗牌算法，确保每次抽取的首选代理 (candidates[0]) 绝对随机！
    */
   getCandidates(count = 3) {
     if (this.proxies.length === 0) return [];
-    if (this.proxies.length <= count) return [...this.proxies];
+    if (this.proxies.length === 1) return [this.proxies[0]];
 
+    // 复制索引并洗牌
+    const indices = [];
+    for (let i = 0; i < this.proxies.length; i++) {
+      indices.push(i);
+    }
+
+    // 随机置换洗牌
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const temp = indices[i];
+      indices[i] = indices[j];
+      indices[j] = temp;
+    }
+
+    const actualCount = Math.min(count, this.proxies.length);
     const result = [];
-    const usedIndices = new Set();
-    while (result.length < count && usedIndices.size < this.proxies.length) {
-      const idx = Math.floor(Math.random() * this.proxies.length);
-      if (!usedIndices.has(idx)) {
-        usedIndices.add(idx);
-        result.push(this.proxies[idx]);
-      }
+    for (let i = 0; i < actualCount; i++) {
+      result.push(this.proxies[indices[i]]);
     }
     return result;
   }

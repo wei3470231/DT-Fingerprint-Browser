@@ -45,14 +45,15 @@ async function startRotatingProxy(rotatingConfig) {
     return null;
   }
 
-  const dispatcher = new RotatingDispatcherServer(pool);
+  const dispatcher = new RotatingDispatcherServer(pool, { portCount: 3 });
   const port = await dispatcher.start();
 
   activePool = pool;
   activeDispatcher = dispatcher;
 
   return {
-    port,
+    ports: dispatcher.ports,
+    port: dispatcher.port,
     rules: rules.trim(),
     count: pool.getCount(),
     dispatcher
@@ -71,18 +72,24 @@ function stopRotatingProxy() {
 }
 
 /**
- * 获取当前活动的轮换调度器端口
+ * 获取当前活动的轮换调度器端口列表
  */
 function getActiveDispatcherPort() {
   return activeDispatcher ? activeDispatcher.port : null;
 }
 
+function getActiveDispatcherPorts() {
+  return activeDispatcher ? activeDispatcher.ports : [];
+}
+
 /**
  * 构建综合 PAC 脚本：
- * - 命中 rotatingRules 的多个域名，全部走本地动态分发器 (127.0.0.1:dispatcherPort)
+ * - 开设 3 个独立端口并在 PAC 中动态随机分配，彻底打破 Chromium 对相同端口的 HTTP/2 / Keep-Alive 会话复用
+ * - 命中 rotatingRules 的多个域名，随机分配到 127.0.0.1:portA/portB/portC 之一
  * - 未命中的流量，若存在环境原有固定代理则走固定代理，否则走 DIRECT 直连
  */
-function buildCombinedPacScript(rotatingPort, rotatingRules, fallbackEndpoint = 'DIRECT') {
+function buildCombinedPacScript(rotatingPorts, rotatingRules, fallbackEndpoint = 'DIRECT') {
+  const ports = Array.isArray(rotatingPorts) ? rotatingPorts : [rotatingPorts];
   const rawRules = (rotatingRules || '')
     .split(/[;\n]/)
     .map(r => r.trim())
@@ -105,6 +112,7 @@ function buildCombinedPacScript(rotatingPort, rotatingRules, fallbackEndpoint = 
   return `
     function FindProxyForURL(url, host) {
       var rotatingRules = [${ruleList.join(', ')}];
+      var ports = [${ports.join(', ')}];
       for (var i = 0; i < rotatingRules.length; i++) {
         var pattern = rotatingRules[i];
         if (
@@ -113,7 +121,8 @@ function buildCombinedPacScript(rotatingPort, rotatingRules, fallbackEndpoint = 
           shExpMatch(url, pattern) ||
           shExpMatch(url, "*" + pattern + "*")
         ) {
-          return "PROXY 127.0.0.1:${rotatingPort}; SOCKS5 127.0.0.1:${rotatingPort}; DIRECT";
+          var p = ports[Math.floor(Math.random() * ports.length)];
+          return "PROXY 127.0.0.1:" + p + "; SOCKS5 127.0.0.1:" + p + "; DIRECT";
         }
       }
       return "${fallbackEndpoint}; DIRECT";

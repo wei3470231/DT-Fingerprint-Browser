@@ -89,16 +89,17 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
   }
 
   // 2. 如果启用了目标域名动态轮换代理池，构建多路综合 PAC 脚本
-  if (rotatingInfo && rotatingInfo.port && rotatingInfo.rules) {
+  if (rotatingInfo && (rotatingInfo.ports || rotatingInfo.port) && rotatingInfo.rules) {
     const fallbackPac = hasBaseProxy
       ? (proto === 'socks5' ? `SOCKS5 ${bridge ? `127.0.0.1:${bridge.port}` : `${host}:${port}`}` : `PROXY ${host}:${port}`)
       : 'DIRECT';
 
-    const pac = buildCombinedPacScript(rotatingInfo.port, rotatingInfo.rules, fallbackPac);
+    const effectivePorts = rotatingInfo.ports || [rotatingInfo.port];
+    const pac = buildCombinedPacScript(effectivePorts, rotatingInfo.rules, fallbackPac);
     await ses.setProxy({
       pacScript: `data:application/x-ns-proxy-autoconfig;base64,${Buffer.from(pac).toString('base64')}`
     });
-    console.log(`[Proxy] 已激活指定域名动态轮换代理池: 规则[${rotatingInfo.rules}], 挂载代理[${rotatingInfo.count}条], 调度端口[${rotatingInfo.port}]`);
+    console.log(`[Proxy] 已激活指定域名动态轮换代理池: 规则[${rotatingInfo.rules}], 挂载代理[${rotatingInfo.count}条], 3独立调度端口[${effectivePorts.join(', ')}]`);
     return bridge;
   }
 
