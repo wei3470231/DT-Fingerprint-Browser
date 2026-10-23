@@ -88,6 +88,18 @@ async function minifyFiles(dir) {
 }
 
 function compileCs(srcFile, outFile, isGui, extraFlags = []) {
+  if (fs.existsSync(outFile)) {
+    try {
+      fs.unlinkSync(outFile);
+    } catch (_) {
+      try {
+        const backupName = outFile + '.' + Date.now() + '.bak';
+        fs.renameSync(outFile, backupName);
+        setTimeout(() => { try { fs.unlinkSync(backupName); } catch (_) {} }, 5000);
+      } catch (_) {}
+    }
+  }
+
   const flags = [
     '/nologo',
     isGui ? '/target:winexe' : '/target:exe',
