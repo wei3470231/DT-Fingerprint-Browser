@@ -63,10 +63,11 @@ async function runTest() {
   }
   assert(sampledHosts.size >= 2, `连续抽取 20 次成功命中多种不同代理节点 (命中不同IP数: ${sampledHosts.size})`);
 
-  // 3. 测试 PAC 脚本生成
-  console.log('\n[3/5] 测试针对多域名规则的 PAC 脚本生成...');
-  const pac = buildCombinedPacScript(28999, 'challenges.cloudflare.com;*.turnstile.com;api.target.com', 'PROXY 192.168.1.1:8080');
+  // 3. 测试 PAC 脚本生成与 URL/路径智能提取兼容
+  console.log('\n[3/5] 测试针对多域名与 URL 路径 (如 hav.digitaldisbursements.com/s) 的 PAC 脚本生成...');
+  const pac = buildCombinedPacScript(28999, 'challenges.cloudflare.com;*.turnstile.com;hav.digitaldisbursements.com/s', 'PROXY 192.168.1.1:8080');
   assert(pac.includes('challenges.cloudflare.com') && pac.includes('PROXY 127.0.0.1:28999'), 'PAC 脚本准确包含指定的多域名规则与本地分发端口');
+  assert(pac.includes('hav.digitaldisbursements.com') && pac.includes('hav.digitaldisbursements.com/s'), 'PAC 脚本成功自动从 URL 路径中智能提取出纯域名 hav.digitaldisbursements.com 并保留完整 pattern');
   assert(pac.includes('PROXY 192.168.1.1:8080'), 'PAC 脚本准确包含未命中规则时的环境回退代理');
 
   // 4. 测试本地分发调度器启动与生命周期

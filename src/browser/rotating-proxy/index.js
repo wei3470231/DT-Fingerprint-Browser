@@ -83,17 +83,36 @@ function getActiveDispatcherPort() {
  * - 未命中的流量，若存在环境原有固定代理则走固定代理，否则走 DIRECT 直连
  */
 function buildCombinedPacScript(rotatingPort, rotatingRules, fallbackEndpoint = 'DIRECT') {
-  const ruleList = rotatingRules.split(/[;\n]/)
+  const rawRules = (rotatingRules || '')
+    .split(/[;\n]/)
     .map(r => r.trim())
-    .filter(Boolean)
-    .map(r => JSON.stringify(r));
+    .filter(Boolean);
+
+  const ruleSet = new Set();
+  for (const raw of rawRules) {
+    ruleSet.add(raw);
+    // 智能兼容用户直接填入的 URL 路径与协议 (如 "hav.digitaldisbursements.com/s" -> "hav.digitaldisbursements.com")
+    // 以及完整 URL (如 "https://hav.digitaldisbursements.com/s" -> "hav.digitaldisbursements.com")
+    const stripped = raw.replace(/^[a-zA-Z]+:\/\//, '');
+    const domain = stripped.split(/[/?#:]/)[0].trim();
+    if (domain) {
+      ruleSet.add(domain);
+    }
+  }
+
+  const ruleList = Array.from(ruleSet).map(r => JSON.stringify(r));
 
   return `
     function FindProxyForURL(url, host) {
       var rotatingRules = [${ruleList.join(', ')}];
       for (var i = 0; i < rotatingRules.length; i++) {
         var pattern = rotatingRules[i];
-        if (shExpMatch(host, pattern) || shExpMatch(url, pattern) || dnsDomainIs(host, pattern)) {
+        if (
+          shExpMatch(host, pattern) || 
+          dnsDomainIs(host, pattern) || 
+          shExpMatch(url, pattern) ||
+          shExpMatch(url, "*" + pattern + "*")
+        ) {
           return "PROXY 127.0.0.1:${rotatingPort}; SOCKS5 127.0.0.1:${rotatingPort}; DIRECT";
         }
       }
