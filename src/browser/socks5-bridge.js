@@ -9,6 +9,8 @@ const net = require('node:net');
 function createSocks5AuthBridge(targetHost, targetPort, username, password) {
   return new Promise((resolve, reject) => {
     const server = net.createServer({ pauseOnConnect: false }, clientSocket => {
+      clientSocket.setKeepAlive(true, 15000);
+      clientSocket.setNoDelay(true);
       let clientBuffer = Buffer.alloc(0);
       let upstreamBuffer = Buffer.alloc(0);
       let stage = 'greeting'; // 'greeting' | 'connect' | 'piped' | 'destroyed'
@@ -73,8 +75,10 @@ function createSocks5AuthBridge(targetHost, targetPort, username, password) {
           clientBuffer = extraClientData;
           stage = 'upstream_connecting';
 
-          // 建立远端上游连接
+          // 建立远端上游连接并开启长连接保活
           upstream = net.createConnection({ host: targetHost, port: Number(targetPort) }, () => {
+            upstream.setKeepAlive(true, 15000);
+            upstream.setNoDelay(true);
             // 发起带有密码认证 (0x02) 的握手
             upstream.write(Buffer.from([0x05, 0x01, 0x02]));
           });

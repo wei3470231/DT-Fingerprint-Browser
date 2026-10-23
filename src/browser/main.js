@@ -550,13 +550,9 @@ function injectSyncCapture(wc) {
   `, true).catch(() => {});
 }
 
-// 触发标签页重新加载 (若开启轮换代理，提前清空旧长连接，确保每一次刷新必定换用新 IP)
+// 触发标签页重新加载
 function triggerTabReload(tabItem) {
   if (!tabItem || !tabItem.view || !tabItem.view.webContents || tabItem.view.webContents.isDestroyed()) return;
-  if (currentEnv?.rotatingProxy?.enabled) {
-    try { getEnvSession()?.closeAllConnections(); } catch (_) {}
-    try { session.defaultSession?.closeAllConnections(); } catch (_) {}
-  }
   markTabLoading(tabItem);
   tabItem.view.webContents.reload();
 }
@@ -783,12 +779,6 @@ function setupTabListeners(tabItem) {
       injectSyncCapture(view.webContents);
     }
     injectBlockDialogs(view.webContents);
-
-    // 关键保证：单次页面渲染完成后立即清理底层长连接，确保下一次在同标签内刷新时 100% 重新新建连接换新 IP
-    if (currentEnv?.rotatingProxy?.enabled) {
-      try { getEnvSession()?.closeAllConnections(); } catch (_) {}
-      try { session.defaultSession?.closeAllConnections(); } catch (_) {}
-    }
   });
 
   // 监听导航和加载事件：支持多框架递归彻底完成检测
@@ -797,11 +787,6 @@ function setupTabListeners(tabItem) {
   });
   view.webContents.on('did-start-navigation', (_event, _url, _isInPlace, isMainFrame) => {
     markTabLoading(tabItem);
-    // 主框架导航开始时清理旧连接池
-    if (isMainFrame && currentEnv?.rotatingProxy?.enabled) {
-      try { getEnvSession()?.closeAllConnections(); } catch (_) {}
-      try { session.defaultSession?.closeAllConnections(); } catch (_) {}
-    }
   });
   view.webContents.on('did-stop-loading', () => {
     scheduleTabLoadingCheck(tabItem);
