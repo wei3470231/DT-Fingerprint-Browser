@@ -95,7 +95,7 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
       : 'DIRECT';
 
     const effectivePorts = rotatingInfo.ports || [rotatingInfo.port];
-    const pac = buildCombinedPacScript(effectivePorts, rotatingInfo.rules, fallbackPac);
+    const pac = buildCombinedPacScript(effectivePorts, rotatingInfo.rules, fallbackPac, proxyConfig?.bypass);
     await ses.setProxy({
       pacScript: `data:application/x-ns-proxy-autoconfig;base64,${Buffer.from(pac).toString('base64')}`
     });
@@ -104,23 +104,57 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
   }
 
   // 3. 原有逻辑：未开启动态代理池时的基础代理设置
-  const { scope = 'all', rules = '', bypass = '<local>;localhost;127.0.0.1' } = proxyConfig;
+  const { scope = 'all', rules = '', bypass = '<local>;localhost;127.0.0.1' } = (proxyConfig || {});
 
   if (scope === 'rules' && rules.trim()) {
-    // 指定 URL 规则走代理，其余直连
-    const rulePatterns = rules.split(';')
+    // 指定 URL 规则走代理，其余直连；白名单域名走本地 IP (DIRECT)
+    const rawRules = rules.split(';')
       .map(r => r.trim())
-      .filter(Boolean)
-      .map(r => JSON.stringify(r));
+      .filter(Boolean);
+
+    const ruleSet = new Set();
+    for (const raw of rawRules) {
+      ruleSet.add(raw);
+      const stripped = raw.replace(/^[a-zA-Z]+:\/\//, '');
+      const domain = stripped.split(/[/?#:]/)[0].trim();
+      if (domain) ruleSet.add(domain);
+    }
+    const rulePatterns = Array.from(ruleSet).map(r => JSON.stringify(r));
+
+    const rawBypass = (bypass || '<local>;localhost;127.0.0.1')
+      .split(/[;\n,]/)
+      .map(r => r.trim())
+      .filter(Boolean);
+
+    const bypassSet = new Set();
+    for (const raw of rawBypass) {
+      bypassSet.add(raw);
+      const stripped = raw.replace(/^[a-zA-Z]+:\/\//, '');
+      const domain = stripped.split(/[/?#:]/)[0].trim();
+      if (domain) bypassSet.add(domain);
+    }
+    const bypassJsonList = Array.from(bypassSet).map(r => JSON.stringify(r));
 
     const proxyType = proto === 'socks5' ? 'SOCKS5' : 'PROXY';
     const pacTarget = bridge ? `127.0.0.1:${bridge.port}` : `${host}:${port}`;
 
     const pac = `
       function FindProxyForURL(url, host) {
+        // 1. 白名单域名走本地 IP (不使用任何代理，直接走 DIRECT)
+        var bypassRules = [${bypassJsonList.join(', ')}];
+        for (var b = 0; b < bypassRules.length; b++) {
+          var bp = bypassRules[b];
+          if (bp === "<local>" && isPlainHostName(host)) return "DIRECT";
+          if (shExpMatch(host, bp) || dnsDomainIs(host, bp) || shExpMatch(url, bp) || shExpMatch(url, "*" + bp + "*")) {
+            return "DIRECT";
+          }
+        }
+
+        // 2. 指定规则走代理
         var rules = [${rulePatterns.join(', ')}];
         for (var i = 0; i < rules.length; i++) {
-          if (shExpMatch(host, rules[i]) || shExpMatch(url, rules[i])) {
+          var pattern = rules[i];
+          if (shExpMatch(host, pattern) || dnsDomainIs(host, pattern) || shExpMatch(url, pattern) || shExpMatch(url, "*" + pattern + "*")) {
             return "${proxyType} ${pacTarget}; DIRECT";
           }
         }

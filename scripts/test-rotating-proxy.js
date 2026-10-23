@@ -63,12 +63,43 @@ async function runTest() {
   }
   assert(sampledHosts.size >= 2, `连续抽取 20 次成功命中多种不同代理节点 (命中不同IP数: ${sampledHosts.size})`);
 
-  // 3. 测试 PAC 脚本生成与 URL/路径智能提取兼容 (3 独立分发端口)
-  console.log('\n[3/5] 测试针对多域名与 URL 路径 (如 hav.digitaldisbursements.com/s) 的 3 端口 PAC 脚本生成...');
-  const pac = buildCombinedPacScript([28991, 28992, 28993], 'challenges.cloudflare.com;*.turnstile.com;hav.digitaldisbursements.com/s', 'PROXY 192.168.1.1:8080');
+  // 3. 测试 PAC 脚本生成与 URL/路径智能提取及白名单直连 (3 独立分发端口)
+  console.log('\n[3/5] 测试针对多域名与 URL 路径的 3 端口 PAC 脚本生成以及白名单走本地 IP (DIRECT)...');
+  const pac = buildCombinedPacScript(
+    [28991, 28992, 28993],
+    'challenges.cloudflare.com;*.turnstile.com;hav.digitaldisbursements.com/s',
+    'PROXY 192.168.1.1:8080',
+    '*.baidu.com;localhost;127.0.0.1;<local>;https://my-internal.site/api'
+  );
   assert(pac.includes('challenges.cloudflare.com') && pac.includes('[28991, 28992, 28993]'), 'PAC 脚本准确包含指定的多域名规则与 3 个本地分发端口');
   assert(pac.includes('hav.digitaldisbursements.com') && pac.includes('hav.digitaldisbursements.com/s'), 'PAC 脚本成功自动从 URL 路径中智能提取出纯域名 hav.digitaldisbursements.com 并保留完整 pattern');
   assert(pac.includes('PROXY 192.168.1.1:8080'), 'PAC 脚本准确包含未命中规则时的环境回退代理');
+  assert(pac.includes('*.baidu.com') && pac.includes('my-internal.site') && pac.includes('<local>'), 'PAC 脚本准确包含白名单域名，优先直接返回 DIRECT 走本地 IP');
+
+  // 在 VM 中模拟 PAC 执行引擎，测试 FindProxyForURL 真实返回
+  const vm = require('node:vm');
+  const pacContext = {
+    shExpMatch: (str, pattern) => {
+      const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$', 'i');
+      return regex.test(str);
+    },
+    dnsDomainIs: (host, domain) => host.endsWith(domain.replace(/^\*/, '')),
+    isPlainHostName: (host) => !host.includes('.')
+  };
+  vm.createContext(pacContext);
+  vm.runInContext(pac, pacContext);
+
+  const testBypass1 = vm.runInContext('FindProxyForURL("http://www.baidu.com/index.html", "www.baidu.com")', pacContext);
+  assert(testBypass1 === 'DIRECT', '命中白名单域名 *.baidu.com -> 准确返回 DIRECT (走本地真实 IP，不走任何代理)');
+
+  const testBypassLocal = vm.runInContext('FindProxyForURL("http://myserver/api", "myserver")', pacContext);
+  assert(testBypassLocal === 'DIRECT', '命中 <local> 本地服务 -> 准确返回 DIRECT (走本地真实 IP)');
+
+  const testRotatingMatch = vm.runInContext('FindProxyForURL("https://challenges.cloudflare.com/turnstile", "challenges.cloudflare.com")', pacContext);
+  assert(testRotatingMatch.includes('PROXY 127.0.0.1:2899'), '命中动态轮换目标规则 challenges.cloudflare.com -> 准确分配至 127.0.0.1 轮换分发端口');
+
+  const testFallback = vm.runInContext('FindProxyForURL("https://other-unmatched.com", "other-unmatched.com")', pacContext);
+  assert(testFallback.includes('PROXY 192.168.1.1:8080'), '未命中白名单与轮换规则的外部网站 -> 准确走 fallback 固定代理');
 
   // 4. 测试本地分发调度器启动与生命周期
   console.log('\n[4/5] 测试本地分发调度器端口绑定与安全退出...');

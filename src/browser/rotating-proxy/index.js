@@ -88,7 +88,7 @@ function getActiveDispatcherPorts() {
  * - 命中 rotatingRules 的多个域名，随机分配到 127.0.0.1:portA/portB/portC 之一
  * - 未命中的流量，若存在环境原有固定代理则走固定代理，否则走 DIRECT 直连
  */
-function buildCombinedPacScript(rotatingPorts, rotatingRules, fallbackEndpoint = 'DIRECT') {
+function buildCombinedPacScript(rotatingPorts, rotatingRules, fallbackEndpoint = 'DIRECT', bypassRules = '') {
   const ports = Array.isArray(rotatingPorts) ? rotatingPorts : [rotatingPorts];
   const rawRules = (rotatingRules || '')
     .split(/[;\n]/)
@@ -107,10 +107,44 @@ function buildCombinedPacScript(rotatingPorts, rotatingRules, fallbackEndpoint =
     }
   }
 
+  const rawBypass = (bypassRules || '')
+    .split(/[;\n,]/)
+    .map(r => r.trim())
+    .filter(Boolean);
+
+  const bypassSet = new Set();
+  for (const raw of rawBypass) {
+    bypassSet.add(raw);
+    const stripped = raw.replace(/^[a-zA-Z]+:\/\//, '');
+    const domain = stripped.split(/[/?#:]/)[0].trim();
+    if (domain) {
+      bypassSet.add(domain);
+    }
+  }
+
   const ruleList = Array.from(ruleSet).map(r => JSON.stringify(r));
+  const bypassList = Array.from(bypassSet).map(r => JSON.stringify(r));
 
   return `
     function FindProxyForURL(url, host) {
+      // 1. 白名单域名走本地 IP (不使用任何代理，直接走 DIRECT)
+      var bypassRules = [${bypassList.join(', ')}];
+      for (var b = 0; b < bypassRules.length; b++) {
+        var bp = bypassRules[b];
+        if (bp === "<local>" && isPlainHostName(host)) {
+          return "DIRECT";
+        }
+        if (
+          shExpMatch(host, bp) || 
+          dnsDomainIs(host, bp) || 
+          shExpMatch(url, bp) ||
+          shExpMatch(url, "*" + bp + "*")
+        ) {
+          return "DIRECT";
+        }
+      }
+
+      // 2. 目标多域名动态轮换代理池 (在 3 个独立端口随机分配，打破连接池复用)
       var rotatingRules = [${ruleList.join(', ')}];
       var ports = [${ports.join(', ')}];
       for (var i = 0; i < rotatingRules.length; i++) {
@@ -125,6 +159,8 @@ function buildCombinedPacScript(rotatingPorts, rotatingRules, fallbackEndpoint =
           return "PROXY 127.0.0.1:" + p + "; SOCKS5 127.0.0.1:" + p + "; DIRECT";
         }
       }
+
+      // 3. 未命中规则流量走环境回退代理或 DIRECT 直连
       return "${fallbackEndpoint}; DIRECT";
     }
   `.trim();

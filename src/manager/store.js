@@ -47,7 +47,7 @@ function parseAndBuildProxyConfig(proxyInput) {
   result.rawString = proxyInput.rawString || '';
   result.scope = proxyInput.scope || 'all';
   result.rules = proxyInput.rules || '';
-  result.bypass = proxyInput.bypass || '<local>;localhost;127.0.0.1';
+  result.bypass = proxyInput.bypass !== undefined ? String(proxyInput.bypass).trim() : '<local>;localhost;127.0.0.1';
 
   // 如果提供了 rawString，优先以解析结果更新
   if (result.rawString) {

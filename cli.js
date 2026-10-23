@@ -45,15 +45,15 @@ function printUsage() {
   [环境配置与 CRUD]
     dt-cli list [--group 组名] [--search 关键词] [--running] [--json] 列出环境配置及其实时运行状态
     dt-cli get --name "环境名" [--json]                             查看环境完整配置与指纹详情 (别名: info)
-    dt-cli create --name "新环境" [--group 组名] [--proxy 代理] [--proxy-scope all|rules] [--proxy-rules 规则] [--rotating-file 文件.txt] [--rotating-rules 规则] [--block-dialogs] [--port 9222] [--url 网址] [--ext 插件] [--lang en-US] 创建新环境
-    dt-cli update --name "环境名" [--new-name 新名] [--url 网址] [--group 组] [--port 端口] [--proxy 代理] [--proxy-scope 范围] [--proxy-rules 规则] [--rotating-file 文件] [--rotating-rules 规则] [--clear-rotating] [--block-dialogs] [--no-block-dialogs] [--ext 插件] 修改环境配置
+    dt-cli create --name "新环境" [--group 组名] [--proxy 代理] [--proxy-scope all|rules] [--proxy-rules 规则] [--proxy-bypass "域名;域名"] [--rotating-file 文件.txt] [--rotating-rules 规则] [--block-dialogs] [--port 9222] [--url 网址] [--ext 插件] [--lang en-US] 创建新环境
+    dt-cli update --name "环境名" [--new-name 新名] [--url 网址] [--group 组] [--port 端口] [--proxy 代理] [--proxy-scope 范围] [--proxy-rules 规则] [--proxy-bypass "白名单"] [--rotating-file 文件] [--rotating-rules 规则] [--clear-rotating] [--block-dialogs] [--no-block-dialogs] [--ext 插件] 修改环境配置
     dt-cli clone --name "已有环境" [--new-name "新名"] [--json]     快速克隆环境 (继承设置并分配新端口与新指纹)
     dt-cli delete --name "环境名" [--json]                          删除环境配置
     dt-cli clear-cache [--name "环境名"|--group 组|--names A,B|--all] [--json] 深度清理环境用户缓存数据 (Cookies/Cache/LevelDB)
 
   [指纹与代理专项控制]
     dt-cli random-fp --name "环境名" [--json]                       一键随机重置硬件指纹 (运行中1秒内热生效)
-    dt-cli set-proxy --name "环境名" --proxy "代理串" [--json]      设置代理 (自动识别4种主流代理格式)
+    dt-cli set-proxy --name "环境名" --proxy "代理串" [--scope all|rules] [--rules 规则] [--bypass "白名单"] [--json] 设置代理
     dt-cli set-proxy --name "环境名" --clear [--json]               清除代理 (切换为直连模式)
     dt-cli set-rotating --name "环境名" --file "代理.txt" --rules "域名1;域名2" [--mode random|round-robin] [--json] 配置目标多域名动态轮换代理池 (每次连接必换IP)
     dt-cli set-rotating --name "环境名" --clear [--json]            清除动态轮换代理池
@@ -695,12 +695,15 @@ async function main() {
       }
       try {
         let proxyConfig = options.proxy;
-        if (options.scope || options.rules !== undefined) {
+        if (options.scope || options.rules !== undefined || options.bypass !== undefined || options['proxy-bypass'] !== undefined) {
           const { parseProxyString } = require('./src/manager/proxy-parser');
           const parsed = typeof proxyConfig === 'string' ? parseProxyString(proxyConfig) : (proxyConfig || {});
           if (parsed) {
             if (options.scope) parsed.scope = options.scope;
             if (options.rules !== undefined) parsed.rules = options.rules;
+            if (options.bypass !== undefined || options['proxy-bypass'] !== undefined) {
+              parsed.bypass = options.bypass || options['proxy-bypass'];
+            }
             proxyConfig = parsed;
           }
         }
@@ -716,6 +719,9 @@ async function main() {
           console.log(`   范围: ${updated.proxy.scope === 'rules' ? '指定URL' : '全局代理'}`);
           if (updated.proxy.scope === 'rules' && updated.proxy.rules) {
             console.log(`   规则: ${updated.proxy.rules}`);
+          }
+          if (updated.proxy.bypass) {
+            console.log(`   白名单(走本地IP): ${updated.proxy.bypass}`);
           }
         }
       } catch (e) {
@@ -966,12 +972,15 @@ async function main() {
         const extVal = options.ext || options.extensions;
         const portDisabled = Boolean(options['no-port'] || options['disable-port']);
         let proxyConfig = options.proxy || undefined;
-        if (proxyConfig && (options['proxy-scope'] || options['proxy-rules'] !== undefined)) {
+        if (proxyConfig && (options['proxy-scope'] || options['proxy-rules'] !== undefined || options['proxy-bypass'] !== undefined || options.bypass !== undefined)) {
           const { parseProxyString } = require('./src/manager/proxy-parser');
           const parsed = typeof proxyConfig === 'string' ? parseProxyString(proxyConfig) : proxyConfig;
           if (parsed) {
             if (options['proxy-scope']) parsed.scope = options['proxy-scope'];
             if (options['proxy-rules'] !== undefined) parsed.rules = options['proxy-rules'];
+            if (options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
+              parsed.bypass = options['proxy-bypass'] || options.bypass;
+            }
             proxyConfig = parsed;
           }
         }
@@ -1070,20 +1079,26 @@ async function main() {
           updates.proxy = { enabled: false, type: 'socks5', host: '', port: '', username: '', password: '', rawString: '', scope: 'all', rules: '', bypass: '<local>;localhost;127.0.0.1' };
         } else if (options.proxy) {
           let p = options.proxy;
-          if (options['proxy-scope'] || options['proxy-rules'] !== undefined) {
+          if (options['proxy-scope'] || options['proxy-rules'] !== undefined || options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
             const { parseProxyString } = require('./src/manager/proxy-parser');
             const parsed = typeof p === 'string' ? parseProxyString(p) : p;
             if (parsed) {
               if (options['proxy-scope']) parsed.scope = options['proxy-scope'];
               if (options['proxy-rules'] !== undefined) parsed.rules = options['proxy-rules'];
+              if (options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
+                parsed.bypass = options['proxy-bypass'] || options.bypass;
+              }
               p = parsed;
             }
           }
           updates.proxy = p;
-        } else if (options['proxy-scope'] || options['proxy-rules'] !== undefined) {
+        } else if (options['proxy-scope'] || options['proxy-rules'] !== undefined || options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
           const curProxy = env.proxy ? { ...env.proxy } : {};
           if (options['proxy-scope']) curProxy.scope = options['proxy-scope'];
           if (options['proxy-rules'] !== undefined) curProxy.rules = options['proxy-rules'];
+          if (options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
+            curProxy.bypass = options['proxy-bypass'] || options.bypass;
+          }
           updates.proxy = curProxy;
         }
 

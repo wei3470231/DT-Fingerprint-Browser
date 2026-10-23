@@ -299,6 +299,13 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 * **全生命周期参数打通**：在 `create`、`update`、`start` 等核心指令中无缝支持 `--rotating-file`、`--rotating-rules`、`--rotating-mode` 以及 `--block-dialogs`；
 * **自动化直通模式兼容**：支持在直调启动时通过参数临时覆盖代理文档路径与生效规则，无需手动修改预存配置。
 
+### 3.30 代理设置支持设置白名单域名走本地真实 IP (不使用任何代理)
+* **全模式生效**：支持在全局代理模式（`all`）、指定 URL 规则代理模式（`rules`）、以及动态轮换代理池（`rotatingProxy`）下配置直连白名单（`bypass`）；
+* **最高优先级 DIRECT 直连**：命中白名单的域名在 PAC 脚本和 Chromium 网络层拥有最高执行优先级，直接返回 `DIRECT`，保证走本机物理网卡真实 IP，绝不耗费任何代理节点流量；
+* **智能规则与通配符**：支持 `<local>`（无点主机名）、`localhost`、`127.0.0.1`、`*.domain.com` 通配符以及自动提取 URL 路径中的域名；
+* **CLI 全链路覆盖**：`dt-cli create`、`dt-cli update` 支持 `--proxy-bypass`，`dt-cli set-proxy` 支持 `--bypass` 参数。
+
+
 ---
 
 ## 4. 命令行 CLI 原生调用详解 (DT-CLI)
@@ -560,6 +567,9 @@ dt-cli batch-random-fp --all --json
 ```powershell
 # 设置代理 (自动识别4种格式)
 dt-cli set-proxy --name "环境 1 · 纽约" --proxy "user:pass@us.proxy.com:6666"
+
+# 设置代理同时指定白名单走本地真实 IP (DIRECT)
+dt-cli set-proxy --name "环境 1 · 纽约" --proxy "user:pass@us.proxy.com:6666" --bypass "*.baidu.com;localhost;<local>"
 
 # 清除代理，恢复网络直连
 dt-cli set-proxy --name "环境 1 · 纽约" --clear --json
@@ -1045,7 +1055,18 @@ main();
 * **全局代理模式**：所有网页流量均通过代理服务器发送。
 * **指定 URL 规则模式**：支持填写通配符规则，多个规则以分号 `;` 分隔，例如：`*httpbin.org*;*google.com*`。命中规则的域名走配置的代理，其余网址（如国内直连网站）自动走本地网络直连，极大节省代理流量。
 
-### 8.4 ⚡ 目标多域名动态轮换代理池（本地 .txt 文档，每连接换新 IP）
+### 8.4 🌐 白名单域名走本地真实 IP (不使用任何代理)
+* **功能定义**：无论处于**全局代理模式**、**指定 URL 规则模式**还是**动态轮换代理池模式**，只要目标域名命中该白名单，网络层与 PAC 脚本将立即直接返回 `DIRECT`，走本机真实物理网卡与出口 IP 直连，**绝不经由任何代理服务器**。
+* **常用白名单场景**：
+  - 本地回环与内网开发服务：`localhost;127.0.0.1;<local>`；
+  - 国内高频访问站点或不需要代理的基础服务：`*.baidu.com;*.qq.com;*.alipay.com`；
+  - 内部鉴权与私有接口：`api.internal.corp;*.local`。
+* **匹配机制与通配符**：
+  - 支持 `<local>` 关键字（自动识别所有不含点的主机名直接直连）；
+  - 支持通配符匹配（如 `*.domain.com` 覆盖全部二级与多级子域名）；
+  - 支持 URL 完整路径输入（程序自动提取对应的主机域名并保留路径过滤）。
+
+### 8.5 ⚡ 目标多域名动态轮换代理池（本地 .txt 文档，每连接换新 IP）
 * **功能定义**：为指定环境接入一个包含数千条代理的本地 `.txt` 文本，针对设定的多个目标域名（如 `challenges.cloudflare.com;*.turnstile.com`），在每次新建连接时随机/轮询抽取独立上游代理并完成认证隧道。
 * **确保同一个页面多次刷新或点击绝对换新 IP**：
   * 在底层代理调度器（`RotatingDispatcherServer`）中，为每次到达的客户端 HTTP CONNECT 隧道或原始 Socket 独立分配新代理；
@@ -1060,7 +1081,7 @@ main();
 * **多域名规则配置**：使用分号 `;` 分隔多个目标域名，支持 `*` 通配符。例如：`challenges.cloudflare.com;*.turnstile.com;api.target.com`。
 * **回退保护**：非目标域名的常规流量自动走环境基础固定代理或本地直连，实现精确分流。
 
-### 8.5 🛡️ 网页交互行为控制：屏蔽浏览器网页弹窗 (window.alert / window.confirm)
+### 8.6 🛡️ 网页交互行为控制：屏蔽浏览器网页弹窗 (window.alert / window.confirm)
 * **默认行为**：默认不勾选，保持 Chromium 原始原生弹窗行为。
 * **开启后行为**：系统在页面最早期初始化（Preload 与 dom-ready）注入覆盖：
   ```javascript

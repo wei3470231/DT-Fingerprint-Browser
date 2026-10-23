@@ -1537,6 +1537,13 @@
             <label class="form-label">指定 URL 规则 (以分号分隔)</label>
             <input type="text" class="form-input" id="formProxyRules" placeholder="例如：*.browserscan.net;*google.com">
           </div>
+          <div class="form-group" style="margin-top: 10px;">
+            <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>白名单域名走本地 IP (不使用任何代理，以分号 ; 分隔)</span>
+              <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">命中白名单直接走本机 IP 直连</span>
+            </label>
+            <input type="text" class="form-input" id="formProxyBypass" placeholder="例如：*.baidu.com;127.0.0.1;localhost;<local>">
+          </div>
         </div>
 
         <!-- ⚡ 目标多域名动态轮换代理池 (每连接换 IP) -->
@@ -2407,6 +2414,7 @@
         document.getElementById('formProxyPass').value = proxy.password || '';
         document.getElementById('formProxyScope').value = proxy.scope || 'all';
         document.getElementById('formProxyRules').value = proxy.rules || '';
+        document.getElementById('formProxyBypass').value = proxy.bypass !== undefined ? proxy.bypass : '<local>;localhost;127.0.0.1';
         proxyRulesRow.style.display = (proxy.scope === 'rules') ? 'block' : 'none';
 
         // 动态代理池回显与联动
@@ -2719,7 +2727,8 @@
           password: document.getElementById('formProxyPass').value.trim(),
           rawString: document.getElementById('formProxyQuickPaste').value.trim(),
           scope: document.getElementById('formProxyScope').value,
-          rules: document.getElementById('formProxyRules').value.trim()
+          rules: document.getElementById('formProxyRules').value.trim(),
+          bypass: document.getElementById('formProxyBypass').value.trim()
         },
         rotatingProxy: {
           enabled: isRotatingEnabled,
