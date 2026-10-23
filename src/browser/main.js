@@ -550,6 +550,17 @@ function injectSyncCapture(wc) {
   `, true).catch(() => {});
 }
 
+// 触发标签页重新加载 (若开启轮换代理，提前清空旧长连接，确保每一次刷新必定换用新 IP)
+function triggerTabReload(tabItem) {
+  if (!tabItem || !tabItem.view || !tabItem.view.webContents || tabItem.view.webContents.isDestroyed()) return;
+  if (currentEnv?.rotatingProxy?.enabled) {
+    try { getEnvSession()?.closeAllConnections(); } catch (_) {}
+    try { session.defaultSession?.closeAllConnections(); } catch (_) {}
+  }
+  markTabLoading(tabItem);
+  tabItem.view.webContents.reload();
+}
+
 // 4. 为标签页配置快捷键、右键菜单、真实物理点击及加载事件监听
 function setupTabListeners(tabItem) {
   const { view, id: tabId } = tabItem;
@@ -566,12 +577,10 @@ function setupTabListeners(tabItem) {
       closeTab(tabId);
     } else if (isCtrl && input.key.toLowerCase() === 'r') {
       event.preventDefault();
-      markTabLoading(tabItem);
-      view.webContents.reload();
+      triggerTabReload(tabItem);
     } else if (input.key === 'F5') {
       event.preventDefault();
-      markTabLoading(tabItem);
-      view.webContents.reload();
+      triggerTabReload(tabItem);
     } else if (input.key === 'F12') {
       event.preventDefault();
       view.webContents.isDevToolsOpened() ? view.webContents.closeDevTools() : view.webContents.openDevTools({ mode: 'detach' });
@@ -700,8 +709,7 @@ function setupTabListeners(tabItem) {
       label: '重新加载 (Reload)',
       accelerator: 'F5',
       click: () => {
-        markTabLoading(tabItem);
-        view.webContents.reload();
+        triggerTabReload(tabItem);
       }
     });
     menuTemplate.push({ type: 'separator' });
@@ -775,14 +783,25 @@ function setupTabListeners(tabItem) {
       injectSyncCapture(view.webContents);
     }
     injectBlockDialogs(view.webContents);
+
+    // 关键保证：单次页面渲染完成后立即清理底层长连接，确保下一次在同标签内刷新时 100% 重新新建连接换新 IP
+    if (currentEnv?.rotatingProxy?.enabled) {
+      try { getEnvSession()?.closeAllConnections(); } catch (_) {}
+      try { session.defaultSession?.closeAllConnections(); } catch (_) {}
+    }
   });
 
   // 监听导航和加载事件：支持多框架递归彻底完成检测
   view.webContents.on('did-start-loading', () => {
     markTabLoading(tabItem);
   });
-  view.webContents.on('did-start-navigation', () => {
+  view.webContents.on('did-start-navigation', (_event, _url, _isInPlace, isMainFrame) => {
     markTabLoading(tabItem);
+    // 主框架导航开始时清理旧连接池
+    if (isMainFrame && currentEnv?.rotatingProxy?.enabled) {
+      try { getEnvSession()?.closeAllConnections(); } catch (_) {}
+      try { session.defaultSession?.closeAllConnections(); } catch (_) {}
+    }
   });
   view.webContents.on('did-stop-loading', () => {
     scheduleTabLoadingCheck(tabItem);
@@ -1557,12 +1576,11 @@ if (typeof chrome !== 'undefined') {
   });
   ipcMain.on('action-nav-reload', () => {
     const activeTab = tabs.find(t => t.id === activeTabId);
-    if (activeTab && activeTab.view && activeTab.view.webContents && !activeTab.view.webContents.isDestroyed()) {
-      markTabLoading(activeTab);
+    if (activeTab) {
       if (isSyncMaster) {
         sendHubMessage({ action: 'sync-event', envId: currentEnv.id, payload: { type: 'reload' } });
       }
-      activeTab.view.webContents.reload();
+      triggerTabReload(activeTab);
     }
   });
   ipcMain.on('action-nav-stop', () => {
@@ -1831,17 +1849,11 @@ if (typeof chrome !== 'undefined') {
     } else if (isCtrl && input.key.toLowerCase() === 'r') {
       event.preventDefault();
       const activeTab = tabs.find(t => t.id === activeTabId);
-      if (activeTab) {
-        markTabLoading(activeTab);
-        activeTab.view.webContents.reload();
-      }
+      if (activeTab) triggerTabReload(activeTab);
     } else if (input.key === 'F5') {
       event.preventDefault();
       const activeTab = tabs.find(t => t.id === activeTabId);
-      if (activeTab) {
-        markTabLoading(activeTab);
-        activeTab.view.webContents.reload();
-      }
+      if (activeTab) triggerTabReload(activeTab);
     } else if (input.key === 'F12') {
       event.preventDefault();
       const activeTab = tabs.find(t => t.id === activeTabId);

@@ -185,7 +185,7 @@ class RotatingDispatcherServer {
         upstreamSocket.pipe(clientSocket);
 
         // 关键增强：为解决 Chromium HTTP/2 和 Keep-Alive 连接池长久保持导致多标签页/多次刷新复用旧 IP 的问题：
-        // 增加数据活动感应空闲超时计时器 (2000ms)。在网页资源加载完毕空闲 2 秒后，自动优雅断开隧道，
+        // 增加数据活动感应空闲超时计时器 (1000ms)。在网页资源加载完毕空闲 1 秒后，自动优雅断开隧道，
         // 确保下一次页面刷新、点击或打开新标签页时，强制 Chromium 重新向 3 个端口之一发起新建连接并换用新 IP！
         let idleTimer = null;
         const resetIdleTimer = () => {
@@ -193,7 +193,7 @@ class RotatingDispatcherServer {
           idleTimer = setTimeout(() => {
             try { clientSocket.end(); } catch (_) {}
             try { upstreamSocket.end(); } catch (_) {}
-          }, 2000);
+          }, 1000);
         };
 
         clientSocket.on('data', resetIdleTimer);

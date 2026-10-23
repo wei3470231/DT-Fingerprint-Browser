@@ -120,7 +120,7 @@ class RotatingProxyPool {
 
   /**
    * 获取指定数量的不同代理候选项 (供故障自动重试挑选)
-   * 采用 Fisher-Yates 洗牌算法，确保每次抽取的首选代理 (candidates[0]) 绝对随机！
+   * 采用 Fisher-Yates 洗牌算法，并确保连续两次连接绝不重复分配同一个代理节点！
    */
   getCandidates(count = 3) {
     if (this.proxies.length === 0) return [];
@@ -139,6 +139,16 @@ class RotatingProxyPool {
       indices[i] = indices[j];
       indices[j] = temp;
     }
+
+    // 关键保证：若代理池数量 > 1，确保本次抽取的首选代理绝对不与上一次连接重复！
+    if (this.proxies.length > 1 && indices[0] === this.lastAssignedIndex) {
+      const swapIdx = indices.length > 1 ? 1 : 0;
+      const t = indices[0];
+      indices[0] = indices[swapIdx];
+      indices[swapIdx] = t;
+    }
+
+    this.lastAssignedIndex = indices[0];
 
     const actualCount = Math.min(count, this.proxies.length);
     const result = [];
