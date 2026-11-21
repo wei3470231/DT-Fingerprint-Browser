@@ -365,7 +365,7 @@ app.whenReady().then(() => {
   ipcMain.handle('set-autostart', (_e, { enabled, silent }) => systemSettings.setAutoStart(app, enabled, silent));
   ipcMain.handle('get-path-status', () => systemSettings.getPathStatus());
   ipcMain.handle('set-path-env', (_e, { enabled }) => systemSettings.setPathEnvironment(enabled));
-  ipcMain.handle('get-random-fp', (_e, { language, timezone } = {}) => store.getRandomFp({ language, timezone }));
+  ipcMain.handle('get-random-fp', (_e, options) => store.getRandomFp(options));
 
   // 字体管理 IPC
   ipcMain.handle('get-fonts', () => ({

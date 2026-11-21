@@ -116,14 +116,8 @@ async function runTests() {
   }
 
   // 4. 便携发布包 ZIP 文件验证 (纯英文含版本号 Release 文件名)
-  console.log('\n[4/4] 验证便携发布包压缩文件 (dist/DT-Fingerprint-Browser-v2.6-Portable.zip 或当前最新发布包)...');
-  const zipPath = fs.existsSync(path.join(ROOT, 'dist', 'DT-Fingerprint-Browser-v2.6-Portable.zip'))
-    ? path.join(ROOT, 'dist', 'DT-Fingerprint-Browser-v2.6-Portable.zip')
-    : (fs.existsSync(path.join(ROOT, 'dist', 'DT-Fingerprint-Browser-v2.5-Portable.zip'))
-      ? path.join(ROOT, 'dist', 'DT-Fingerprint-Browser-v2.5-Portable.zip')
-      : (fs.existsSync(path.join(ROOT, 'dist', 'DT-Fingerprint-Browser-v2.3-Portable.zip'))
-        ? path.join(ROOT, 'dist', 'DT-Fingerprint-Browser-v2.3-Portable.zip')
-        : path.join(ROOT, 'dist', 'DT-Fingerprint-Browser-v2.2-Portable.zip')));
+  console.log('\n[4/4] 验证 v2.7 便携发布包...');
+  const zipPath = path.join(ROOT, 'dist', 'DT-Fingerprint-Browser-v2.7-Portable.zip');
   assert(fs.existsSync(zipPath), `便携版 ZIP 压缩包存在: ${zipPath}`);
   if (fs.existsSync(zipPath)) {
     const zipSizeMB = (fs.statSync(zipPath).size / (1024 * 1024)).toFixed(1);

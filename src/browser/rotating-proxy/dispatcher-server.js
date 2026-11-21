@@ -487,8 +487,8 @@ class RotatingDispatcherServer {
 
   sendHttpError(socket, code, msg) {
     try {
-      socket.write(`HTTP/1.1 ${code} ${msg}\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n${msg}\n`);
-      socket.end();
+      const body = `${msg}\n`;
+      socket.end(`HTTP/1.1 ${code} ${http.STATUS_CODES[code]}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`);
     } catch (_) {}
   }
 }

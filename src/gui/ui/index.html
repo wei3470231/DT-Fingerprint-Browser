@@ -480,7 +480,8 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       background: var(--bg-body, #0f172a);
-      min-height: 100vh;
+      height: 100%;
+      overflow: hidden;
     }
     body {
       background: var(--bg-body);
@@ -489,29 +490,30 @@
       user-select: none;
       display: flex;
       flex-direction: column;
-      height: 100vh;
-      min-width: 1060px;
-      overflow-x: auto;
-      overflow-y: hidden;
       transition: background 0.2s ease, color 0.2s ease;
     }
 
-    /* 顶部导航 Header (严格不换行防错乱) */
+    /* 顶部导航 */
     header {
-      height: 60px;
       min-height: 60px;
       background: var(--bg-header);
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 20px;
-      gap: 12px;
-      min-width: 1060px;
+      padding: 8px 20px;
+      gap: 8px 12px;
+      flex-wrap: wrap;
       white-space: nowrap;
       flex-shrink: 0;
       box-sizing: border-box;
       transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .header-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px 14px;
     }
     .logo-area {
       display: flex;
@@ -582,18 +584,18 @@
       flex-direction: column;
       padding: 14px 20px;
       gap: 12px;
-      min-width: 1060px;
+      min-height: 0;
       overflow: hidden;
       box-sizing: border-box;
     }
 
-    /* 工具栏 Controls (单行排版) */
+    /* 工具栏 */
     .toolbar {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 10px;
-      min-width: 1060px;
+      flex-wrap: wrap;
       white-space: nowrap;
       flex-shrink: 0;
     }
@@ -601,14 +603,14 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      flex-shrink: 0;
+      flex-wrap: wrap;
       white-space: nowrap;
     }
     .toolbar-right {
       display: flex;
       align-items: center;
       gap: 6px;
-      flex-shrink: 0;
+      flex-wrap: wrap;
       white-space: nowrap;
     }
 
@@ -700,6 +702,7 @@
     /* 表格容器 */
     .table-card {
       flex: 1;
+      min-height: 0;
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -803,6 +806,7 @@
     .app-footer {
       height: 32px;
       min-height: 32px;
+      flex-shrink: 0;
       background: var(--bg-header);
       border-top: 1px solid var(--border);
       display: flex;
@@ -820,11 +824,16 @@
       align-items: center;
       gap: 10px;
     }
+    .footer-left, .footer-right { flex-shrink: 0; }
+    .footer-center { min-width: 0; margin: 0 8px; }
     .footer-slogan {
       font-size: 11px;
       color: var(--text-muted);
       opacity: 0.85;
       letter-spacing: 0.3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .footer-tag {
       display: inline-flex;
@@ -1136,7 +1145,7 @@
         <div class="logo-sub">多环境管理 · 独立远程调试端口 · 独立缓存隔离 · 商业级指纹对抗</div>
       </div>
     </div>
-    <div style="display: flex; align-items: center; gap: 14px;">
+    <div class="header-controls">
       <!-- 皮肤切换 (深浅双色 + 赤橙黄绿青蓝紫) -->
       <div style="display: flex; align-items: center; gap: 6px;">
         <span id="themeLabel" style="font-size: 12px; color: var(--text-muted); font-weight: 500; display: inline-flex; align-items: center; gap: 4px;"></span>
@@ -1267,7 +1276,7 @@
     </div>
     <div class="footer-right">
       <div id="btnVersionCheck" class="footer-tag" title="点击检查更新或前往 GitHub Releases 页面">
-        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v2.6</b></span>
+        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v2.7</b></span>
         <span class="footer-version-badge" id="versionBadge">
           <span class="status-dot green" id="versionDot"></span>
           <span id="versionStatusText">检测更新中...</span>
@@ -1463,7 +1472,7 @@
             <div style="font-size: 12px; font-weight: 600; color: #38bdf8; display: inline-flex; align-items: center; gap: 6px;">
               自定义 User-Agent (UA 头)
             </div>
-            <span style="font-size: 11px; color: var(--text-muted);">* 设置后随机指纹时将保留自定义 UA，不被随机覆写</span>
+            <span style="font-size: 11px; color: var(--text-muted);">手动 UA 用于兼容性测试。随机指纹会替换 UA。</span>
           </div>
           <div class="form-row">
             <div class="form-group" style="max-width: 260px;">
@@ -2539,14 +2548,13 @@
       try {
         const lang = document.getElementById('formLang').value;
         const tz = document.getElementById('formTimezone').value || 'America/New_York';
-        modalFpData = await ipcRenderer.invoke('get-random-fp', { language: lang, timezone: tz });
-        const customUa = document.getElementById('formCustomUa').value.trim();
-        // 关键规则：自定义 UA 在随机指纹时保留不被随机覆盖
-        if (customUa && modalFpData) {
-          modalFpData.uaString = customUa;
-        }
+        const input = document.getElementById('formCustomUa');
+        const previousUa = input.value.trim() || modalFpData?.uaString;
+        modalFpData = await ipcRenderer.invoke('get-random-fp', { language: lang, timezone: tz, previousUa });
+        input.value = '';
+        document.getElementById('formUaPreset').value = '';
         updateFpPreview();
-        showToast(customUa ? '已随机生成全新硬件指纹 (自定义 UA 保持锁定)！' : '已随机生成全新硬件指纹！');
+        showToast('已随机生成新指纹和 UA');
       } catch (err) {
         console.error('随机生成指纹失败:', err);
         alert('随机指纹生成失败: ' + err.message);
@@ -2803,9 +2811,6 @@
 
       if (modalFpData) {
         modalFpData.timezone = tzVal;
-        if (customUa) {
-          modalFpData.uaString = customUa;
-        }
         data.fp = modalFpData;
       }
 
@@ -3609,7 +3614,7 @@
     const QQ_GROUP_NUMBER = '328399769';
     const GITHUB_REPO_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser';
     const GITHUB_RELEASES_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser/releases';
-    const APP_CURRENT_VERSION = '2.6';
+    const APP_CURRENT_VERSION = '2.7';
 
     const btnCopyQQ = document.getElementById('btnCopyQQ');
     const badgeCopyQQ = document.getElementById('badgeCopyQQ');

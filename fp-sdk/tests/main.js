@@ -98,7 +98,15 @@ async function main(){
   await manager.setExtensionEnabled(disabled.id,'sdk-2',true);
   check('missing extension files produce a per instance error without stopping app',manager.state().extensions.find(e=>e.id===disabled.id).profiles.find(p=>p.profileId==='sdk-2').status==='error');
   fs.renameSync(moved,disabled.directory);await manager.setExtensionEnabled(disabled.id,'sdk-2',false);
-  const {createManagementWindow}=require('../../fp-demo/src/management');
+  fs.writeFileSync(selectionFile,JSON.stringify(selection));
+  const managementFile = path.resolve(__dirname, '../../fp-demo/src/management.js');
+  const managementPreload = path.resolve(__dirname, '../../fp-demo/src/manage/preload.js');
+  if (!fs.existsSync(managementFile) || !fs.existsSync(managementPreload)) {
+    report.skipped = ['External fp-demo management UI and its IPC checks are unavailable in this checkout'];
+    console.log('SKIP external fp-demo management UI and its IPC checks');
+    return;
+  }
+  const {createManagementWindow}=require(managementFile);
   manageWindow=createManagementWindow({parent:host,automation:manager,getProfiles:()=>profiles.map(({id,name})=>({id,name})),currentId:'sdk-1',show:false});
   await poll(()=>manageWindow.webContents.executeJavaScript("Boolean(window.fpManagement && document.querySelectorAll('#script-list button').length)"),Boolean);
   check('management UI renders saved scripts and both profiles',await manageWindow.webContents.executeJavaScript("document.querySelectorAll('#script-targets input').length===2 && document.querySelectorAll('#script-list button').length>0"));
@@ -107,7 +115,7 @@ async function main(){
   await poll(()=>manageWindow.webContents.executeJavaScript("!document.getElementById('run-script').disabled && document.getElementById('script-name').value==='UI saved'"),Boolean);
   await manageWindow.webContents.executeJavaScript("document.getElementById('run-script').click()");
   check('management UI executes saved script and records result',Boolean(await poll(()=>manager.state().logs.find(l=>l.name==='UI saved'&&l.result===42),Boolean)));
-  attacker=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false,preload:path.resolve(__dirname,'../../fp-demo/src/manage/preload.js')}});await attacker.loadURL(url+'attacker');
+  attacker=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false,preload:managementPreload}});await attacker.loadURL(url+'attacker');
   check('foreign window with same preload cannot access manager IPC',await attacker.webContents.executeJavaScript("window.fpManagement.invoke('state').then(()=>false,()=>true)"));
   check('foreign window cannot create an automatic script',await attacker.webContents.executeJavaScript(`window.fpManagement.invoke('save-script',{name:'unauthorized',code:'return 1',trigger:'page-loaded',profileIds:['sdk-1']}).then(()=>false,()=>true)`)&&!manager.state().scripts.some(s=>s.name==='unauthorized'));attacker.destroy();attacker=null;
   manageWindow.showInactive();await wait(250);fs.writeFileSync(path.join(output,'management.png'),(await manageWindow.webContents.capturePage()).toPNG());manageWindow.hide();
@@ -116,7 +124,6 @@ async function main(){
   manageWindow.showInactive();await wait(150);fs.writeFileSync(path.join(output,'extensions.png'),(await manageWindow.webContents.capturePage()).toPNG());manageWindow.hide();
   await manageWindow.webContents.executeJavaScript("document.querySelector('[data-tab=logs]').click()");
   check('log UI renders expandable execution details',await manageWindow.webContents.executeJavaScript("!document.getElementById('logs').hidden && document.querySelectorAll('#log-list details').length>0 && document.getElementById('log-list').textContent.includes('UI saved')"));
-  fs.writeFileSync(selectionFile,JSON.stringify(selection));
 }
 const timer=setTimeout(()=>{report.error='Test deadline';finish();},130000);
 function finish(){

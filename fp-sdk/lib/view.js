@@ -15,6 +15,7 @@ async function createFingerprintView({ profile, partitionPrefix = 'acc-', config
   ses.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
   if (configureSession) await configureSession(ses);
   const view = new WebContentsView({ webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false, plugins: true, backgroundThrottling: false } });
+  view.webContents.setUserAgent(profile.fp.uaString);
   view.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
   const onLogin = (event, contents, _details, authInfo, callback) => {
     if (contents !== view.webContents || !authInfo.isProxy) return;

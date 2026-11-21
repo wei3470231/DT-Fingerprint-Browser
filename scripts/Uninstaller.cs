@@ -7,6 +7,9 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
+[assembly: System.Reflection.AssemblyVersion("2.7.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("2.7.0.0")]
+
 namespace BitFPManager
 {
     static class UninstallerProgram

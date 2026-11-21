@@ -1,6 +1,7 @@
 'use strict';
 
 const { RotatingProxyPool } = require('./proxy-pool');
+const BLOCKED_PROXY_PORT = 1;
 const { RotatingDispatcherServer } = require('./dispatcher-server');
 
 let activePool = null;
@@ -119,7 +120,9 @@ function getActiveDispatcherPorts() {
  * - 未命中的流量，若存在环境原有固定代理则走固定代理，否则走 DIRECT 直连
  */
 function buildCombinedPacScript(rotatingPorts, rotatingRules, fallbackEndpoint = 'DIRECT', bypassRules = '') {
-  const ports = Array.isArray(rotatingPorts) ? rotatingPorts : [rotatingPorts];
+  const ports = (Array.isArray(rotatingPorts) ? rotatingPorts : [rotatingPorts])
+    .filter(port => Number.isInteger(port) && port > 0 && port <= 65535);
+  if (!ports.length) ports.push(BLOCKED_PROXY_PORT);
   const rawRules = (rotatingRules || '')
     .split(/[;\n]/)
     .map(r => r.trim())
@@ -165,10 +168,8 @@ function buildCombinedPacScript(rotatingPorts, rotatingRules, fallbackEndpoint =
           return "DIRECT";
         }
         if (
-          shExpMatch(host, bp) || 
-          dnsDomainIs(host, bp) || 
-          shExpMatch(url, bp) ||
-          shExpMatch(url, "*" + bp + "*")
+          shExpMatch(host, bp) ||
+          dnsDomainIs(host, bp.charAt(0) === "." ? bp : "." + bp)
         ) {
           return "DIRECT";
         }
@@ -186,17 +187,18 @@ function buildCombinedPacScript(rotatingPorts, rotatingRules, fallbackEndpoint =
           shExpMatch(url, "*" + pattern + "*")
         ) {
           var p = ports[Math.floor(Math.random() * ports.length)];
-          return "PROXY 127.0.0.1:" + p + "; SOCKS5 127.0.0.1:" + p + "; DIRECT";
+          return "PROXY 127.0.0.1:" + p;
         }
       }
 
       // 3. 未命中规则流量走环境回退代理或 DIRECT 直连
-      return "${fallbackEndpoint}; DIRECT";
+      return ${JSON.stringify(fallbackEndpoint)};
     }
   `.trim();
 }
 
 module.exports = {
+  BLOCKED_PROXY_PORT,
   startRotatingProxy,
   stopRotatingProxy,
   getActiveDispatcherPort,

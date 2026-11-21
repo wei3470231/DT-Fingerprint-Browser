@@ -1,7 +1,7 @@
 import { WebContentsView, Session, BaseWindow, BrowserWindow } from 'electron';
 import { EventEmitter } from 'node:events';
 export interface FingerprintConfig {
-  schemaVersion: number; seed: string; uaString: string;
+  schemaVersion: number; seed: string; uaString: string; uaFormat?:'reduced'|'full';
   ua: {brand:string; fullVersion:string; platform:string; platformVersion:string; arch:string; bitness:string};
   navigator: {platform:string; hardwareConcurrency:number; deviceMemory:number; languages:string[]};
   screen: {width:number; height:number; availWidth:number; availHeight:number; colorDepth:number; dpr:number};
@@ -9,7 +9,8 @@ export interface FingerprintConfig {
   noise: {canvas:boolean; audio:boolean; rects:boolean}; disable:string[];
 }
 export interface Profile { id:string; name?:string; fp:FingerprintConfig; proxy?:string; proxyAuth?:{username:string;password:string} }
-export function generateFingerprint(hint?:{language?:string;timezone?:string}): FingerprintConfig;
+export function generateFingerprint(hint?:{language?:string;timezone?:string;randomizeUa?:boolean;previousUa?:string}): FingerprintConfig;
+export function buildWindowsChromeUa(version:string, reduced?:boolean): string;
 export function createFingerprintView(options:{profile:Profile;partitionPrefix?:string;configureSession?:(session:Session)=>void|Promise<void>}):Promise<WebContentsView>;
 export interface Script { id:string;name:string;code:string;trigger:'manual'|'page-loaded';enabled:boolean;profileIds:string[];matches:string[];updatedAt:string }
 export type ScriptInput = Pick<Script,'code'|'trigger'|'profileIds'> & Partial<Pick<Script,'id'|'name'|'enabled'|'matches'>>;

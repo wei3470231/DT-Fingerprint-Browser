@@ -3,6 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 
+[assembly: System.Reflection.AssemblyVersion("2.7.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("2.7.0.0")]
+
 namespace BitFPManager
 {
     class Program

@@ -13,23 +13,21 @@ let isWindowClosing = false;
 
 const { app, BaseWindow, WebContentsView, ipcMain, session, Menu, BrowserWindow, screen } = require('electron');
 
-// 系统稳定性与证书安全放行：防止显卡驱动超时(TDR)引发蓝屏，放行代理中间人/自签名证书杜绝页面加载白屏
+// 防止显卡驱动超时导致浏览器退出。
 app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
 app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
-app.commandLine.appendSwitch('ignore-certificate-errors');
-app.commandLine.appendSwitch('allow-running-insecure-content');
 const fs = require('node:fs');
 const path = require('node:path');
 const url = require('node:url');
 const net = require('node:net');
-const { getEnvironment, loadAll, getSettings, getActiveFontInfo, ROOT_DIR, DATA_DIR, PROFILES_DIR, loadBookmarks, saveBookmarks } = require('../manager/store');
-const { applyProxy, closeCurrentBridge } = require('./proxy-helper');
+const { getEnvironment, getSettings, getActiveFontInfo, ROOT_DIR, DATA_DIR, PROFILES_DIR, loadBookmarks, saveBookmarks } = require('../manager/store');
+const { applyProxy, closeCurrentBridge, stopRotatingProxy } = require('./proxy-helper');
 const { PIPE_PATH } = require('../manager/ipc-hub');
 const { buildCookieUrl } = require('../shared/cookie-helper');
+const { buildWindowsChromeUa } = require('../../fp-sdk/lib/fp-generator');
 
 const LOCAL_TEST_PAGE_PATH = path.join(__dirname, 'testing', 'index.html');
 const LOCAL_TEST_PAGE_URL = url.pathToFileURL(LOCAL_TEST_PAGE_PATH).href;
-const STEALTH_PRELOAD = path.join(__dirname, 'stealth-preload.js');
 
 // 保证 F12 开发者工具每次弹出时大小固定为 800*600 且在当前屏幕工作区居中
 function attachDevToolsHandler(wc) {
@@ -269,6 +267,7 @@ let shellView = null;
 let tabs = [];
 let activeTabId = null;
 let currentEnv = env;
+let effectiveBrowserUa;
 let loadedExtensions = [];
 let cachedBookmarks = null;
 
@@ -907,10 +906,11 @@ async function createTab(targetUrl) {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false,
-      preload: STEALTH_PRELOAD
+      backgroundThrottling: false
     }
   });
+  view.webContents.setUserAgent(effectiveBrowserUa);
+  view.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
 
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.contentView.addChildView(view);
@@ -1027,60 +1027,36 @@ function injectBlockDialogs(wc) {
 }
 
 // 动态应用/切换代理
-async function updateSessionProxy() {
-  const sessions = [session.defaultSession, getEnvSession()];
-  const hasProxyConfig = Boolean(currentEnv.proxy && currentEnv.proxy.host && currentEnv.proxy.port);
-  const hasRotating = Boolean(currentEnv.rotatingProxy && currentEnv.rotatingProxy.enabled);
-
-  if ((userWantsProxy && hasProxyConfig) || hasRotating) {
-    for (const ses of sessions) {
-      await applyProxy(ses, userWantsProxy ? currentEnv.proxy : null, currentEnv.rotatingProxy);
-    }
-    isCurrentlyUsingProxy = true;
-    console.log(`[Proxy] 已切换为代理网络模式 (固定代理: ${hasProxyConfig ? currentEnv.proxy.host : '无'}, 动态轮换池: ${hasRotating ? '已激活' : '未开启'})`);
-  } else {
-    closeCurrentBridge();
-    for (const ses of sessions) {
-      await ses.setProxy({ mode: 'direct' });
-    }
-    isCurrentlyUsingProxy = false;
-    console.log(`[Proxy] 已切换为本地直连模式`);
+let proxyUpdate = Promise.resolve();
+async function updateSessionProxy(useProxy) {
+  const proxy = useProxy ? currentEnv.proxy : null;
+  const rotatingProxy = useProxy ? currentEnv.rotatingProxy : null;
+  for (const ses of [getEnvSession(), session.defaultSession]) {
+    await applyProxy(ses, proxy, rotatingProxy);
+    await ses.closeAllConnections();
   }
+  userWantsProxy = useProxy;
+  isCurrentlyUsingProxy = Boolean(rotatingProxy?.enabled || (proxy?.enabled && proxy.host && proxy.port));
 }
 
-// 5. 应用指纹与代理到 Session
-async function configureSession(ses, config) {
+function applySessionFingerprint(ses, config) {
   if (typeof ses.setFingerprintConfig !== 'function') {
     throw new Error('当前内核未提供 setFingerprintConfig，必须使用定制 electron.exe 启动！');
   }
 
-  // 配置代理 (含固定代理与多域名动态轮换代理池)
-  const hasProxyConfig = Boolean(config.proxy && config.proxy.host && config.proxy.port);
-  const hasRotating = Boolean(config.rotatingProxy && config.rotatingProxy.enabled);
-  if ((userWantsProxy && hasProxyConfig) || hasRotating) {
-    await applyProxy(ses, userWantsProxy ? config.proxy : null, config.rotatingProxy);
-    isCurrentlyUsingProxy = true;
-  } else {
-    closeCurrentBridge();
-    await ses.setProxy({ mode: 'direct' });
-    isCurrentlyUsingProxy = false;
-  }
-
-  // 配置 UA 与语言 (优先自定义 UA)
-  const effectiveUa = config.customUa || config.fp?.uaString;
-  const languages = config.fp?.navigator?.languages || ['en-US', 'en'];
+  const fp = config.fp;
+  const defaultUa = !fp.uaFormat && fp.ua?.fullVersion && fp.uaString === buildWindowsChromeUa(fp.ua.fullVersion, false)
+    ? buildWindowsChromeUa(fp.ua.fullVersion) : fp.uaString;
+  const effectiveUa = config.customUa || defaultUa;
+  const languages = fp.navigator?.languages || ['en-US', 'en'];
   ses.setUserAgent(effectiveUa, languages.join(','));
+  ses.setFingerprintConfig(JSON.stringify({ ...fp, uaString: effectiveUa }));
+  return effectiveUa;
+}
 
-  // 注入指纹内核核心配置 (含 timezone 地区时区，触发内核 SetTimeZoneOverride)
-  ses.setFingerprintConfig(JSON.stringify(config.fp));
-
-  // WebRTC 策略安全化：禁止非代理 UDP，防止 STUN 泄露宿主真实公网/局域网 IP
-  try {
-    if (typeof ses.setWebRTCIPHandlingPolicy === 'function') {
-      ses.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
-    }
-  } catch (_) {}
-
+async function configureSession(ses, config) {
+  effectiveBrowserUa = applySessionFingerprint(ses, config);
+  app.userAgentFallback = effectiveBrowserUa;
   ses.setPermissionCheckHandler(() => false);
 
   // 注入待应用的导入 Cookie
@@ -1300,27 +1276,27 @@ async function handleDispatchedSyncEvent(evt) {
 }
 
 // 6. 热更新指纹
-async function applyHotFingerprint(newFp) {
-  currentEnv.fp = newFp;
-  // 如果当前环境设置了自定义 UA，指纹热更新时 UA 保持自定义不变
-  const effectiveUa = currentEnv.customUa || newFp.uaString;
+function applyHotFingerprint(config) {
   for (const s of [session.defaultSession, getEnvSession()]) {
-    const languages = newFp.navigator?.languages || ['en-US', 'en'];
-    s.setUserAgent(effectiveUa, languages.join(','));
-    s.setFingerprintConfig(JSON.stringify(newFp));
+    effectiveBrowserUa = applySessionFingerprint(s, config);
   }
+  app.userAgentFallback = effectiveBrowserUa;
+  currentEnv.fp = config.fp;
+  currentEnv.customUa = config.customUa;
 
   // 刷新所有已打开的页面使新指纹即刻生效
   for (const tab of tabs) {
     if (tab.view && tab.view.webContents && !tab.view.webContents.isDestroyed()) {
+      tab.view.webContents.setUserAgent(effectiveBrowserUa);
       tab.view.webContents.reload();
     }
   }
   notifyShell();
-  console.log(`[Hot Update] 窗口已热加载新指纹: ${newFp.seed}`);
+  console.log('[Hot Update] 窗口已热加载新指纹');
 }
 
 app.whenReady().then(async () => {
+  await updateSessionProxy(userWantsProxy);
   await configureSession(session.defaultSession, currentEnv);
   await configureSession(getEnvSession(), currentEnv);
 
@@ -1330,12 +1306,6 @@ app.whenReady().then(async () => {
       event.preventDefault();
       callback(currentEnv.proxy.username, currentEnv.proxy.password || '');
     }
-  });
-
-  // 放行自签名证书与代理中间人证书，杜绝因证书不受信任导致页面一片白板
-  app.on('certificate-error', (event, _webContents, _url, _error, _certificate, callback) => {
-    event.preventDefault();
-    callback(true);
   });
 
 // 插件兼容性安全预处理 (解决部分 Chrome 插件因包含 Electron 不支持的权限导致 Chromium C++ FATAL DCHECK 崩溃)
@@ -1655,10 +1625,11 @@ if (typeof chrome !== 'undefined') {
     }
   });
 
-  ipcMain.on('action-toggle-proxy', async (_event, useProxy) => {
-    userWantsProxy = Boolean(useProxy);
-    await updateSessionProxy();
-    notifyShell();
+  ipcMain.on('action-toggle-proxy', (event, useProxy) => {
+    if (event.sender !== shellView?.webContents) return;
+    proxyUpdate = proxyUpdate.then(() => updateSessionProxy(Boolean(useProxy)))
+      .catch(err => console.error('[Proxy] 切换失败:', err.message))
+      .finally(notifyShell);
   });
 
   ipcMain.on('action-open-extension-page', (_event, targetUrl) => {
@@ -1906,6 +1877,8 @@ if (typeof chrome !== 'undefined') {
   // 自动接入浏览器多标签管理体系，显示在下方内容区，并在顶栏标签栏显示
   app.on('web-contents-created', (_event, contents) => {
     if (contents.getType() !== 'window') return;
+    contents.setUserAgent(effectiveBrowserUa);
+    contents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
     setImmediate(() => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       if (shellView && shellView.webContents === contents) return;
@@ -1955,6 +1928,7 @@ if (typeof chrome !== 'undefined') {
       hubSocket = null;
     }
     closeCurrentBridge();
+    stopRotatingProxy();
     app.quit();
   });
 
@@ -1965,31 +1939,19 @@ if (typeof chrome !== 'undefined') {
   // 6. 连接至管理器 IPC Hub 接收平铺控制、Cookie交换与键鼠同步广播
   connectToHub();
 
-  // 6. 热更新检查优化：通过 mtimeMs 避免无意义的高频磁盘读取
-  const { CONFIG_FILE } = require('../manager/store');
-  let lastMtime = 0;
-  let lastSeed = currentEnv.fp?.seed;
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      lastMtime = fs.statSync(CONFIG_FILE).mtimeMs;
-    }
-  } catch (_) {}
-
-  setInterval(() => {
-    try {
-      if (!fs.existsSync(CONFIG_FILE)) return;
-      const mtime = fs.statSync(CONFIG_FILE).mtimeMs;
-      if (mtime <= lastMtime) return;
-      lastMtime = mtime;
-
-      const latestList = loadAll();
-      const latestEnv = latestList.find(i => i.id === currentEnv.id);
-      if (latestEnv && latestEnv.fp && latestEnv.fp.seed !== lastSeed) {
-        lastSeed = latestEnv.fp.seed;
-        applyHotFingerprint(latestEnv.fp);
+  // store 已按配置文件的修改时间缓存数据。
+  if (envId) {
+    setInterval(() => {
+      try {
+        const latestEnv = getEnvironment(envId);
+        if (latestEnv?.fp && latestEnv.fp.seed !== currentEnv.fp?.seed) {
+          applyHotFingerprint(latestEnv);
+        }
+      } catch (err) {
+        console.warn('[Hot Update] 读取或更新指纹失败:', err.message);
       }
-    } catch {}
-  }, 1000);
+    }, 1000);
+  }
 
   console.log(`[Window Started] ${currentEnv.name} | Port: ${currentEnv.remotePort} | Profile: ${absUserData}`);
 }).catch(err => {

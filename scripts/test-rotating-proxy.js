@@ -96,10 +96,12 @@ async function runTest() {
   assert(testBypassLocal === 'DIRECT', '命中 <local> 本地服务 -> 准确返回 DIRECT (走本地真实 IP)');
 
   const testRotatingMatch = vm.runInContext('FindProxyForURL("https://challenges.cloudflare.com/turnstile", "challenges.cloudflare.com")', pacContext);
-  assert(testRotatingMatch.includes('PROXY 127.0.0.1:2899'), '命中动态轮换目标规则 challenges.cloudflare.com -> 准确分配至 127.0.0.1 轮换分发端口');
+  assert(/^PROXY 127\.0\.0\.1:2899[1-3]$/.test(testRotatingMatch), '命中动态轮换目标规则仅走本地分发端口');
 
   const testFallback = vm.runInContext('FindProxyForURL("https://other-unmatched.com", "other-unmatched.com")', pacContext);
-  assert(testFallback.includes('PROXY 192.168.1.1:8080'), '未命中白名单与轮换规则的外部网站 -> 准确走 fallback 固定代理');
+  assert(testFallback === 'PROXY 192.168.1.1:8080', '固定回退代理不可用时没有 DIRECT 后备路径');
+  const misleadingUrl = vm.runInContext('FindProxyForURL("https://other-unmatched.com/?next=my-internal.site", "other-unmatched.com")', pacContext);
+  assert(misleadingUrl === testFallback, 'URL 中出现白名单字符串不会让外部主机绕过代理');
 
   // 4. 测试本地分发调度器启动与生命周期
   console.log('\n[4/5] 测试本地分发调度器端口绑定与安全退出...');

@@ -11,6 +11,9 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
+[assembly: AssemblyVersion("2.7.0.0")]
+[assembly: AssemblyFileVersion("2.7.0.0")]
+
 namespace BitFPManager
 {
     public class InstallerForm : Form
@@ -752,7 +755,7 @@ namespace BitFPManager
                     if (key != null)
                     {
                         key.SetValue("DisplayName", "DT - 指纹浏览器");
-                        key.SetValue("DisplayVersion", "2.6.0");
+                        key.SetValue("DisplayVersion", "2.7.0");
                         key.SetValue("Publisher", "DT Studio");
                         key.SetValue("DisplayIcon", Path.Combine(installDir, "app.ico"));
                         key.SetValue("InstallLocation", installDir);

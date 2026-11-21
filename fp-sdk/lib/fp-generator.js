@@ -24,7 +24,7 @@ function pick(seed, purpose, arr) {
 
 const FALLBACK_TEMPLATES = [
   {
-    uaPlatform: 'Win32',
+    uaPlatform: 'Windows',
     platform: 'Win32',
     platformVersion: '15.0.0',
     cores: [8, 12, 16],
@@ -59,7 +59,12 @@ function loadTemplates() {
   return templatesCache;
 }
 
-// geoHint 预留给将来按代理 IP 国家填写，例如 { language: 'zh-CN', timezone: 'Asia/Shanghai' }
+function buildWindowsChromeUa(version, reduced = true) {
+  const uaVersion = reduced ? `${version.split('.')[0]}.0.0.0` : version;
+  return `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${uaVersion} Safari/537.36`;
+}
+
+// geoHint 可以同时指定环境的语言、时区和 UA 随机化选项。
 function generateFingerprint(geoHint = {}) {
   const seed = crypto.randomBytes(8).toString('hex');
   const templates = loadTemplates();
@@ -67,6 +72,9 @@ function generateFingerprint(geoHint = {}) {
 
   // UA 版本优先使用内核真实 Chromium 版本，Node CLI 环境回退到当前内核版本 152.0.7977.130
   const chromeVer = process.versions.chrome || '152.0.7977.130';
+  // 当前内核的 Client Hints 固定报告实际 Chromium 版本。
+  const availableFormats = [true, false].filter(reduced => buildWindowsChromeUa(chromeVer, reduced) !== geoHint.previousUa);
+  const reducedUa = !geoHint.randomizeUa || pick(seed, 'uaFormat', availableFormats);
 
   const cores = pick(seed, 'cores', tpl.cores);
   const memory = pick(seed, 'memory', tpl.memory);
@@ -79,7 +87,8 @@ function generateFingerprint(geoHint = {}) {
   return {
     schemaVersion: 1,
     seed,
-    uaString: `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeVer} Safari/537.36`,
+    uaString: buildWindowsChromeUa(chromeVer, reducedUa),
+    uaFormat: reducedUa ? 'reduced' : 'full',
     ua: {
       brand: 'Google Chrome',
       fullVersion: chromeVer,
@@ -113,4 +122,4 @@ function generateFingerprint(geoHint = {}) {
   };
 }
 
-module.exports = { generateFingerprint };
+module.exports = { generateFingerprint, buildWindowsChromeUa };

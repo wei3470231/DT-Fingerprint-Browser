@@ -10,9 +10,9 @@
 > 欢迎进群交流指纹对抗技术、提交 BUG 与功能建议、获取最新编译发布的便携包与安装包！
 >
 > 📥 **Release 官方最新版本下载（纯英文标准命名，含版本号）**：
-> - 📦 **独立安装向导包**：[`DT-Fingerprint-Browser-v2.6-Setup.exe`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（自动配置用户 PATH 环境变量与开机自启）
-> - 🗜️ **绿色便携压缩包**：[`DT-Fingerprint-Browser-v2.6-Portable.zip`](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/latest)（解压即用，无任何绝对路径依赖）
-> - 🌐 **GitHub Releases 发布页面**：[https://github.com/wei3470231/DT-Fingerprint-Browser/releases](https://github.com/wei3470231/DT-Fingerprint-Browser/releases)
+> - 📦 **独立安装向导包**：在最新发布中下载 `*-Setup.exe`（支持配置用户 PATH 环境变量与开机自启）
+> - 🗜️ **绿色便携压缩包**：在最新发布中下载 `*-Portable.zip`（解压即用）
+> - 🌐 [GitHub Releases 发布页面](https://github.com/wei3470231/DT-Fingerprint-Browser/releases) · [v2.7 更新记录](RELEASE_NOTES_v2.7.md)
 
 ---
 
@@ -114,7 +114,7 @@ node scripts/test-portable.js
 * 验证精简系统兜底字体库 `Fonts/`；
 * 验证 CLI Chrome Drop-in 模式（`--version`、`--product-version`）；
 * 验证 CLI JSON 管理指令（`list`、`font status`、`theme status`、`settings get`）；
-* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.6-Portable.zip`。
+* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.7-Portable.zip`。
 
 ### 2.2 一键生成便携包与商业安装程序
 在项目根目录下执行：
@@ -124,8 +124,8 @@ node scripts/build-installer.js
 构建脚本将全自动完成：
 1. **源码脱敏加密**：使用 Terser 进行变量混淆并打包进虚拟归档 `app.asar`；
 2. **生成便携目录**：在 `dist/payload/` 编译生成原生无黑框启动器与 CLI 工具；
-3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.6-Portable.zip`（约 200 MB，无中文字符，解压即用）；
-4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v2.6-Setup.exe`（自动配置用户 PATH 与开机自启）。
+3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v2.7-Portable.zip`（约 200 MB，无中文字符，解压即用）；
+4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v2.7-Setup.exe`（自动配置用户 PATH 与开机自启）。
 
 ### 2.3 根目录快捷调用机制
 在根目录下提供了 `dt-cli.cmd` 与 `dt.cmd` 包装脚本：
@@ -222,7 +222,7 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 * **居中纯免费标语**：醒目标注 `🛡️ 商业级对抗内核 · 永久纯免费 · 100%完全开源 · 拒绝收费套路`，宣告拒绝商业割韭菜。
 
 ### 3.18 GitHub Releases 实时版本检测与在线更新提醒
-* **右下角版本感知**：管理器右下角自动展示当前客户端版本号（`v2.6`）；
+* **右下角版本感知**：管理器右下角展示当前客户端版本号。
 * **静默异步版本探测**：启动时自动异步请求 GitHub Releases API（`wei3470231/DT-Fingerprint-Browser`）；
 * **一键直达新版本**：若检测到线上存在高于本地的最新版本，右下角将以高亮橙色徽章提示 `发现新版本: vX.X.X (点击更新)`，点击后立即通过系统默认浏览器打开 GitHub Release 发布页面，轻松下载最新便携包。
 
@@ -258,13 +258,13 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 * **全生命周期位置追踪**：监听窗口 `move`、`resize` 与 `close` 事件，防抖保存窗口坐标（`x`、`y`）、尺寸（`width`、`height`）及最大化状态至配置目录的 `window-state.json`；
 * **多屏拔出防越界纠偏**：启动时检测所有当前连接的显示器物理边界，若先前所在的外接屏幕已拔出，自动纠偏回当前主屏可见工作区，杜绝窗口飞出屏幕外。
 
-### 3.24 自定义 UA 预设库支持与随机指纹防覆盖保护
+### 3.24 自定义 UA 与随机指纹
 * **主流现代浏览器 UA 库**：内置近几代主流版本的 macOS / Windows Chrome（132~134）、Firefox（134~135）及 Safari 预设；
-* **自定义 UA 随机指纹锁定**：用户手动指定自定义 UA 或选择预设后，在执行“一键改指纹 / 随机指纹”时，自定义 UA 严格保持锁定，不被通用随机指纹库覆写。
+* 手动 UA 和预设用于网站兼容性测试。执行「改指纹」会替换现有 UA，自动选用当前 Chromium 版本的简化或完整格式。
 
 ### 3.25 代理直连一键切换与网络安全增强
 * **顶栏代理快速开关**：浏览器顶部导航栏新增 `[✓] 使用代理` 复选框（默认勾选），支持在不重启浏览器的情况下无缝热切换代理与本地直连网络；
-* **WebRTC 真实 IP 防泄漏**：Chromium 会话强制启用 `disable_non_proxied_udp` 策略，杜绝通过 WebRTC STUN 协议嗅探泄露本地物理公网 IP；
+* 网页标签启用 `disable_non_proxied_udp` 策略，限制 WebRTC 的非代理 UDP 通信。
 * **SOCKS5 外网真实连通性探测**：通过向外网目标发送 SOCKS5 CONNECT 握手确认连通，彻底消除假阳性问题；
 * **CDP 批量关闭标签页稳定性提升**：完善 WebContents 销毁监听防护，彻底杜绝自动化并发快速关闭标签页时的底层崩溃。
 
@@ -276,7 +276,7 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
   3. `http://账号:密码@IP:端口`（如 `http://admin:123456@1.2.3.4:8080`）
   4. `socks5://账号:密码@IP:端口`（如 `socks5://u:p@1.2.3.4:1080`）
 * **微秒级无感调度分发中枢**：内置轻量透明代理分发器（`RotatingDispatcherServer`），在 TCP/CONNECT 握手层工作，为每次外发的新连接**即时抽取独立代理**；
-* **确保同一个页面多次刷新或点击绝对换新 IP**：自动阻断长连接（Keep-Alive）复用，确保对目标域名的任何一次点击、刷新或异步请求，都强制建立新 TCP 连接并分配全新的代理 IP；
+* 轮换池按新建代理连接抽取节点。页面刷新、请求和标签页可能复用现有连接。命中轮换规则而代理不可用时，请求会失败。
 * **多域名精准分流与回退保护**：支持配置多个目标域名/URL 规则（以分号 `;` 分隔，支持 `*` 通配符）。命中规则的访问走动态轮换代理池，其余流量平滑回退至基础代理或直连；
 * **多重故障快速重试**：当抽取的上游代理网络抖动超时时，调度器自动在 300ms 内快速切换备用候选节点重试，杜绝页面卡死。
 
@@ -1068,9 +1068,7 @@ main();
 
 ### 8.5 ⚡ 目标多域名动态轮换代理池（本地 .txt 文档，每连接换新 IP）
 * **功能定义**：为指定环境接入一个包含数千条代理的本地 `.txt` 文本，针对设定的多个目标域名（如 `challenges.cloudflare.com;*.turnstile.com`），在每次新建连接时随机/轮询抽取独立上游代理并完成认证隧道。
-* **确保同一个页面多次刷新或点击绝对换新 IP**：
-  * 在底层代理调度器（`RotatingDispatcherServer`）中，为每次到达的客户端 HTTP CONNECT 隧道或原始 Socket 独立分配新代理；
-  * 主动断开并禁用针对目标域名的长连接连接池（Keep-Alive Pooling）复用，确保在同一页面上的每次 AJAX 请求、多次手动刷新、多次点击验证码，均强制发起全新连接并分配不同 IP。
+* 分发器为每条新的代理连接抽取节点。页面刷新和子请求可能复用已有连接，代理故障会阻断应走代理的请求。
 * **支持的本地代理文档格式**（一行一个，自动过滤注释与空行）：
   ```text
   112.45.12.88:8080
@@ -1191,10 +1189,10 @@ node scripts/build-installer.js
 
 构建完成后将在 `dist/` 目录下生成两类产物（文件名均为标准纯英文并带版本号，兼容 GitHub Releases 上传与海外环境）：
 1. **独立单文件安装程序**：
-   * 路径：`dist\DT-Fingerprint-Browser-v2.6-Setup.exe`（约 200 MB）
+   * 路径：`dist\DT-Fingerprint-Browser-v2.7-Setup.exe`（约 200 MB）
    * 适用场景：GitHub Release 发布、对外分享的标准安装包，带安装向导界面、开机自启复选框、PATH 自动注册与控制面板卸载项。
 2. **便携即用免安装包与目录**：
-   * 压缩包路径：`dist\DT-Fingerprint-Browser-v2.6-Portable.zip`（约 200 MB，解压即用）
+   * 压缩包路径：`dist\DT-Fingerprint-Browser-v2.7-Portable.zip`（约 200 MB，解压即用）
    * 运行目录：`dist\payload\`
    * 适用场景：GitHub Release 发布、解压即用的免安装绿色便携版，直接双击 `DT-Fingerprint-Browser.exe` 或 `DT - 指纹浏览器.exe` 即可运行。
 

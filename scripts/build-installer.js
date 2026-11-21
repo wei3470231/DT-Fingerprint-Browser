@@ -9,7 +9,8 @@ const DIST = path.join(ROOT, 'dist');
 const STAGING = path.join(DIST, 'staging');
 const PAYLOAD = path.join(DIST, 'payload');
 const ZIP_FILE = path.join(DIST, 'payload.zip');
-const VERSION = 'v2.6';
+const APP_VERSION = '2.7.0';
+const VERSION = 'v' + APP_VERSION.replace(/\.0$/, '');
 const SETUP_EXE = path.join(DIST, `DT-Fingerprint-Browser-${VERSION}-Setup.exe`);
 const PORTABLE_ZIP = path.join(DIST, `DT-Fingerprint-Browser-${VERSION}-Portable.zip`);
 
@@ -24,21 +25,7 @@ function logStep(step, msg) {
 }
 
 function cleanDir(dir) {
-  if (fs.existsSync(dir)) {
-    for (let i = 0; i < 3; i++) {
-      try {
-        fs.rmSync(dir, { recursive: true, force: true });
-        break;
-      } catch (err) {
-        if (i === 2) throw err;
-        try {
-          cp.execSync('taskkill /F /IM electron.exe /T 2>nul || exit 0', { shell: 'cmd.exe' });
-        } catch (_) {}
-        const sleep = ms => { const at = Date.now(); while (Date.now() - at < ms) {} };
-        sleep(800);
-      }
-    }
-  }
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 2, retryDelay: 400 });
   fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -136,12 +123,10 @@ async function main() {
   // 复制 src/
   copyDirRecursive(path.join(ROOT, 'src'), path.join(STAGING, 'src'));
   // 复制 fp-sdk/
-  copyDirRecursive(path.join(ROOT, 'fp-sdk'), path.join(STAGING, 'fp-sdk'), (srcPath) => {
-    // 排除 fp-sdk 内部的 examples 和 tests
-    const norm = srcPath.replace(/\\/g, '/');
-    if (norm.includes('/examples') || norm.includes('/tests')) return false;
-    return true;
-  });
+  const sdkRoot = path.join(ROOT, 'fp-sdk');
+  const sdkExcluded = ['examples', 'tests', 'test-results', 'node_modules', 'exports'];
+  copyDirRecursive(sdkRoot, path.join(STAGING, 'fp-sdk'), srcPath =>
+    !sdkExcluded.includes(path.relative(sdkRoot, srcPath).split(path.sep)[0]));
   // 复制 cli.js
   fs.copyFileSync(path.join(ROOT, 'cli.js'), path.join(STAGING, 'cli.js'));
   // 复制 runtime-path.js
@@ -155,7 +140,7 @@ async function main() {
   // 创建精简 package.json (以 index.js 为主入口，实现管理器与指纹浏览器多进程分流)
   const pkgJson = {
     name: 'dt-fingerprint-browser',
-    version: '2.6.0',
+    version: APP_VERSION,
     description: 'DT Fingerprint Browser Commercial Standard Edition',
     main: 'index.js'
   };

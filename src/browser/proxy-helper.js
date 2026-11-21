@@ -2,7 +2,7 @@
 
 const { createSocks5AuthBridge } = require('./socks5-bridge');
 const { parseProxyString } = require('../manager/proxy-parser');
-const { startRotatingProxy, stopRotatingProxy, buildCombinedPacScript } = require('./rotating-proxy');
+const { BLOCKED_PROXY_PORT, startRotatingProxy, stopRotatingProxy, buildCombinedPacScript } = require('./rotating-proxy');
 
 /**
  * 代理配置与生效助手：
@@ -15,7 +15,8 @@ const { startRotatingProxy, stopRotatingProxy, buildCombinedPacScript } = requir
 async function applyProxy(ses, proxyConfig, rotatingConfig) {
   // 1. 若配置了目标域名动态轮换代理池，优先启动本地多路分发调度器
   let rotatingInfo = null;
-  if (rotatingConfig && rotatingConfig.enabled) {
+  const rotatingEnabled = Boolean(rotatingConfig?.enabled);
+  if (rotatingEnabled) {
     try {
       rotatingInfo = await startRotatingProxy(rotatingConfig);
     } catch (rErr) {
@@ -28,9 +29,8 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
   const hasBaseProxy = Boolean(proxyConfig && proxyConfig.enabled && proxyConfig.host && proxyConfig.port);
 
   // 既无基础代理，也未开启动态轮换代理池 -> 直连模式
-  if (!hasBaseProxy && !rotatingInfo) {
+  if (!hasBaseProxy && !rotatingEnabled) {
     closeCurrentBridge();
-    stopRotatingProxy();
     await ses.setProxy({ mode: 'direct' });
     return null;
   }
@@ -77,7 +77,7 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
           console.log(`[Proxy] SOCKS5 认证中转已就绪: 127.0.0.1:${bridge.port} -> ${host}:${port}`);
         } catch (e) {
           console.error('[Proxy] 启动本地 SOCKS5 中转失败:', e.message);
-          effectiveEndpoint = `socks5://${host}:${port}`;
+          effectiveEndpoint = `http://127.0.0.1:${BLOCKED_PROXY_PORT}`;
         }
       }
     } else {
@@ -89,17 +89,26 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
   }
 
   // 2. 如果启用了目标域名动态轮换代理池，构建多路综合 PAC 脚本
-  if (rotatingInfo && (rotatingInfo.ports || rotatingInfo.port) && rotatingInfo.rules) {
-    const fallbackPac = hasBaseProxy
-      ? (proto === 'socks5' ? `SOCKS5 ${bridge ? `127.0.0.1:${bridge.port}` : `${host}:${port}`}` : `PROXY ${host}:${port}`)
-      : 'DIRECT';
+  const pacEndpoint = effectiveEndpoint === 'DIRECT' ? 'DIRECT' :
+    effectiveEndpoint.replace(/^socks5:\/\//, 'SOCKS5 ').replace(/^http:\/\//, 'PROXY ');
 
-    const effectivePorts = rotatingInfo.ports || [rotatingInfo.port];
-    const pac = buildCombinedPacScript(effectivePorts, rotatingInfo.rules, fallbackPac, proxyConfig?.bypass);
+  if (rotatingEnabled) {
+    const rules = rotatingConfig.rules?.trim();
+    if (!rules) {
+      await ses.setProxy({ proxyRules: `http://127.0.0.1:${BLOCKED_PROXY_PORT}` });
+      console.error('[Proxy] 动态轮换未配置目标域名，已阻断网络请求');
+      return bridge;
+    }
+    const ports = rotatingInfo?.ports || [];
+    const pac = buildCombinedPacScript(ports, rules, pacEndpoint, proxyConfig?.bypass);
     await ses.setProxy({
       pacScript: `data:application/x-ns-proxy-autoconfig;base64,${Buffer.from(pac).toString('base64')}`
     });
-    console.log(`[Proxy] 已激活指定域名动态轮换代理池: 规则[${rotatingInfo.rules}], 挂载代理[${rotatingInfo.count}条], 3独立调度端口[${effectivePorts.join(', ')}]`);
+    if (rotatingInfo) {
+      console.log(`[Proxy] 动态轮换代理池已启用: 规则[${rules}]，节点[${rotatingInfo.count}]，端口[${ports.join(', ')}]`);
+    } else {
+      console.error('[Proxy] 动态轮换代理池不可用，已阻断命中规则的请求');
+    }
     return bridge;
   }
 
@@ -135,9 +144,6 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
     }
     const bypassJsonList = Array.from(bypassSet).map(r => JSON.stringify(r));
 
-    const proxyType = proto === 'socks5' ? 'SOCKS5' : 'PROXY';
-    const pacTarget = bridge ? `127.0.0.1:${bridge.port}` : `${host}:${port}`;
-
     const pac = `
       function FindProxyForURL(url, host) {
         // 1. 白名单域名走本地 IP (不使用任何代理，直接走 DIRECT)
@@ -145,7 +151,7 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
         for (var b = 0; b < bypassRules.length; b++) {
           var bp = bypassRules[b];
           if (bp === "<local>" && isPlainHostName(host)) return "DIRECT";
-          if (shExpMatch(host, bp) || dnsDomainIs(host, bp) || shExpMatch(url, bp) || shExpMatch(url, "*" + bp + "*")) {
+          if (shExpMatch(host, bp) || dnsDomainIs(host, bp.charAt(0) === "." ? bp : "." + bp)) {
             return "DIRECT";
           }
         }
@@ -155,7 +161,7 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
         for (var i = 0; i < rules.length; i++) {
           var pattern = rules[i];
           if (shExpMatch(host, pattern) || dnsDomainIs(host, pattern) || shExpMatch(url, pattern) || shExpMatch(url, "*" + pattern + "*")) {
-            return "${proxyType} ${pacTarget}; DIRECT";
+            return ${JSON.stringify(pacEndpoint)};
           }
         }
         return "DIRECT";
@@ -189,7 +195,6 @@ function closeCurrentBridge() {
     activeBridge = null;
     activeBridgeKey = null;
   }
-  stopRotatingProxy();
 }
 
 module.exports = { applyProxy, closeCurrentBridge, stopRotatingProxy };

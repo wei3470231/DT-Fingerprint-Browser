@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const net = require('node:net');
-const { generateFingerprint } = require('../../fp-sdk');
+const { generateFingerprint, buildWindowsChromeUa } = require('../../fp-sdk');
 const { parseProxyString } = require('./proxy-parser');
 
 function parseAndBuildProxyConfig(proxyInput) {
@@ -292,9 +292,6 @@ function normalizeRecord(env) {
   } else if (typeof env.customUa === 'string') {
     env.customUa = env.customUa.trim();
   }
-  if (env.customUa && env.fp) {
-    env.fp.uaString = env.customUa;
-  }
   return env;
 }
 
@@ -539,7 +536,7 @@ function saveAll(list) {
 function getRandomFp(options = {}) {
   const language = options.language || 'en-US';
   const timezone = options.timezone || 'America/New_York';
-  return generateFingerprint({ language, timezone });
+  return generateFingerprint({ language, timezone, randomizeUa: true, previousUa: options.previousUa });
 }
 
 function createRecord(data = {}) {
@@ -553,9 +550,6 @@ function createRecord(data = {}) {
 
   const customUa = (typeof data.customUa === 'string') ? data.customUa.trim() : '';
   const fp = data.fp || generateFingerprint({ language, timezone });
-  if (customUa) {
-    fp.uaString = customUa;
-  }
 
   return {
     id,
@@ -707,8 +701,10 @@ function updateEnvironment(id, updates) {
   if (updates.customUa !== undefined) {
     const trimmedUa = typeof updates.customUa === 'string' ? updates.customUa.trim() : '';
     updates.customUa = trimmedUa;
-    if (trimmedUa && list[index].fp) {
-      list[index].fp.uaString = trimmedUa;
+    const current = list[index];
+    const fp = updates.fp || current.fp;
+    if (!trimmedUa && current.customUa && fp?.uaString === current.customUa && fp.ua?.fullVersion) {
+      updates.fp = { ...fp, uaString: buildWindowsChromeUa(fp.ua.fullVersion) };
     }
   }
 
@@ -804,12 +800,8 @@ function regenerateFp(id, customTimezone) {
   const env = list[index];
   const tz = customTimezone || env.timezone || 'America/New_York';
   env.timezone = tz;
-  const newFp = generateFingerprint({ language: env.language, timezone: tz });
-  // 关键规则：自定义 UA 在随机生成指纹时不被随机覆盖
-  if (env.customUa && env.customUa.trim()) {
-    newFp.uaString = env.customUa.trim();
-  }
-  env.fp = newFp;
+  env.fp = getRandomFp({ language: env.language, timezone: tz, previousUa: env.customUa || env.fp?.uaString });
+  env.customUa = '';
   env.updatedAt = new Date().toISOString();
   saveAll(list);
   return env;
