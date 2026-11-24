@@ -19,12 +19,14 @@ const runtime = path.join(app, 'runtime');
 const launcher = path.join(app, 'DT-CLI.exe');
 const envId = 'portable-fixture';
 const exec = promisify(execFile);
+const cleanEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toLowerCase() !== 'path'));
+cleanEnv.PATH = '';
 let running = false;
 
 function cli(...args) {
   try {
     return execFileSync(launcher, args, {
-      cwd: app, encoding: 'utf8', windowsHide: true, timeout: 900000,
+      cwd: app, env: cleanEnv, encoding: 'utf8', windowsHide: true, timeout: 900000,
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
   } catch (error) {
@@ -40,7 +42,7 @@ function json(...args) {
 
 async function jsonAsync(...args) {
   const { stdout } = await exec(launcher, [...args, '--json'], {
-    cwd: app, encoding: 'utf8', windowsHide: true, timeout: 120000,
+    cwd: app, env: cleanEnv, encoding: 'utf8', windowsHide: true, timeout: 120000,
   });
   const response = JSON.parse(stdout);
   assert.equal(response.code, 0, response.message);
@@ -51,7 +53,7 @@ async function warmUpChromium(electron, executable) {
   const env = { ...process.env, DT_APP_ROOT: app };
   delete env.ELECTRON_RUN_AS_NODE;
   const launcher = spawn(path.join(app, 'DT-Fingerprint-Browser.exe'), ['--minimized'], {
-    cwd: app, env, windowsHide: true, stdio: 'ignore',
+    cwd: app, env: { ...cleanEnv, DT_APP_ROOT: app }, windowsHide: true, stdio: 'ignore',
   });
   try {
     const until = Date.now() + 120000;
@@ -122,7 +124,10 @@ async function main() {
   assert.ok(fs.existsSync(launcher));
   assert.ok(fs.existsSync(path.join(app, 'DT-Fingerprint-Browser.exe')));
   assert.ok(fs.existsSync(path.join(app, 'app.asar')));
-  assert.ok(fs.existsSync(path.join(app, 'scripts', 'install-core.ps1')));
+  assert.ok(fs.existsSync(path.join(app, 'scripts', 'RuntimeTools.exe')));
+  assert.ok(fs.existsSync(path.join(app, 'scripts', 'RuntimeTools.exe.config')));
+  assert.ok(!fs.existsSync(path.join(app, 'scripts', 'install-core.ps1')));
+  assert.ok(!fs.existsSync(path.join(app, 'scripts', 'spawn-browser.ps1')));
   assert.ok(!fs.existsSync(path.join(app, 'fingerprint-test')));
   assert.ok(fs.existsSync(path.join(app, 'scripts', 'ChromiumWindowIcon.exe')));
   assert.ok(fs.readdirSync(path.join(app, 'Fonts')).length);
@@ -158,14 +163,26 @@ async function main() {
   assert.equal(proxy.scope, 'rules');
   assert.equal(json('get', '--id', id).proxy.bypass, 'white.target.release.test');
   json('set-proxy', '--id', id, '--clear');
-  console.log('PASS bundled Electron starts the packaged CLI before any local ZIP is supplied');
+  console.log('PASS bundled Electron starts the packaged CLI with empty PATH and without a local ZIP');
+
+  const electronFixture = json('create', '--name', 'Fresh Electron environment', '--core', 'electron',
+    '--port', String(await freePort()), '--url', 'about:blank');
+  running = true;
+  const electronStart = json('start', '--id', electronFixture.id);
+  assert.equal(electronStart.core, 'electron');
+  assert.match(electronStart.ws, /^ws:\/\/127\.0\.0\.1:/);
+  assert.equal(json('status', '--id', electronFixture.id).info.pid, electronStart.pid);
+  assert.ok(!fs.existsSync(chromium), 'Electron can run before Chromium is installed');
+  json('stop', '--id', electronFixture.id);
+  running = false;
+  console.log('PASS newly created Electron environment opens with empty PATH before Chromium is installed');
 
   if (process.env.DT_TEST_CORE_ARCHIVES) {
     fs.copyFileSync(path.join(process.env.DT_TEST_CORE_ARCHIVES, 'runtime_chromium.zip'), path.join(app, 'runtime_chromium.zip'));
   }
 
   await warmUpChromium(electron, chromium);
-  console.log('PASS fresh manager automatically installed Chromium before any environment was launched');
+  console.log('PASS fresh manager automatically prepared Chromium with empty PATH and native tools');
 
   const independent = json('create', '--name', 'Parallel Chromium', '--core', 'chromium', '--no-port', '--url', 'about:blank');
   running = true;

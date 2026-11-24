@@ -93,7 +93,7 @@ function compileCs(srcFile, outFile, isGui, extraFlags = []) {
     `/win32icon:${ICON}`,
     `/out:${outFile}`,
     ...extraFlags,
-    srcFile
+    ...[].concat(srcFile)
   ];
   try {
     cp.execFileSync(CSC, flags, { stdio: 'pipe' });
@@ -186,14 +186,20 @@ async function main() {
   fs.rmSync(STAGING, { recursive: true, force: true });
 
   // 5. 将 Electron 内核及 Chromium 按需安装脚本打入发布包。
-  logStep('5/8', '集成 Electron 内核、Chromium 下载脚本和窗口图标工具...');
+  logStep('5/8', '集成 Electron 内核、内核下载与窗口启动工具...');
   const runtimeScripts = path.join(PAYLOAD, 'scripts');
   fs.mkdirSync(runtimeScripts, { recursive: true });
-  for (const script of ['install-core.ps1', 'cores.json', 'spawn-browser.ps1']) {
-    fs.copyFileSync(path.join(ROOT, 'scripts', script), path.join(runtimeScripts, script));
+  for (const file of ['cores.json', 'RuntimeTools.exe.config']) {
+    fs.copyFileSync(path.join(ROOT, 'scripts', file), path.join(runtimeScripts, file));
   }
   await bundleElectron();
   compileCs(path.join(ROOT, 'scripts', 'ChromiumWindowIcon.cs'), path.join(runtimeScripts, 'ChromiumWindowIcon.exe'), true);
+  compileCs(['RuntimeTools.cs', 'RuntimeCoreInstaller.cs'].map(file => path.join(ROOT, 'scripts', file)),
+    path.join(runtimeScripts, 'RuntimeTools.exe'), false, [
+      '/r:System.Web.Extensions.dll',
+      '/r:System.IO.Compression.dll',
+      '/r:System.IO.Compression.FileSystem.dll',
+    ]);
 
   // 5.5 复制内置本地精选字体库 (Fonts) 为精简版 Windows 系统提供开箱即用字体支持
   const FONTS_SRC = path.join(ROOT, 'Fonts');

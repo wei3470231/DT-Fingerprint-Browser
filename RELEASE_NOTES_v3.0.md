@@ -4,7 +4,7 @@
 
 管理器顶部的 **新建环境内核** 默认为 Chromium。创建环境时保存该内核，列表分别以紫色和青绿色显示 Electron、Chromium，每次启动按该环境保存的内核打开。旧配置首次升级时优先按已有浏览器资料补齐。两个内核为同一环境分别保存 Cookie、站点数据和浏览历史。
 
-v3.0 安装包和便携包内置 Electron。全新安装后可直接打开管理器，CLI 也可离线启动。管理器会按需准备 Chromium，顶部显示下载、校验和解压进度。程序可复用现有 Chromium 或软件目录里的 `runtime_chromium.zip`。需要联网时，从 GitHub 取得 ZIP 并校验，再解压至 `runtime/cores/`。 [内核发布页](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/tag/core)
+v3.0 安装包和便携包内置 Electron。全新安装后可直接打开管理器，CLI 也可离线启动。管理器会按需准备 Chromium，顶部显示下载、校验和解压进度。程序可复用现有 Chromium 或软件目录里的 `runtime_chromium.zip`。需要联网时，从 GitHub 取得 ZIP 并校验，再解压至 `runtime/cores/`。安装目录无法写入时，普通用户会使用 `%LOCALAPPDATA%\DT-Fingerprint-Browser\runtime-cache` 下的内核缓存。正式包的内核准备和环境启动使用内置工具，并支持长路径解压。 [内核发布页](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/tag/core)
 
 覆盖安装时会备份旧运行时中的应用包，确保启动器加载 v3.0 界面。Chromium 浏览器窗口和任务栏使用 DT 图标。指纹检测页封装在应用中，首次打开时从内部资源生成。
 
@@ -23,12 +23,11 @@ GUI 和 CLI 可以并行启动不同环境。同一环境同时收到启动请�
 
 ## 已知风险
 
-- **受保护目录首次准备 Chromium**。安装包内置 Electron。Chromium 在首次安装时需要写入软件目录的 `runtime\cores`，从本地 ZIP 解压也需要写权限。普通用户可以使用默认的 `%LOCALAPPDATA%\Programs\DT-Fingerprint-Browser` 安装目录。
 - **换目录升级**。原地覆盖会保留原有浏览器数据。换目录时程序的历史配置回退不会复制完整浏览器资料。要保留 Cookie、历史和登录状态，先退出两个目录的管理器和浏览器，再备份原目录的 `data`，迁移环境配置及 `data\profiles`、`data\chromium-profiles`。保留新目录已有的配置和资料，避免覆盖。
 
 ## 构建和验证
 
 - `node scripts/build-installer.js` 生成安装包、便携包和 `dist/payload-v3.0/`。
-- `node scripts/test-portable.js` 在隔离目录验收内置 Electron、首次准备 Chromium、环境并发启动和 CLI。设置 `DT_TEST_CORE_ARCHIVES` 可用本地 Chromium ZIP 验收，设置 `DT_TEST_WINDOW_ICON=1` 可检查 Chromium 窗口和任务栏图标。
+- `node scripts/test-portable.js` 在清空 PATH 的隔离目录验收内置 Electron、首次准备 Chromium、环境并发启动和 CLI。设置 `DT_TEST_CORE_ARCHIVES` 可用本地 Chromium ZIP 验收，设置 `DT_TEST_WINDOW_ICON=1` 可检查 Chromium 窗口和任务栏图标。
 - `node scripts/test-v30.js` 启动两个实际内核，在本地网页上校验指纹更新、UA 保留及切回 Electron。
 - `node scripts/test-chromium-proxy.js` 使用本地服务验证 Chromium 代理路由、白名单和故障处理。

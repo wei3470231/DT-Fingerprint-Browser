@@ -322,7 +322,7 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 2. **环境管理模式**使用 `create`、`start`、`status` 和 `stop` 管理保存的 Chromium 或 Electron 环境。脚本可接收 JSON，或通过 CDP 连接已启动的浏览器。
 
 ### 4.1 运行机制与环境自适应
-* 安装版和便携版的 `DT-CLI.exe` 使用内置 Electron 的 Node 模式执行命令，系统无需单独安装 Node.js。浏览器环境按配置启动对应内核。缺少 Chromium 时，程序先检查软件目录中的同名 ZIP，再按需从 GitHub 下载。
+* 安装版和便携版的 `DT-CLI.exe` 使用内置 Electron 的 Node 模式执行命令，系统无需单独安装 Node.js。浏览器环境按配置启动对应内核。缺少 Chromium 时，程序先检查软件目录中的同名 ZIP，再按需从 GitHub 下载。正式包内置内核下载和浏览器启动工具，这些步骤无需系统 PATH 中的 PowerShell 或 `curl.exe`。
 * 已加入 PATH 时可用 `dt-cli`。在安装目录的 PowerShell 可用 `.\DT-CLI.exe`。Python 或 Node.js 脚本可用 `DT-CLI.exe` 的绝对路径，确保调用指定安装。
 * 单环境命令通常以退出码 `0` 表示成功，`1` 表示失败。批量 `start --json` 还需检查每个 `data[].success`，失败原因在 `data[].error`。
 

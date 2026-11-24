@@ -26,17 +26,29 @@ namespace BitFPManager
             string installed = Path.Combine(rootDir, "runtime", "cores", "electron", "electron.exe");
             if (File.Exists(installed)) return installed;
 
-            string script = Path.Combine(rootDir, "scripts", "install-core.ps1");
-            if (!File.Exists(script)) throw new FileNotFoundException(script);
-            ProcessStartInfo start = new ProcessStartInfo("powershell.exe",
-                "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + script +
-                "\" -Root \"" + Path.Combine(rootDir, ".") + "\" -Core electron");
+            string helper = Path.Combine(rootDir, "scripts", "RuntimeTools.exe");
+            bool hasHelper = File.Exists(helper);
+            string arguments;
+            if (hasHelper)
+            {
+                arguments = "install \"" + Path.Combine(rootDir, ".") + "\" electron";
+            }
+            else
+            {
+                string script = Path.Combine(rootDir, "scripts", "install-core.ps1");
+                if (!File.Exists(script)) throw new FileNotFoundException(script);
+                helper = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
+                arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + script +
+                    "\" -Root \"" + Path.Combine(rootDir, ".") + "\" -Core electron";
+            }
+            ProcessStartInfo start = new ProcessStartInfo(helper, arguments);
             start.WorkingDirectory = rootDir;
             start.UseShellExecute = false;
             start.CreateNoWindow = true;
             start.RedirectStandardOutput = true;
             start.RedirectStandardError = true;
             start.StandardErrorEncoding = System.Text.Encoding.UTF8;
+            start.StandardOutputEncoding = System.Text.Encoding.UTF8;
 
             using (Form progress = new Form())
             using (Process child = new Process())
@@ -44,6 +56,8 @@ namespace BitFPManager
                 child.StartInfo = start;
                 var errors = new System.Text.StringBuilder();
                 child.ErrorDataReceived += (sender, e) => { if (e.Data != null) errors.AppendLine(e.Data); };
+                string resolved = null;
+                child.OutputDataReceived += (sender, e) => { if (!String.IsNullOrEmpty(e.Data)) resolved = e.Data; };
                 if (!isCli)
                 {
                     progress.Text = "DT 指纹浏览器";
@@ -65,6 +79,7 @@ namespace BitFPManager
                 child.BeginOutputReadLine();
                 while (!child.WaitForExit(100)) { if (!isCli) Application.DoEvents(); }
                 child.WaitForExit();
+                if (hasHelper && !String.IsNullOrEmpty(resolved)) installed = resolved;
                 if (child.ExitCode != 0 || !File.Exists(installed)) throw new Exception(errors.ToString().Trim());
             }
             return installed;

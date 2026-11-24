@@ -20,6 +20,19 @@ function getAppRoot() {
   return path.resolve(__dirname, '..');
 }
 
+function runtimeTools(root = getAppRoot()) {
+  const executable = path.join(root, 'scripts', 'RuntimeTools.exe');
+  return fs.existsSync(executable) ? executable : null;
+}
+
+function systemExecutable(file) {
+  return path.join(process.env.SystemRoot || process.env.windir || 'C:\\Windows', 'System32', file);
+}
+
+function windowsPowerShell() {
+  return systemExecutable(path.join('WindowsPowerShell', 'v1.0', 'powershell.exe'));
+}
+
 function executableFor(core, root = getAppRoot()) {
   if (core === 'chromium') {
     return path.join(root, 'runtime', 'cores', 'chromium', 'chrome.exe');
@@ -82,10 +95,12 @@ async function ensureCore(core, root = getAppRoot(), onProgress) {
 
 async function installCore(core, root, executable, notify) {
   const scripts = __dirname.includes('.asar') ? path.join(root, 'scripts') : __dirname;
-  const operation = run('powershell.exe', [
+  const tool = runtimeTools(root);
+  const args = tool ? ['install', root, core] : [
     '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
     '-File', path.join(scripts, 'install-core.ps1'), '-Root', root, '-Core', core, '-ReportProgress',
-  ], { windowsHide: true });
+  ];
+  const operation = run(tool || windowsPowerShell(), args, { windowsHide: true });
   let buffered = '';
   operation.child.stdout.setEncoding('utf8').on('data', chunk => {
     const lines = (buffered + chunk).split(/\r?\n/);
@@ -96,10 +111,13 @@ async function installCore(core, root, executable, notify) {
     }
   });
   try {
-    await operation;
-    if (!fs.existsSync(executable)) throw new Error('解压后缺少可执行文件');
+    const { stdout } = await operation;
+    const installed = tool ? stdout.trim().split(/\r?\n/).at(-1) : executable;
+    if (!installed || !path.isAbsolute(installed) || !fs.existsSync(installed)) {
+      throw new Error('解压后缺少可执行文件');
+    }
     notify({ phase: 'ready' });
-    return executable;
+    return installed;
   } catch (error) {
     const details = error.stderr?.trim();
     notify({ phase: 'error' });
@@ -107,4 +125,4 @@ async function installCore(core, root, executable, notify) {
   }
 }
 
-module.exports = { getAppRoot, electronPath, executableFor, ensureCore };
+module.exports = { getAppRoot, electronPath, executableFor, ensureCore, runtimeTools, systemExecutable, windowsPowerShell };

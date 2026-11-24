@@ -7,7 +7,7 @@ const { createHash, randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { getEnvironment, getSettings, regenerateFp, isPortAvailable, DATA_DIR, ROOT_DIR } = require('./store');
-const { ensureCore } = require('../../scripts/runtime-path');
+const { ensureCore, runtimeTools, systemExecutable, windowsPowerShell } = require('../../scripts/runtime-path');
 const { launchArgs, chromiumProfile } = require('./chromium');
 const { prepareCanvasAssets } = require('./chromium-canvas');
 const { withProcessLock } = require('./process-lock');
@@ -196,12 +196,16 @@ async function spawnBrowser(executable, args, env, branding) {
   const script = __dirname.includes('.asar')
     ? path.join(ROOT_DIR, 'scripts', 'spawn-browser.ps1')
     : path.resolve(__dirname, '../../scripts/spawn-browser.ps1');
-  const start = run('powershell.exe', [
+  const tool = runtimeTools(ROOT_DIR);
+  const command = tool ? ['spawn'] : [
     '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script,
-  ], { env, windowsHide: true, timeout: 15000 });
+  ];
+  const start = run(tool || windowsPowerShell(), command, { env, windowsHide: true, timeout: 30000 });
   start.child.stdin.on('error', () => {});
   start.child.stdin.end(JSON.stringify({ executable, args, cwd: ROOT_DIR, branding }));
-  const { stdout } = await start;
+  const { stdout } = await start.catch(error => {
+    throw new Error(error.stderr?.trim() || error.message);
+  });
   const pid = Number(stdout.trim());
   if (!Number.isInteger(pid) || pid <= 0) throw new Error('启动浏览器后未得到有效进程 ID');
   return pid;
@@ -272,7 +276,7 @@ async function terminateBrowser(record) {
     // Windows 彻底终结进程树释放端口及文件锁，阻塞等待进程退出
     await new Promise(resolve => {
       try {
-        const killer = spawn('taskkill', ['/PID', String(record.pid), '/T', '/F'], { windowsHide: true });
+        const killer = spawn(systemExecutable('taskkill.exe'), ['/PID', String(record.pid), '/T', '/F'], { windowsHide: true });
         killer.on('close', () => resolve());
         killer.on('error', () => resolve());
         setTimeout(resolve, 2000); // 兜底保护 2 秒
@@ -289,7 +293,7 @@ async function terminateBrowser(record) {
 async function ownsDebugPort({ port, pid }) {
   if (!port) return false;
   try {
-    const { stdout } = await run('netstat.exe', ['-ano', '-p', 'tcp'], { windowsHide: true, timeout: 3000 });
+    const { stdout } = await run(systemExecutable('netstat.exe'), ['-ano', '-p', 'tcp'], { windowsHide: true, timeout: 3000 });
     return stdout.split(/\r?\n/).some(line => {
       const [protocol, local, remote, , owner] = line.trim().split(/\s+/);
       return protocol === 'TCP' && local === '127.0.0.1:' + port && remote === '0.0.0.0:0' && Number(owner) === pid;
@@ -313,14 +317,16 @@ async function closeChromium(record) {
     });
   }
   if (isPidAlive(record.pid)) {
-    await run('powershell.exe', [
+    const tool = runtimeTools(ROOT_DIR);
+    const command = tool ? ['close', String(record.pid)] : [
       '-NoProfile', '-NonInteractive', '-Command',
       '(Get-Process -Id ' + Number(record.pid) + " -ErrorAction SilentlyContinue).CloseMainWindow()",
-    ], { windowsHide: true, timeout: 2000 }).catch(() => {});
+    ];
+    await run(tool || windowsPowerShell(), command, { windowsHide: true, timeout: 2000 }).catch(() => {});
   }
   for (let i = 0; i < 30 && isPidAlive(record.pid); i++) await delay(100);
   if (isPidAlive(record.pid)) {
-    await run('taskkill.exe', ['/PID', String(record.pid), '/T', '/F'], { windowsHide: true, timeout: 5000 }).catch(() => {});
+    await run(systemExecutable('taskkill.exe'), ['/PID', String(record.pid), '/T', '/F'], { windowsHide: true, timeout: 5000 }).catch(() => {});
   }
   if (isPidAlive(record.pid)) throw new Error('Chromium 窗口尚未退出，无法重新加载指纹。');
 }
