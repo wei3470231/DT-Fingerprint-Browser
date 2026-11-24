@@ -64,18 +64,10 @@ function parseAndBuildProxyConfig(proxyInput) {
   return result;
 }
 
-function resolveRootDir() {
-  if (process.env.DT_APP_ROOT && fs.existsSync(process.env.DT_APP_ROOT)) {
-    return path.resolve(process.env.DT_APP_ROOT);
-  }
-  const asarIdx = __dirname.indexOf('app.asar');
-  if (asarIdx !== -1) {
-    const beforeAsar = __dirname.substring(0, asarIdx);
-    const candidate = path.resolve(beforeAsar, '..', '..');
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  return path.resolve(__dirname, '../../');
-}
+const { getAppRoot: resolveRootDir } = require('../../scripts/runtime-path');
+const { chromiumProfile } = require('./chromium');
+const { chromiumSeed } = require('../shared/chromium-seed');
+const { DEFAULT_BROWSER_CORE, isBrowserCore } = require('../shared/browser-core');
 
 const ROOT_DIR = resolveRootDir();
 
@@ -244,6 +236,7 @@ function getActiveFontInfo() {
 }
 
 const DEFAULT_SETTINGS = {
+  browserCore: DEFAULT_BROWSER_CORE,
   managerTheme: 'dark',
   browserTheme: 'dark',
   fontFamily: '',
@@ -258,7 +251,25 @@ function ensureDirs() {
   }
 }
 
-function normalizeRecord(env) {
+function usedProfileBirthtime(directory, markers) {
+  if (!markers.some(marker => fs.existsSync(path.join(directory, marker)))) return Infinity;
+  return fs.statSync(directory, { throwIfNoEntry: false })?.birthtimeMs ?? Infinity;
+}
+
+function inferBrowserCore(env, defaultCore, dataDir = DATA_DIR) {
+  const existingElectron = path.join(dataDir, 'profiles', path.basename(env.userDataDir || env.id));
+  const electron = usedProfileBirthtime(existingElectron, ['Preferences', 'Local State', 'Partitions']);
+  const chromium = usedProfileBirthtime(chromiumProfile(dataDir, env.id), ['Local State', path.join('Default', 'Preferences')]);
+  if (electron === chromium) return defaultCore;
+  return chromium < electron ? 'chromium' : 'electron';
+}
+
+function getDefaultBrowserCore() {
+  const core = getSettings().browserCore;
+  return isBrowserCore(core) ? core : DEFAULT_BROWSER_CORE;
+}
+
+function normalizeRecord(env, defaultCore) {
   if (!env) return env;
   if (!env.userDataDir || path.isAbsolute(env.userDataDir)) {
     const norm = (env.userDataDir || '').replace(/\\/g, '/');
@@ -287,6 +298,7 @@ function normalizeRecord(env) {
   if (!env.url) {
     env.url = 'dt://fingerprint-test';
   }
+  if (!isBrowserCore(env.browserCore)) env.browserCore = inferBrowserCore(env, defaultCore);
   if (env.customUa === undefined) {
     env.customUa = '';
   } else if (typeof env.customUa === 'string') {
@@ -377,6 +389,7 @@ function loadAll() {
               id: dirName,
               name: `已恢复环境-${dirName.slice(-6)}`,
               group: '已恢复环境',
+              browserCore: 'electron',
               userDataDir: path.join('data', 'profiles', dirName),
               remotePort: 9222 + portOffset
             });
@@ -407,7 +420,6 @@ function loadAll() {
                 console.error(`[Store] 成功从历史安装位置 ${hDir} 无损继承 ${parsed.length} 个指纹环境配置！`);
                 list = parsed;
                 loaded = true;
-                saveAll(list);
 
                 // 同步继承历史 settings.json
                 const hSetJson = path.join(hDir, 'settings.json');
@@ -415,6 +427,13 @@ function loadAll() {
                 if (fs.existsSync(hSetJson) && !fs.existsSync(curSetJson)) {
                   try { fs.copyFileSync(hSetJson, curSetJson); } catch (_) {}
                 }
+
+                const importedDefault = getDefaultBrowserCore();
+                list = list.map(env => isBrowserCore(env.browserCore) ? env : {
+                  ...env,
+                  browserCore: inferBrowserCore(env, importedDefault, hDir),
+                });
+                saveAll(list);
 
                 // 同步继承历史 bookmarks.json
                 const hBmkJson = path.join(hDir, 'bookmarks.json');
@@ -475,11 +494,13 @@ function loadAll() {
 
   // 规范化所有环境记录
   let dirty = false;
+  const defaultCore = getDefaultBrowserCore();
   const normalized = list.map(env => {
     const originalUserData = env.userDataDir;
     const originalExt = env.extensions;
-    const norm = normalizeRecord(env);
-    if (norm.userDataDir !== originalUserData || norm.extensions !== originalExt) {
+    const originalCore = env.browserCore;
+    const norm = normalizeRecord(env, defaultCore);
+    if (norm.userDataDir !== originalUserData || norm.extensions !== originalExt || norm.browserCore !== originalCore) {
       dirty = true;
     }
     return norm;
@@ -533,13 +554,23 @@ function saveAll(list) {
   }
 }
 
-function getRandomFp(options = {}) {
-  const language = options.language || 'en-US';
-  const timezone = options.timezone || 'America/New_York';
-  return generateFingerprint({ language, timezone, randomizeUa: true, previousUa: options.previousUa });
+function getRandomFp({ language, timezone, previousFp } = {}) {
+  const fp = generateFingerprint({ language, timezone });
+  const value = crypto.randomBytes(4).readUInt32BE();
+  fp.chromiumSeed = value === chromiumSeed(previousFp) ? (value + 1) >>> 0 : value;
+  if (!previousFp?.uaString) return fp;
+
+  return {
+    ...fp,
+    uaString: previousFp.uaString,
+    uaFormat: previousFp.uaFormat,
+    ua: previousFp.ua,
+  };
 }
 
 function createRecord(data = {}) {
+  const browserCore = data.browserCore ?? getDefaultBrowserCore();
+  if (!isBrowserCore(browserCore)) throw new Error('环境内核必须是 electron 或 chromium');
   const id = data.id || 'env-' + crypto.randomBytes(4).toString('hex');
   const language = data.language || 'en-US';
   const timezone = data.timezone || 'America/New_York';
@@ -549,10 +580,11 @@ function createRecord(data = {}) {
   }
 
   const customUa = (typeof data.customUa === 'string') ? data.customUa.trim() : '';
-  const fp = data.fp || generateFingerprint({ language, timezone });
+  const fp = data.fp || getRandomFp({ language, timezone });
 
   return {
     id,
+    browserCore,
     name: data.name || `新建环境-${Date.now().toString().slice(-4)}`,
     group: data.group || '默认分组',
     notes: data.notes || '',
@@ -688,10 +720,15 @@ function updateEnvironment(id, updates) {
     }
   }
 
-  // 语言或时区变更时同步调整 fp.navigator.languages
-  if (updates.language && updates.language !== list[index].language && list[index].fp) {
-    const lang = updates.language;
-    list[index].fp.navigator.languages = lang === 'en-US' ? ['en-US', 'en'] : [lang, lang.split('-')[0]];
+  const current = list[index];
+  let fp = updates.fp || current.fp;
+  if (fp && updates.language && updates.language !== current.language) {
+    const language = updates.language;
+    const languages = language.includes('-') ? [language, language.split('-')[0]] : [language];
+    fp = { ...fp, navigator: { ...fp.navigator, languages } };
+  }
+  if (fp && updates.timezone && updates.timezone !== fp.timezone) {
+    fp = { ...fp, timezone: updates.timezone };
   }
 
   if (updates.proxy !== undefined) {
@@ -701,16 +738,16 @@ function updateEnvironment(id, updates) {
   if (updates.customUa !== undefined) {
     const trimmedUa = typeof updates.customUa === 'string' ? updates.customUa.trim() : '';
     updates.customUa = trimmedUa;
-    const current = list[index];
-    const fp = updates.fp || current.fp;
     if (!trimmedUa && current.customUa && fp?.uaString === current.customUa && fp.ua?.fullVersion) {
-      updates.fp = { ...fp, uaString: buildWindowsChromeUa(fp.ua.fullVersion) };
+      fp = { ...fp, uaString: buildWindowsChromeUa(fp.ua.fullVersion) };
     }
   }
 
   list[index] = {
-    ...list[index],
+    ...current,
     ...updates,
+    fp,
+    browserCore: current.browserCore,
     updatedAt: new Date().toISOString()
   };
   saveAll(list);
@@ -764,6 +801,8 @@ function clearEnvironmentCache(id) {
   } else {
     fs.mkdirSync(targetDir, { recursive: true });
   }
+  const nativeProfile = chromiumProfile(DATA_DIR, env.id);
+  fs.rmSync(nativeProfile, { recursive: true, force: true, maxRetries: 3, retryDelay: 120 });
   return { success: true, message: `已彻底清空 "${env.name}" 的独立缓存与数据目录！` };
 }
 
@@ -785,7 +824,7 @@ function cloneEnvironment(id, newName) {
     userDataDir: undefined, // 自动生成新目录
     customUa: original.customUa || '',
     // 复制时自动重新随机指纹
-    fp: generateFingerprint({ language: original.language, timezone: original.timezone })
+    fp: getRandomFp({ language: original.language, timezone: original.timezone })
   });
 
   list.push(cloned);
@@ -800,8 +839,7 @@ function regenerateFp(id, customTimezone) {
   const env = list[index];
   const tz = customTimezone || env.timezone || 'America/New_York';
   env.timezone = tz;
-  env.fp = getRandomFp({ language: env.language, timezone: tz, previousUa: env.customUa || env.fp?.uaString });
-  env.customUa = '';
+  env.fp = getRandomFp({ language: env.language, timezone: tz, previousFp: env.fp });
   env.updatedAt = new Date().toISOString();
   saveAll(list);
   return env;
@@ -1000,6 +1038,7 @@ function saveBookmarks(bookmarks) {
 }
 
 module.exports = {
+  parseAndBuildProxyConfig,
   ROOT_DIR,
   DATA_DIR,
   PROFILES_DIR,

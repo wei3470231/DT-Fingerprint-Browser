@@ -1,6 +1,8 @@
 @echo off
-if exist "%~dp0dist\payload\DT-CLI.exe" (
-    "%~dp0dist\payload\DT-CLI.exe" %*
-) else (
-    node "%~dp0cli.js" %*
-)
+if not exist "%~dp0dist\payload-v3.0\app.asar" goto source
+if not exist "%~dp0dist\payload-v3.0\DT-CLI.exe" goto source
+"%~dp0dist\payload-v3.0\DT-CLI.exe" %*
+exit /b %errorlevel%
+
+:source
+node "%~dp0cli.js" %*

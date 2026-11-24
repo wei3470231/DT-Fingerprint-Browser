@@ -2,9 +2,10 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Windows.Forms;
 
-[assembly: System.Reflection.AssemblyVersion("2.7.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("2.7.0.0")]
+[assembly: System.Reflection.AssemblyVersion("3.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("3.0.0.0")]
 
 namespace BitFPManager
 {
@@ -14,35 +15,71 @@ namespace BitFPManager
         static extern bool AttachConsole(int dwProcessId);
         private const int ATTACH_PARENT_PROCESS = -1;
 
-        [DllImport("user32.dll", SetLastError = true)]
-        static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+        static string EnsureElectron(string rootDir, bool isCli)
+        {
+            string legacy = Path.Combine(rootDir, "runtime", "electron.exe");
+            string resources = Path.Combine(rootDir, "runtime", "resources");
+            bool canLaunchRootApp = !File.Exists(Path.Combine(rootDir, "app.asar")) ||
+                (File.Exists(Path.Combine(resources, "default_app.asar")) &&
+                 !File.Exists(Path.Combine(resources, "app.asar")) && !Directory.Exists(Path.Combine(resources, "app")));
+            if (File.Exists(legacy) && canLaunchRootApp) return legacy;
+            string installed = Path.Combine(rootDir, "runtime", "cores", "electron", "electron.exe");
+            if (File.Exists(installed)) return installed;
 
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool SetForegroundWindow(IntPtr hWnd);
+            string script = Path.Combine(rootDir, "scripts", "install-core.ps1");
+            if (!File.Exists(script)) throw new FileNotFoundException(script);
+            ProcessStartInfo start = new ProcessStartInfo("powershell.exe",
+                "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + script +
+                "\" -Root \"" + Path.Combine(rootDir, ".") + "\" -Core electron");
+            start.WorkingDirectory = rootDir;
+            start.UseShellExecute = false;
+            start.CreateNoWindow = true;
+            start.RedirectStandardOutput = true;
+            start.RedirectStandardError = true;
+            start.StandardErrorEncoding = System.Text.Encoding.UTF8;
 
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-        private const int SW_SHOW = 5;
-        private const int SW_RESTORE = 9;
+            using (Form progress = new Form())
+            using (Process child = new Process())
+            {
+                child.StartInfo = start;
+                var errors = new System.Text.StringBuilder();
+                child.ErrorDataReceived += (sender, e) => { if (e.Data != null) errors.AppendLine(e.Data); };
+                if (!isCli)
+                {
+                    progress.Text = "DT 指纹浏览器";
+                    progress.Width = 400;
+                    progress.Height = 120;
+                    progress.StartPosition = FormStartPosition.CenterScreen;
+                    progress.ControlBox = false;
+                    progress.FormBorderStyle = FormBorderStyle.FixedDialog;
+                    progress.Controls.Add(new ProgressBar { Dock = DockStyle.Bottom, Style = ProgressBarStyle.Marquee });
+                    progress.Controls.Add(new Label { Dock = DockStyle.Fill, Padding = new Padding(16), Text = "正在准备 Electron 内核，首次下载约 191 MB。" });
+                    progress.Show();
+                }
+                else
+                {
+                    Console.Error.WriteLine("正在准备 Electron 内核。");
+                }
+                child.Start();
+                child.BeginErrorReadLine();
+                child.BeginOutputReadLine();
+                while (!child.WaitForExit(100)) { if (!isCli) Application.DoEvents(); }
+                child.WaitForExit();
+                if (child.ExitCode != 0 || !File.Exists(installed)) throw new Exception(errors.ToString().Trim());
+            }
+            return installed;
+        }
 
+        [STAThread]
         static void Main(string[] args)
         {
             string rootDir = AppDomain.CurrentDomain.BaseDirectory;
-            string electronExe = Path.Combine(rootDir, "runtime", "electron.exe");
-            string asarPath = Path.Combine(rootDir, "runtime", "resources", "app.asar");
+            string asarPath = Path.Combine(rootDir, "app.asar");
+            if (!File.Exists(asarPath)) asarPath = Path.Combine(rootDir, "runtime", "resources", "app.asar");
             string guiScript = Path.Combine(rootDir, "src", "gui", "main.js");
             string cliScript = Path.Combine(rootDir, "cli.js");
 
             bool isAsarMode = File.Exists(asarPath) && !File.Exists(guiScript);
-
-            if (!File.Exists(electronExe))
-            {
-                AttachConsole(ATTACH_PARENT_PROCESS);
-                Console.WriteLine("【错误】未找到定制内核: " + electronExe);
-                return;
-            }
 
             // 格式化命令行参数
             string formattedArgs = "";
@@ -111,10 +148,30 @@ namespace BitFPManager
             // - 否则若是 CLI 程序或者首参数为明确的 CLI 命令，进入 CLI 模式；
             // - 其余情况 (无参数、或常规双击运行) 均启动 GUI 管理器。
             bool isCli = !isExplicitGuiFlag && (isCliExe || isKnownCliCommand);
+            string electronExe;
+            try
+            {
+                electronExe = EnsureElectron(rootDir, isCli);
+            }
+            catch (Exception ex)
+            {
+                string message = "无法安装 Electron 内核。" + ex.Message;
+                if (isCli)
+                {
+                    AttachConsole(ATTACH_PARENT_PROCESS);
+                    Console.Error.WriteLine(message);
+                }
+                else
+                {
+                    MessageBox.Show(message, "DT 指纹浏览器", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                Environment.ExitCode = 1;
+                return;
+            }
 
             if (isCli)
             {
-                if (AttachConsole(ATTACH_PARENT_PROCESS))
+                if (!Console.IsOutputRedirected && AttachConsole(ATTACH_PARENT_PROCESS))
                 {
                     try
                     {
@@ -130,6 +187,7 @@ namespace BitFPManager
                 {
                     try { Console.OutputEncoding = System.Text.Encoding.UTF8; } catch {}
                 }
+
 
                 // 运行 CLI 模式，通过 node 或 electron 运行 cli.js
                 string targetScript = isAsarMode ? Path.Combine(asarPath, "cli.js") : cliScript;
@@ -192,16 +250,6 @@ namespace BitFPManager
             }
             else
             {
-                // GUI 模式单例互斥：若已有管理器窗口打开，直接置顶并退出，不允许多开
-                IntPtr existingWnd = FindWindow(null, "DT - 指纹浏览器");
-                if (existingWnd != IntPtr.Zero)
-                {
-                    ShowWindow(existingWnd, SW_SHOW);
-                    ShowWindow(existingWnd, SW_RESTORE);
-                    SetForegroundWindow(existingWnd);
-                    return;
-                }
-
                 ProcessStartInfo psi = new ProcessStartInfo();
                 psi.FileName = electronExe;
                 psi.WorkingDirectory = rootDir;
@@ -213,9 +261,7 @@ namespace BitFPManager
                 // GUI 模式：无黑框后台拉起管理器
                 if (isAsarMode)
                 {
-                    // 在发行版中：electron 启动时自动载入 runtime/resources/app.asar
-                    // 传递命令行参数 (例如 --minimized)，以便 Electron / src/gui/main.js 能读取到参数！
-                    psi.Arguments = formattedArgs.TrimStart();
+                    psi.Arguments = "\"" + asarPath + "\"" + formattedArgs;
                 }
                 else
                 {

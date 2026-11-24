@@ -1,29 +1,45 @@
 'use strict';
 
-const net = require('node:net');
+const { createHash } = require('node:crypto');
 const EventEmitter = require('node:events');
+const fs = require('node:fs');
+const net = require('node:net');
+const path = require('node:path');
+const { DATA_DIR } = require('./store');
 
-const PIPE_PATH = process.platform === 'win32'
-  ? '\\\\.\\pipe\\dt-fingerprint-hub'
-  : '/tmp/dt-fingerprint-hub.sock';
+function getPipePath(dataDir) {
+  let canonicalDir = path.resolve(dataDir);
+  try {
+    canonicalDir = fs.realpathSync.native(canonicalDir);
+  } catch (_) {}
+  if (process.platform === 'win32') canonicalDir = canonicalDir.toLowerCase();
+
+  const namespace = createHash('sha256').update(canonicalDir).digest('hex').slice(0, 24);
+  const pipeName = 'dt-fingerprint-hub-' + namespace;
+  return process.platform === 'win32' ? '\\\\.\\pipe\\' + pipeName : '/tmp/' + pipeName + '.sock';
+}
+
+const PIPE_PATH = getPipePath(DATA_DIR);
 
 class IpcHub extends EventEmitter {
   constructor() {
     super();
     this.server = null;
+    this.connections = new Set();
     this.clients = new Map(); // envId -> socket
     this.syncConfig = {
       enabled: false,
       masterEnvId: null,
       slaveEnvIds: []
     };
-    this.pendingCallbacks = new Map(); // msgId -> { resolve, reject, timer }
+    this.pendingCallbacks = new Map(); // msgId -> { resolve, reject, timer, socket }
   }
 
   start() {
     if (this.server) return;
 
     this.server = net.createServer((socket) => {
+      this.connections.add(socket);
       let buffer = '';
       let registeredEnvId = null;
 
@@ -36,6 +52,7 @@ class IpcHub extends EventEmitter {
           if (!line.trim()) continue;
           try {
             const msg = JSON.parse(line);
+            if (msg.action === 'register' && registeredEnvId !== null) continue;
             this._handleMessage(socket, msg, (envId) => {
               registeredEnvId = envId;
             });
@@ -46,23 +63,18 @@ class IpcHub extends EventEmitter {
       });
 
       socket.on('close', () => {
-        if (registeredEnvId) {
-          this.clients.delete(registeredEnvId);
-          this.emit('client-disconnected', registeredEnvId);
-          // 若断开的是主控窗口，自动暂停同步
-          if (this.syncConfig.masterEnvId === registeredEnvId) {
-            this.syncConfig.enabled = false;
-            this.syncConfig.masterEnvId = null;
-            this.emit('sync-state-changed', this.syncConfig);
-          }
+        this.connections.delete(socket);
+        if (this.clients.get(registeredEnvId) !== socket) return;
+
+        this.clients.delete(registeredEnvId);
+        this.emit('client-disconnected', registeredEnvId);
+        // 若断开的是主控窗口，自动暂停同步
+        if (this.syncConfig.masterEnvId === registeredEnvId) {
+          this.setSyncConfig({ enabled: false, slaveEnvIds: this.syncConfig.slaveEnvIds });
         }
       });
 
-      socket.on('error', () => {
-        if (registeredEnvId) {
-          this.clients.delete(registeredEnvId);
-        }
-      });
+      socket.on('error', () => socket.destroy());
     });
 
     this.server.on('error', (err) => {
@@ -100,6 +112,7 @@ class IpcHub extends EventEmitter {
     // 处理带请求 ID 的响应回调
     if (msgId && this.pendingCallbacks.has(msgId)) {
       const cb = this.pendingCallbacks.get(msgId);
+      if (cb.socket !== socket) return;
       this.pendingCallbacks.delete(msgId);
       clearTimeout(cb.timer);
       if (msg.error) cb.reject(new Error(msg.error));
@@ -109,7 +122,7 @@ class IpcHub extends EventEmitter {
 
     // 键鼠与事件同步转发 (Master -> Slaves)
     if (action === 'sync-event') {
-      if (!this.syncConfig.enabled || this.syncConfig.masterEnvId !== envId) {
+      if (this.clients.get(envId) !== socket || !this.syncConfig.enabled || this.syncConfig.masterEnvId !== envId) {
         return;
       }
       // 广播给所有被勾选的从属窗口
@@ -189,11 +202,12 @@ class IpcHub extends EventEmitter {
       } catch (_) {}
       this.server = null;
     }
-    for (const socket of this.clients.values()) {
+    for (const socket of this.connections) {
       try {
         socket.destroy();
       } catch (_) {}
     }
+    this.connections.clear();
     this.clients.clear();
     this.pendingCallbacks.clear();
   }
@@ -229,7 +243,7 @@ class IpcHub extends EventEmitter {
         reject(new Error('获取 Cookie 超时'));
       }, timeoutMs);
 
-      this.pendingCallbacks.set(msgId, { resolve, reject, timer });
+      this.pendingCallbacks.set(msgId, { resolve, reject, timer, socket });
       this._send(socket, {
         action: 'get-cookies',
         msgId
@@ -253,7 +267,7 @@ class IpcHub extends EventEmitter {
         reject(new Error('注入 Cookie 超时'));
       }, timeoutMs);
 
-      this.pendingCallbacks.set(msgId, { resolve, reject, timer });
+      this.pendingCallbacks.set(msgId, { resolve, reject, timer, socket });
       this._send(socket, {
         action: 'set-cookies',
         msgId,

@@ -2,6 +2,7 @@
 
 const { createSocks5AuthBridge } = require('./socks5-bridge');
 const { parseProxyString } = require('../manager/proxy-parser');
+const { DEFAULT_PROXY_BYPASS, proxyHostRules, buildRoutingPac, pacDataUrl } = require('./proxy-rules');
 const { BLOCKED_PROXY_PORT, startRotatingProxy, stopRotatingProxy, buildCombinedPacScript } = require('./rotating-proxy');
 
 /**
@@ -94,16 +95,14 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
 
   if (rotatingEnabled) {
     const rules = rotatingConfig.rules?.trim();
-    if (!rules) {
-      await ses.setProxy({ proxyRules: `http://127.0.0.1:${BLOCKED_PROXY_PORT}` });
+    if (!proxyHostRules(rules).length) {
+      await ses.setProxy({ mode: 'fixed_servers', proxyRules: `http://127.0.0.1:${BLOCKED_PROXY_PORT}` });
       console.error('[Proxy] 动态轮换未配置目标域名，已阻断网络请求');
       return bridge;
     }
     const ports = rotatingInfo?.ports || [];
     const pac = buildCombinedPacScript(ports, rules, pacEndpoint, proxyConfig?.bypass);
-    await ses.setProxy({
-      pacScript: `data:application/x-ns-proxy-autoconfig;base64,${Buffer.from(pac).toString('base64')}`
-    });
+    await setPacProxy(ses, pac);
     if (rotatingInfo) {
       console.log(`[Proxy] 动态轮换代理池已启用: 规则[${rules}]，节点[${rotatingInfo.count}]，端口[${ports.join(', ')}]`);
     } else {
@@ -113,65 +112,16 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
   }
 
   // 3. 原有逻辑：未开启动态代理池时的基础代理设置
-  const { scope = 'all', rules = '', bypass = '<local>;localhost;127.0.0.1' } = (proxyConfig || {});
-
-  if (scope === 'rules' && rules.trim()) {
-    // 指定 URL 规则走代理，其余直连；白名单域名走本地 IP (DIRECT)
-    const rawRules = rules.split(';')
-      .map(r => r.trim())
-      .filter(Boolean);
-
-    const ruleSet = new Set();
-    for (const raw of rawRules) {
-      ruleSet.add(raw);
-      const stripped = raw.replace(/^[a-zA-Z]+:\/\//, '');
-      const domain = stripped.split(/[/?#:]/)[0].trim();
-      if (domain) ruleSet.add(domain);
+  const { scope = 'all', rules = '', bypass = DEFAULT_PROXY_BYPASS } = proxyConfig || {};
+  if (scope === 'rules') {
+    if (!proxyHostRules(rules).length) {
+      await ses.setProxy({ mode: 'fixed_servers', proxyRules: `http://127.0.0.1:${BLOCKED_PROXY_PORT}` });
+      console.error('[Proxy] 分流未配置有效的目标域名，已阻断网络请求');
+      return bridge;
     }
-    const rulePatterns = Array.from(ruleSet).map(r => JSON.stringify(r));
-
-    const rawBypass = (bypass || '<local>;localhost;127.0.0.1')
-      .split(/[;\n,]/)
-      .map(r => r.trim())
-      .filter(Boolean);
-
-    const bypassSet = new Set();
-    for (const raw of rawBypass) {
-      bypassSet.add(raw);
-      const stripped = raw.replace(/^[a-zA-Z]+:\/\//, '');
-      const domain = stripped.split(/[/?#:]/)[0].trim();
-      if (domain) bypassSet.add(domain);
-    }
-    const bypassJsonList = Array.from(bypassSet).map(r => JSON.stringify(r));
-
-    const pac = `
-      function FindProxyForURL(url, host) {
-        // 1. 白名单域名走本地 IP (不使用任何代理，直接走 DIRECT)
-        var bypassRules = [${bypassJsonList.join(', ')}];
-        for (var b = 0; b < bypassRules.length; b++) {
-          var bp = bypassRules[b];
-          if (bp === "<local>" && isPlainHostName(host)) return "DIRECT";
-          if (shExpMatch(host, bp) || dnsDomainIs(host, bp.charAt(0) === "." ? bp : "." + bp)) {
-            return "DIRECT";
-          }
-        }
-
-        // 2. 指定规则走代理
-        var rules = [${rulePatterns.join(', ')}];
-        for (var i = 0; i < rules.length; i++) {
-          var pattern = rules[i];
-          if (shExpMatch(host, pattern) || dnsDomainIs(host, pattern) || shExpMatch(url, pattern) || shExpMatch(url, "*" + pattern + "*")) {
-            return ${JSON.stringify(pacEndpoint)};
-          }
-        }
-        return "DIRECT";
-      }
-    `.trim();
-
-    await ses.setProxy({
-      pacScript: `data:application/x-ns-proxy-autoconfig;base64,${Buffer.from(pac).toString('base64')}`
-    });
-    console.log(`[Proxy] 已启用指定 URL 规则代理模式: ${rules}`);
+    const pac = buildRoutingPac({ rules, bypass, targets: [pacEndpoint] });
+    await setPacProxy(ses, pac);
+    console.log('[Proxy] 已启用域名代理分流');
   } else {
     // 全局代理模式
     await ses.setProxy({
@@ -182,6 +132,12 @@ async function applyProxy(ses, proxyConfig, rotatingConfig) {
   }
 
   return bridge;
+}
+
+async function setPacProxy(ses, script) {
+  await ses.setProxy({ mode: 'pac_script', pacScript: pacDataUrl(script) });
+  // SetProxy writes the preference before the network service loads the new PAC.
+  await ses.forceReloadProxyConfig();
 }
 
 let activeBridge = null;

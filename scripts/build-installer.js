@@ -3,14 +3,19 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
+const { createHash } = require('node:crypto');
+const { electron } = require('./cores.json');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
-const STAGING = path.join(DIST, 'staging');
-const PAYLOAD = path.join(DIST, 'payload');
-const ZIP_FILE = path.join(DIST, 'payload.zip');
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '3.0.0';
 const VERSION = 'v' + APP_VERSION.replace(/\.0$/, '');
+const LOCAL_PAYLOAD = path.join(DIST, 'payload-' + VERSION);
+fs.mkdirSync(DIST, { recursive: true });
+const BUILD = fs.mkdtempSync(path.join(DIST, '.build-' + VERSION + '-'));
+const STAGING = path.join(BUILD, 'staging');
+const PAYLOAD = path.join(BUILD, 'payload');
+const ZIP_FILE = path.join(BUILD, 'payload.zip');
 const SETUP_EXE = path.join(DIST, `DT-Fingerprint-Browser-${VERSION}-Setup.exe`);
 const PORTABLE_ZIP = path.join(DIST, `DT-Fingerprint-Browser-${VERSION}-Portable.zip`);
 
@@ -22,11 +27,6 @@ const ICON = path.join(ROOT, 'app.ico');
 
 function logStep(step, msg) {
   console.log(`\n[${step}] ${msg}`);
-}
-
-function cleanDir(dir) {
-  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 2, retryDelay: 400 });
-  fs.mkdirSync(dir, { recursive: true });
 }
 
 function copyDirRecursive(src, dest, filterFn) {
@@ -104,6 +104,32 @@ function compileCs(srcFile, outFile, isGui, extraFlags = []) {
   }
 }
 
+async function bundleElectron() {
+  const archive = path.resolve(process.env.DT_ELECTRON_ARCHIVE || path.join(ROOT, electron.archive));
+  if (!fs.existsSync(archive)) {
+    throw new Error('请先从 GitHub 的 core 发布页下载 ' + electron.archive + ' 并放入项目根目录。');
+  }
+  const hash = createHash('sha256');
+  for await (const chunk of fs.createReadStream(archive)) hash.update(chunk);
+  if (fs.statSync(archive).size !== electron.size || hash.digest('hex') !== electron.sha256) {
+    throw new Error('Electron 压缩包校验失败：' + archive);
+  }
+
+  const extracted = fs.mkdtempSync(path.join(BUILD, 'electron-'));
+  cp.execFileSync('tar.exe', ['-xf', archive, '-C', extracted], { stdio: 'inherit' });
+  const candidates = [extracted, ...fs.readdirSync(extracted, { withFileTypes: true })
+    .filter(entry => entry.isDirectory()).map(entry => path.join(extracted, entry.name))];
+  const layouts = candidates.filter(candidate =>
+    fs.existsSync(path.join(candidate, electron.executable)) &&
+    fs.existsSync(path.join(candidate, 'resources', 'default_app.asar')) &&
+    !fs.existsSync(path.join(candidate, 'resources', 'app.asar')) &&
+    !fs.existsSync(path.join(candidate, 'resources', 'app')));
+  if (layouts.length !== 1) throw new Error('Electron 压缩包缺少可启动 v3.0 的运行时。');
+  const cores = path.join(PAYLOAD, 'runtime', 'cores');
+  fs.mkdirSync(cores, { recursive: true });
+  fs.renameSync(layouts[0], path.join(cores, 'electron'));
+}
+
 async function main() {
   console.log('===============================================================');
   console.log('  DT - 指纹浏览器: 商业标准安装程序独立打包构建系统');
@@ -111,11 +137,10 @@ async function main() {
   console.log(`根目录: ${ROOT}`);
   console.log(`输出目录: ${DIST}`);
 
-  // 1. 准备目录
+  // 1. 构建目录与已经启动过的便携目录分开，避免重打包清除用户数据。
   logStep('1/8', '初始化构建输出目录与临时工作区...');
-  if (!fs.existsSync(DIST)) fs.mkdirSync(DIST, { recursive: true });
-  cleanDir(STAGING);
-  cleanDir(PAYLOAD);
+  fs.mkdirSync(STAGING);
+  fs.mkdirSync(PAYLOAD);
 
   // 2. 收集发布所需代码 (严格排除用户扩展插件与个人数据)
   logStep('2/8', '收集核心业务源码 (排除任何用户插件与本地测试数据)...');
@@ -152,9 +177,7 @@ async function main() {
 
   // 4. 将脱敏源码打包为虚拟归档 app.asar
   logStep('4/8', '封装为二进制虚拟归档 (app.asar)，消除所有明文源码文件...');
-  const asarTargetDir = path.join(PAYLOAD, 'runtime', 'resources');
-  fs.mkdirSync(asarTargetDir, { recursive: true });
-  const asarOut = path.join(asarTargetDir, 'app.asar');
+  const asarOut = path.join(PAYLOAD, 'app.asar');
   
   cp.execSync(`npx.cmd -y asar pack "${STAGING}" "${asarOut}"`, { cwd: ROOT, stdio: 'inherit' });
   console.log(`      -> 成功生成 app.asar (${(fs.statSync(asarOut).size / 1024).toFixed(1)} KB)`);
@@ -162,14 +185,15 @@ async function main() {
   // 清理 staging 目录，确保不留任何源码
   fs.rmSync(STAGING, { recursive: true, force: true });
 
-  // 5. 复制独立运行内核 (runtime)
-  logStep('5/8', '集成 Chromium/Electron 独立定制内核与运行时组件...');
-  copyDirRecursive(path.join(ROOT, 'runtime'), path.join(PAYLOAD, 'runtime'), (srcPath) => {
-    const norm = srcPath.replace(/\\/g, '/');
-    // 排除原先的 default_app.asar，避免体积冗余
-    if (norm.endsWith('default_app.asar')) return false;
-    return true;
-  });
+  // 5. 将 Electron 内核及 Chromium 按需安装脚本打入发布包。
+  logStep('5/8', '集成 Electron 内核、Chromium 下载脚本和窗口图标工具...');
+  const runtimeScripts = path.join(PAYLOAD, 'scripts');
+  fs.mkdirSync(runtimeScripts, { recursive: true });
+  for (const script of ['install-core.ps1', 'cores.json', 'spawn-browser.ps1']) {
+    fs.copyFileSync(path.join(ROOT, 'scripts', script), path.join(runtimeScripts, script));
+  }
+  await bundleElectron();
+  compileCs(path.join(ROOT, 'scripts', 'ChromiumWindowIcon.cs'), path.join(runtimeScripts, 'ChromiumWindowIcon.exe'), true);
 
   // 5.5 复制内置本地精选字体库 (Fonts) 为精简版 Windows 系统提供开箱即用字体支持
   const FONTS_SRC = path.join(ROOT, 'Fonts');
@@ -186,7 +210,7 @@ async function main() {
   const CS_INSTALLER = path.join(ROOT, 'scripts', 'Installer.cs');
 
   // 编译 GUI (纯英文标准名称与中文兼容名称同时支持)
-  compileCs(CS_LAUNCHER, path.join(PAYLOAD, 'DT-Fingerprint-Browser.exe'), true);
+  compileCs(CS_LAUNCHER, path.join(PAYLOAD, 'DT-Fingerprint-Browser.exe'), true, ['/r:System.Windows.Forms.dll']);
   console.log('      -> 已编译: "DT-Fingerprint-Browser.exe"');
   try {
     fs.copyFileSync(path.join(PAYLOAD, 'DT-Fingerprint-Browser.exe'), path.join(PAYLOAD, 'DT - 指纹浏览器.exe'));
@@ -194,7 +218,7 @@ async function main() {
   } catch (_) {}
 
   // 编译 CLI
-  compileCs(CS_LAUNCHER, path.join(PAYLOAD, 'DT-CLI.exe'), false);
+  compileCs(CS_LAUNCHER, path.join(PAYLOAD, 'DT-CLI.exe'), false, ['/r:System.Windows.Forms.dll']);
   console.log('      -> 已编译: "DT-CLI.exe"');
 
   // 编译 Uninstaller.exe
@@ -206,8 +230,6 @@ async function main() {
 
   // 复制图标与命令包装
   fs.copyFileSync(ICON, path.join(PAYLOAD, 'app.ico'));
-  try { fs.copyFileSync(ICON, path.join(PAYLOAD, 'runtime', 'app.ico')); } catch (_) {}
-  try { fs.copyFileSync(ICON, path.join(PAYLOAD, 'runtime', 'resources', 'app.ico')); } catch (_) {}
   fs.writeFileSync(path.join(PAYLOAD, 'dt-cli.cmd'), '@"%~dp0DT-CLI.exe" %*\r\n');
   fs.writeFileSync(path.join(PAYLOAD, 'dt.cmd'), '@"%~dp0DT-CLI.exe" %*\r\n');
 
@@ -252,23 +274,9 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
     `/resource:${ZIP_FILE},payload.zip`
   ]);
 
-  // 保存便携版独立 zip 归档 (无中文字符 Release 文件名)
-  try {
-    if (fs.existsSync(PORTABLE_ZIP)) fs.unlinkSync(PORTABLE_ZIP);
-    fs.copyFileSync(ZIP_FILE, PORTABLE_ZIP);
-    fs.unlinkSync(ZIP_FILE);
-  } catch (_) {}
-
-  // 清理历史无版本号或旧命名的临时构建文件
-  const oldFiles = [
-    path.join(DIST, 'DT-指纹浏览器-便携版.zip'),
-    path.join(DIST, 'DT-指纹浏览器-安装程序.exe'),
-    path.join(DIST, 'DT-Fingerprint-Browser-Portable.zip'),
-    path.join(DIST, 'DT-Fingerprint-Browser-Setup.exe')
-  ];
-  for (const f of oldFiles) {
-    if (fs.existsSync(f)) try { fs.unlinkSync(f); } catch (_) {}
-  }
+  fs.copyFileSync(ZIP_FILE, PORTABLE_ZIP);
+  copyDirRecursive(PAYLOAD, LOCAL_PAYLOAD, source => path.relative(PAYLOAD, source).split(path.sep)[0] !== 'data');
+  fs.mkdirSync(path.join(LOCAL_PAYLOAD, 'data', 'profiles'), { recursive: true });
 
   const setupSizeMb = (fs.statSync(SETUP_EXE).size / (1024 * 1024)).toFixed(1);
   const portableSizeMb = fs.existsSync(PORTABLE_ZIP) ? (fs.statSync(PORTABLE_ZIP).size / (1024 * 1024)).toFixed(1) : '未知';
@@ -281,7 +289,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
   console.log(`\n🗜️ 便携版独立压缩包 (解压即用):`);
   console.log(`   ${PORTABLE_ZIP} (${portableSizeMb} MB)`);
   console.log(`\n📁 便携解压即用目录 (无需安装直接运行版):`);
-  console.log(`   ${PAYLOAD}`);
+  console.log(`   ${LOCAL_PAYLOAD}`);
   console.log(`\n🛡️ 安全与合规说明:`);
   console.log(`   1. 源码保护：所有 JS 已全量 Terser 混淆并封装入 app.asar，无任何明文源码。`);
   console.log(`   2. 插件隔离：您的本地插件 (chrome/ 等) 未打包进安装文件，零泄露风险。`);
@@ -292,5 +300,5 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 main().catch(err => {
   console.error('\n【打包构建失败】:', err);
-  process.exit(1);
-});
+  process.exitCode = 1;
+}).finally(() => fs.rmSync(BUILD, { recursive: true, force: true }));

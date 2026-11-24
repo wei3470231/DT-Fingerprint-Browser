@@ -1,0 +1,14 @@
+{
+  "electron": {
+    "archive": "runtime_electron.zip",
+    "executable": "electron.exe",
+    "size": 200448190,
+    "sha256": "f2754852c2bede32dd349e673bac5d6c770b2a616963af6f44b76fdb10fd39fb"
+  },
+  "chromium": {
+    "archive": "runtime_chromium.zip",
+    "executable": "chrome.exe",
+    "size": 193743241,
+    "sha256": "4d549c326e51ebbabf562fd365eb5380d9d4a81200da2c60f075c688d9a77e03"
+  }
+}

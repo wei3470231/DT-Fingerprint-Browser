@@ -71,8 +71,8 @@ async function runTest() {
     'PROXY 192.168.1.1:8080',
     '*.baidu.com;localhost;127.0.0.1;<local>;https://my-internal.site/api'
   );
-  assert(pac.includes('challenges.cloudflare.com') && pac.includes('[28991, 28992, 28993]'), 'PAC 脚本准确包含指定的多域名规则与 3 个本地分发端口');
-  assert(pac.includes('hav.digitaldisbursements.com') && pac.includes('hav.digitaldisbursements.com/s'), 'PAC 脚本成功自动从 URL 路径中智能提取出纯域名 hav.digitaldisbursements.com 并保留完整 pattern');
+  assert(pac.includes('challenges.cloudflare.com') && [28991, 28992, 28993].every(port => pac.includes('PROXY 127.0.0.1:' + port)), 'PAC 脚本准确包含指定的多域名规则与 3 个本地分发端口');
+  assert(pac.includes('"hav.digitaldisbursements.com"') && !pac.includes('hav.digitaldisbursements.com/s'), '完整网址按主机名分流');
   assert(pac.includes('PROXY 192.168.1.1:8080'), 'PAC 脚本准确包含未命中规则时的环境回退代理');
   assert(pac.includes('*.baidu.com') && pac.includes('my-internal.site') && pac.includes('<local>'), 'PAC 脚本准确包含白名单域名，优先直接返回 DIRECT 走本地 IP');
 
@@ -102,6 +102,9 @@ async function runTest() {
   assert(testFallback === 'PROXY 192.168.1.1:8080', '固定回退代理不可用时没有 DIRECT 后备路径');
   const misleadingUrl = vm.runInContext('FindProxyForURL("https://other-unmatched.com/?next=my-internal.site", "other-unmatched.com")', pacContext);
   assert(misleadingUrl === testFallback, 'URL 中出现白名单字符串不会让外部主机绕过代理');
+  const lookalike = vm.runInContext('FindProxyForURL("https://not-challenges.cloudflare.com/", "not-challenges.cloudflare.com")', pacContext);
+  const targetQuery = vm.runInContext('FindProxyForURL("https://elsewhere.test/?next=challenges.cloudflare.com", "elsewhere.test")', pacContext);
+  assert(lookalike === testFallback && targetQuery === testFallback, '相似域名与查询参数不会误命中轮换规则');
 
   // 4. 测试本地分发调度器启动与生命周期
   console.log('\n[4/5] 测试本地分发调度器端口绑定与安全退出...');

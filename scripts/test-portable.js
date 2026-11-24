@@ -1,142 +1,240 @@
 'use strict';
 
-/**
- * DT - 指纹浏览器: 便携包全功能自动化验证套件
- * 专门用于测试 dist/payload 便携包的完整性、二进制功能、CLI 接口与独立运行能力
- */
-
+const assert = require('node:assert/strict');
+const { execFile, execFileSync, spawn } = require('node:child_process');
+const { promisify } = require('node:util');
+const { createHash } = require('node:crypto');
+const { setTimeout: delay } = require('node:timers/promises');
 const fs = require('node:fs');
+const net = require('node:net');
+const os = require('node:os');
 const path = require('node:path');
-const cp = require('node:child_process');
+const { generateFingerprint } = require('../fp-sdk');
 
-const ROOT = path.resolve(__dirname, '..');
-const PAYLOAD = path.join(ROOT, 'dist', 'payload');
+const zip = path.resolve(__dirname, '../dist/DT-Fingerprint-Browser-v3.0-Portable.zip');
+const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'dt-portable-v30-'));
+const app = path.join(sandbox, 'Portable app');
+const data = path.join(app, 'data');
+const runtime = path.join(app, 'runtime');
+const launcher = path.join(app, 'DT-CLI.exe');
+const envId = 'portable-fixture';
+const exec = promisify(execFile);
+let running = false;
 
-console.log('===============================================================');
-console.log('      DT - 指纹浏览器: 便携发布包全链路自动化验收测试');
-console.log('===============================================================\n');
-
-let passed = 0;
-let failed = 0;
-
-function assert(condition, message) {
-  if (condition) {
-    console.log(`  ✅ [PASS] ${message}`);
-    passed++;
-  } else {
-    console.error(`  ❌ [FAIL] ${message}`);
-    failed++;
+function cli(...args) {
+  try {
+    return execFileSync(launcher, args, {
+      cwd: app, encoding: 'utf8', windowsHide: true, timeout: 900000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch (error) {
+    throw new Error([error.message, error.stdout, error.stderr].filter(Boolean).join('\n'));
   }
 }
 
-function runPayloadCli(args) {
-  const cliExe = path.join(PAYLOAD, 'DT-CLI.exe');
+function json(...args) {
+  const response = JSON.parse(cli(...args, '--json'));
+  assert.equal(response.code, 0, response.message);
+  return response.data;
+}
+
+async function jsonAsync(...args) {
+  const { stdout } = await exec(launcher, [...args, '--json'], {
+    cwd: app, encoding: 'utf8', windowsHide: true, timeout: 120000,
+  });
+  const response = JSON.parse(stdout);
+  assert.equal(response.code, 0, response.message);
+  return response.data;
+}
+
+async function warmUpChromium(electron, executable) {
+  const env = { ...process.env, DT_APP_ROOT: app };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const launcher = spawn(path.join(app, 'DT-Fingerprint-Browser.exe'), ['--minimized'], {
+    cwd: app, env, windowsHide: true, stdio: 'ignore',
+  });
   try {
-    const res = cp.execFileSync(cliExe, args, {
-      cwd: PAYLOAD,
-      encoding: 'utf8',
-      timeout: 15000,
-      env: Object.assign({}, process.env)
+    const until = Date.now() + 120000;
+    while (!fs.existsSync(executable) && Date.now() < until && (launcher.exitCode ?? 0) === 0) await delay(200);
+    assert.ok(fs.existsSync(executable), 'The packaged GUI launcher must open and automatically install Chromium');
+  } finally {
+    await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      'Get-Process electron -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $env:DT_PACKAGED_TEST_ELECTRON } | Stop-Process -Force -ErrorAction SilentlyContinue',
+    ], { env: { ...env, DT_PACKAGED_TEST_ELECTRON: electron }, windowsHide: true });
+  }
+}
+
+function cdp(wsUrl, method, params) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(wsUrl);
+    const timer = setTimeout(() => {
+      socket.close();
+      reject(new Error('CDP command did not respond: ' + method));
+    }, 2500);
+    socket.onopen = () => socket.send(JSON.stringify({
+      id: 1, method, params,
+    }));
+    socket.onmessage = ({ data }) => {
+      const response = JSON.parse(data);
+      if (response.id !== 1) return;
+      clearTimeout(timer);
+      socket.close();
+      if (response.error) reject(new Error(response.error.message));
+      else resolve(response.result);
+    };
+    socket.onerror = event => {
+      clearTimeout(timer);
+      reject(new Error(event.message || 'Cannot connect to CDP for ' + method));
+    };
+  });
+}
+
+async function readCanvas(port) {
+  const until = Date.now() + 15000;
+  while (Date.now() < until) {
+    try {
+      const target = await fetch('http://127.0.0.1:' + port + '/json/list', {
+        signal: AbortSignal.timeout(1500),
+      }).then(response => response.json());
+      const page = target.find(item => item.url.endsWith('fingerprint-check/index.html'));
+      const result = page && await cdp(page.webSocketDebuggerUrl, 'Runtime.evaluate', {
+        expression: 'window.fingerprintResult?.canvas', returnByValue: true,
+      });
+      const canvas = result?.result?.value;
+      if (canvas?.status === 'ok') return canvas.data;
+    } catch {}
+    await delay(200);
+  }
+  throw new Error('Canvas readback did not complete in the packaged browser');
+}
+
+async function freePort() {
+  const server = net.createServer();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  await new Promise(resolve => server.close(resolve));
+  return port;
+}
+
+async function main() {
+  fs.mkdirSync(app);
+  execFileSync('tar.exe', ['-xf', zip, '-C', app], { windowsHide: true });
+  assert.ok(fs.existsSync(launcher));
+  assert.ok(fs.existsSync(path.join(app, 'DT-Fingerprint-Browser.exe')));
+  assert.ok(fs.existsSync(path.join(app, 'app.asar')));
+  assert.ok(fs.existsSync(path.join(app, 'scripts', 'install-core.ps1')));
+  assert.ok(!fs.existsSync(path.join(app, 'fingerprint-test')));
+  assert.ok(fs.existsSync(path.join(app, 'scripts', 'ChromiumWindowIcon.exe')));
+  assert.ok(fs.readdirSync(path.join(app, 'Fonts')).length);
+  assert.ok(fs.existsSync(path.join(runtime, 'cores', 'electron', 'electron.exe')));
+  assert.ok(!fs.existsSync(path.join(runtime, 'cores', 'chromium')), 'Chromium remains available on demand');
+
+  const port = await freePort();
+  fs.mkdirSync(data, { recursive: true });
+  fs.writeFileSync(path.join(data, 'environments.json'), JSON.stringify([{
+    id: envId, name: envId, customUa: 'DT-Portable-Fixture/1.0',
+    remotePortEnabled: true, remotePort: port, fp: generateFingerprint(),
+  }]));
+
+  assert.match(cli('--version'), /^Google Chrome 152\./);
+  assert.match(cli('--help'), /旧版直通模式 \(Electron\)/);
+  const electron = path.join(runtime, 'cores', 'electron', 'electron.exe');
+  const chromium = path.join(runtime, 'cores', 'chromium', 'chrome.exe');
+  assert.ok(fs.existsSync(electron));
+  assert.match(cli('--product-version'), /^152\./);
+  assert.equal(json('list')[0].id, envId);
+  assert.equal(json('get', '--id', envId).browserCore, 'chromium');
+  assert.ok(json('font', 'status').name);
+  assert.ok(json('theme', 'status').managerTheme);
+  assert.equal(json('settings', 'get').browserCore, 'chromium');
+  const created = json('create', '--name', 'CLI Chromium test', '--core', 'chromium', '--port', String(port));
+  const id = created.id;
+  assert.equal(created.browserCore, 'chromium');
+  assert.throws(() => cli('cdp-url', '--id', id, '--ws'), /尚未运行或未开启 CDP/);
+  const proxyArgs = ['set-proxy', '--id', id, '--proxy', 'http://127.0.0.1:9', '--scope', 'rules',
+    '--rules', 'target.release.test;*.route.release.test', '--bypass', 'white.target.release.test'];
+  const proxy = json(...proxyArgs);
+  assert.equal(proxy.enabled, true);
+  assert.equal(proxy.scope, 'rules');
+  assert.equal(json('get', '--id', id).proxy.bypass, 'white.target.release.test');
+  json('set-proxy', '--id', id, '--clear');
+  console.log('PASS bundled Electron starts the packaged CLI before any local ZIP is supplied');
+
+  if (process.env.DT_TEST_CORE_ARCHIVES) {
+    fs.copyFileSync(path.join(process.env.DT_TEST_CORE_ARCHIVES, 'runtime_chromium.zip'), path.join(app, 'runtime_chromium.zip'));
+  }
+
+  await warmUpChromium(electron, chromium);
+  console.log('PASS fresh manager automatically installed Chromium before any environment was launched');
+
+  const independent = json('create', '--name', 'Parallel Chromium', '--core', 'chromium', '--no-port', '--url', 'about:blank');
+  running = true;
+  const [started, competing, parallel] = await Promise.all([
+    jsonAsync('start', '--id', id, '--headless'),
+    jsonAsync('start', '--id', id, '--headless'),
+    jsonAsync('start', '--id', independent.id, '--headless'),
+  ]);
+  assert.equal(started.pid, competing.pid);
+  assert.notEqual(started.alreadyRunning, competing.alreadyRunning);
+  assert.notEqual(started.pid, parallel.pid);
+  assert.equal(json('status', '--id', id).info.pid, started.pid);
+  assert.equal(json('status', '--id', independent.id).info.pid, parallel.pid);
+  json('stop', '--id', independent.id);
+  assert.equal(json('status', '--id', id).info.pid, started.pid);
+  console.log('PASS three independent CLI processes, same-env deduplication and separate registry entries');
+  assert.equal(started.core, 'chromium');
+  assert.equal(started.port, port);
+  assert.match(started.ws, /^ws:\/\/127\.0\.0\.1:/);
+  assert.equal(cli('cdp-url', '--id', id, '--ws'), started.ws);
+  assert.equal(cli('cdp-url', '--id', id, '--http'), started.http);
+  assert.equal(json('status', '--id', id).info.core, 'chromium');
+  assert.equal(json('start', '--id', id, '--core', 'electron').alreadyRunning, true);
+  assert.throws(() => cli(...proxyArgs, '--json'), /请先停止/);
+  const before = await readCanvas(port);
+  const unchanged = await readCanvas(port);
+  assert.deepEqual(unchanged.pixelHash, before.pixelHash);
+  assert.deepEqual(unchanged.pngHash, before.pngHash);
+  const changed = json('random-fp', '--id', id);
+  assert.equal(changed.restarted, true);
+  assert.notEqual(cli('cdp-url', '--id', id, '--ws'), started.ws);
+  assert.ok(Number.isInteger(changed.fp.chromiumSeed));
+  const after = await readCanvas(port);
+  assert.notDeepEqual(after.pixelHash, before.pixelHash);
+  assert.notDeepEqual(after.pngHash, before.pngHash);
+  json('stop', '--id', id);
+  assert.equal(json('status', '--id', id).running, false);
+
+  const legacy = json('start', '--id', id, '--core', 'electron', '--headless');
+  assert.equal(legacy.core, 'electron');
+  assert.ok(legacy.ws);
+  assert.equal(json('get', '--id', id).browserCore, 'chromium');
+  json('stop', '--id', id);
+  console.log('PASS packaged CLI create, saved/overridden core, CDP, proxy edit guard, randomization and stop');
+
+  if (process.env.DT_TEST_WINDOW_ICON === '1') {
+    const branded = json('create', '--name', 'Chromium icon test', '--core', 'chromium',
+      '--port', String(await freePort()), '--url', 'about:blank');
+    const visible = json('start', '--id', branded.id);
+    const checkIcon = count => execFileSync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Sta', '-ExecutionPolicy', 'Bypass', '-File',
+      path.join(__dirname, 'test-chromium-icon.ps1'), '-BrowserPid', String(visible.pid),
+      '-IconPath', path.join(app, 'app.ico'), '-ExpectedWindows', String(count),
+    ], { windowsHide: true, stdio: 'inherit' });
+    checkIcon(1);
+    const profile = createHash('sha256').update(branded.id).digest('hex');
+    const directory = path.join(data, 'chromium-profiles', profile);
+    await exec(chromium, ['--user-data-dir=' + directory, '--new-window', 'about:blank'], {
+      cwd: app, windowsHide: true, timeout: 5000,
     });
-    return { success: true, stdout: res.trim() };
-  } catch (err) {
-    return { success: false, error: err.message, stdout: (err.stdout || '').trim() };
+    checkIcon(2);
+    json('stop', '--id', branded.id);
   }
+  running = false;
 }
 
-async function runTests() {
-  // 1. 结构与文件完整性检测
-  console.log('[1/4] 验证便携包目录结构与核心资产完整性...');
-  assert(fs.existsSync(PAYLOAD), `便携包目录存在: ${PAYLOAD}`);
-  
-  const guiExe = fs.existsSync(path.join(PAYLOAD, 'DT-Fingerprint-Browser.exe'))
-    ? path.join(PAYLOAD, 'DT-Fingerprint-Browser.exe')
-    : path.join(PAYLOAD, 'DT - 指纹浏览器.exe');
-  assert(fs.existsSync(guiExe) && fs.statSync(guiExe).size > 10000, `便携版主程序 "${path.basename(guiExe)}" 存在且体积正常`);
-
-  const cliExe = path.join(PAYLOAD, 'DT-CLI.exe');
-  assert(fs.existsSync(cliExe) && fs.statSync(cliExe).size > 10000, '便携版控制台 "DT-CLI.exe" 存在且体积正常');
-
-  const asarFile = path.join(PAYLOAD, 'runtime', 'resources', 'app.asar');
-  assert(fs.existsSync(asarFile) && fs.statSync(asarFile).size > 100000, '核心业务代码虚拟归档 "app.asar" 存在且体积正常 (>100KB)');
-
-  const electronExe = path.join(PAYLOAD, 'runtime', 'electron.exe');
-  assert(fs.existsSync(electronExe), '定制 Chromium/Electron 内核 "runtime/electron.exe" 存在');
-
-  const fontsDir = path.join(PAYLOAD, 'Fonts');
-  assert(fs.existsSync(fontsDir) && fs.readdirSync(fontsDir).length > 0, '精简系统兜底字体库 "Fonts/" 存在且包含字体文件');
-
-  const iconFile = path.join(PAYLOAD, 'app.ico');
-  assert(fs.existsSync(iconFile), '高清应用程序图标 "app.ico" 存在');
-
-  // 2. CLI 版本探测与 Chrome Drop-in 模式
-  console.log('\n[2/4] 验证便携版 CLI 运行时调用与版本伪装...');
-  const verRes = runPayloadCli(['--version']);
-  assert(verRes.success && verRes.stdout.includes('Google Chrome'), `版本返回正常: "${verRes.stdout}"`);
-
-  const prodVerRes = runPayloadCli(['--product-version']);
-  assert(prodVerRes.success && prodVerRes.stdout.includes('152.'), `产品版本号正常: "${prodVerRes.stdout}"`);
-
-  // 3. CLI JSON 结构化管理指令测试
-  console.log('\n[3/4] 验证便携版 CLI 管理控制与 JSON 接口...');
-  const listRes = runPayloadCli(['list', '--json']);
-  assert(listRes.success, 'dt-cli list --json 执行成功');
-  try {
-    const listData = JSON.parse(listRes.stdout);
-    assert(listData.code === 0 && Array.isArray(listData.data), `环境列表 JSON 解析成功 (包含 ${listData.data ? listData.data.length : 0} 个环境)`);
-  } catch (e) {
-    assert(false, `list --json 返回非法 JSON: ${e.message}`);
+main().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {
+  if (running) {
+    try { cli('stop', '--all', '--json'); } catch {}
   }
-
-  const fontRes = runPayloadCli(['font', 'status', '--json']);
-  assert(fontRes.success, 'dt-cli font status --json 执行成功');
-  try {
-    const fontData = JSON.parse(fontRes.stdout);
-    assert(fontData.code === 0 && fontData.data && (fontData.data.name || fontData.data.fileName), `当前生效字体检测正常: ${fontData.data ? (fontData.data.name || fontData.data.fileName) : ''}`);
-  } catch (e) {
-    assert(false, `font status --json 返回非法 JSON: ${e.message}`);
-  }
-
-  const themeRes = runPayloadCli(['theme', 'status', '--json']);
-  assert(themeRes.success, 'dt-cli theme status --json 执行成功');
-  try {
-    const themeData = JSON.parse(themeRes.stdout);
-    assert(themeData.code === 0 && themeData.data, `当前生效主题检测正常: 浏览器[${themeData.data.browserTheme || themeData.data.browser}] / 管理器[${themeData.data.managerTheme || themeData.data.manager}]`);
-  } catch (e) {
-    assert(false, `theme status --json 返回非法 JSON: ${e.message}`);
-  }
-
-  const settingsRes = runPayloadCli(['settings', 'get', '--json']);
-  assert(settingsRes.success, 'dt-cli settings get --json 执行成功');
-  try {
-    const settingsData = JSON.parse(settingsRes.stdout);
-    assert(settingsData.code === 0 && settingsData.data, '全局配置 settings.json 读取正常');
-  } catch (e) {
-    assert(false, `settings get --json 返回非法 JSON: ${e.message}`);
-  }
-
-  // 4. 便携发布包 ZIP 文件验证 (纯英文含版本号 Release 文件名)
-  console.log('\n[4/4] 验证 v2.7 便携发布包...');
-  const zipPath = path.join(ROOT, 'dist', 'DT-Fingerprint-Browser-v2.7-Portable.zip');
-  assert(fs.existsSync(zipPath), `便携版 ZIP 压缩包存在: ${zipPath}`);
-  if (fs.existsSync(zipPath)) {
-    const zipSizeMB = (fs.statSync(zipPath).size / (1024 * 1024)).toFixed(1);
-    assert(fs.statSync(zipPath).size > 150 * 1024 * 1024, `便携版 ZIP 大小正常: ${zipSizeMB} MB`);
-  }
-
-  console.log('\n===============================================================');
-  if (failed === 0) {
-    console.log(`  🎉 全部便携包测试通过！(${passed} 项检查全部成功)`);
-    console.log('===============================================================');
-    process.exit(0);
-  } else {
-    console.error(`  ❌ 测试未全部通过: ${passed} 项通过, ${failed} 项失败`);
-    console.log('===============================================================');
-    process.exit(1);
-  }
-}
-
-runTests().catch(err => {
-  console.error('测试运行异常:', err);
-  process.exit(1);
+  fs.rmSync(sandbox, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
 });

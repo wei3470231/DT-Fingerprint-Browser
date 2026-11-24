@@ -1104,7 +1104,7 @@
         <span>使用代理</span>
       </label>
       <div class="badge blue" id="proxyBadge" title="代理信息">直连</div>
-      <div class="badge orange" id="syncBadge" style="display: none; font-weight: 600;">⚡ 同步主控</div>
+      <div class="badge orange" id="syncBadge" style="display: none; font-weight: 600;">同步主控</div>
       <button class="nav-btn" id="devtoolsBtn" title="开发者工具 (F12)"></button>
     </div>
   </div>
@@ -1427,12 +1427,12 @@
       if (syncBadge) {
         if (data.isSyncMaster) {
           syncBadge.style.display = 'inline-flex';
-          syncBadge.textContent = '⚡ 同步主控';
+          syncBadge.innerHTML = `${icon('bolt', { size: 12 })} 同步主控`;
           syncBadge.className = 'badge orange';
           syncBadge.title = '当前窗口是键鼠同步主控端：操作将实时镜像广播至其他窗口';
         } else if (data.isSyncSlave) {
           syncBadge.style.display = 'inline-flex';
-          syncBadge.textContent = '⚡ 镜像从属';
+          syncBadge.innerHTML = `${icon('bolt', { size: 12 })} 镜像从属`;
           syncBadge.className = 'badge purple';
           syncBadge.title = '当前窗口是键鼠同步从属端：正在实时接收并执行主控端操作';
         } else {
@@ -1561,7 +1561,7 @@
       if (!currentBookmarks || currentBookmarks.length === 0) {
         const emptyHint = document.createElement('div');
         emptyHint.className = 'bookmark-empty-hint';
-        emptyHint.innerHTML = `<span>${icon('star', { size: 12 })} 暂无书签，点击地址栏右侧 ⭐ 或按 Ctrl+D 快速收藏</span>`;
+        emptyHint.innerHTML = `<span>${icon('star', { size: 12 })} 暂无书签，点击地址栏右侧收藏按钮或按 Ctrl+D 快速收藏</span>`;
         bookmarksList.appendChild(emptyHint);
         return;
       }

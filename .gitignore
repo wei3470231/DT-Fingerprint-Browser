@@ -4,6 +4,8 @@
 runtime/
 dist/
 /downloads/
+/runtime_electron.zip
+/runtime_chromium.zip
 **/node_modules/
 **/test-results/
 **/exports/

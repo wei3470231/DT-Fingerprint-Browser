@@ -91,10 +91,25 @@ async function checkProxy() {
 }
 
 async function checkLayout() {
-  ipcMain.handle('get-settings', () => ({}));
+  let browserCore = 'chromium';
+  ipcMain.handle('get-settings', () => ({ browserCore }));
+  ipcMain.handle('prepare-default-browser', event => {
+    event.sender.send('core-install-progress', { core: 'chromium', phase: 'download', bytes: 50, total: 100 });
+  });
+  ipcMain.handle('select-browser-core', (_event, core) => {
+    browserCore = core;
+    return core;
+  });
   ipcMain.handle('get-groups', () => []);
   ipcMain.handle('get-fonts', () => ({ fonts: [] }));
-  ipcMain.handle('get-state', () => ({ envs: [], active: {} }));
+  ipcMain.handle('get-state', () => ({
+    environments: [
+      { id: 'c', name: 'Chromium profile', browserCore: 'chromium', fp: { navigator: { hardwareConcurrency: 8, deviceMemory: 16 } } },
+      { id: 'e', name: 'Electron profile', browserCore: 'electron', fp: { navigator: { hardwareConcurrency: 4, deviceMemory: 8 }, webgl: { renderer: 'Long renderer shown on hover only' } } },
+    ],
+    running: {},
+    settings: { browserCore },
+  }));
   const manager = new BrowserWindow({ width: 1366, height: 873, show: false, webPreferences: { nodeIntegration: true, contextIsolation: false } });
   try {
     await manager.loadFile(path.join(__dirname, '../src/gui/ui/index.html'));
@@ -113,7 +128,42 @@ async function checkLayout() {
       `);
       assert.equal(fits, true, `manager layout at ${width}x${height}`);
     }
-    console.log('PASS manager footer, controls and independently scrolling table');
+    const controls = await manager.webContents.executeJavaScript(`({
+      defaultCore: document.getElementById('browserCoreSelect').value,
+      progress: document.getElementById('coreInstallText').textContent,
+      icons: [...document.querySelectorAll('[data-icon]')].every(el => el.querySelector('svg')?.children.length),
+      layoutIcons: document.querySelectorAll('#windowLayoutContainer svg').length,
+      cores: [...document.querySelectorAll('#envTableBody .core-badge')].map(cell => cell.textContent.trim()),
+      coreColors: [...document.querySelectorAll('#envTableBody .core-badge')].map(cell => {
+        const style = getComputedStyle(cell);
+        return { text: style.color, background: style.backgroundColor, border: style.borderColor };
+      }),
+      hardware: [...document.querySelectorAll('#envTableBody .hardware-summary')].map(cell => ({
+        text: cell.textContent.trim(), width: cell.getBoundingClientRect().width, title: cell.title,
+      })),
+    })`);
+    assert.equal(controls.defaultCore, 'chromium');
+    assert.equal(controls.progress, '正在下载 Chromium · 50%');
+    assert.ok(controls.icons);
+    assert.equal(controls.layoutIcons, 5);
+    assert.deepEqual(controls.cores, ['Chromium', 'Electron']);
+    for (const property of ['text', 'background', 'border']) {
+      assert.notEqual(controls.coreColors[0][property], controls.coreColors[1][property]);
+    }
+    assert.deepEqual(controls.hardware.map(cell => cell.text), ['8 核', '4 核 · 8 GB']);
+    assert.ok(controls.hardware.every(cell => cell.width < 150));
+    assert.match(controls.hardware[1].title, /Long renderer/);
+
+    await manager.webContents.executeJavaScript(`
+      const core = document.getElementById('browserCoreSelect');
+      core.value = 'electron';
+      core.dispatchEvent(new Event('change'));
+    `);
+    for (let i = 0; i < 20 && browserCore !== 'electron'; i++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    assert.equal(browserCore, 'electron');
+    console.log('PASS manager layout and top core selector');
   } finally {
     manager.destroy();
   }

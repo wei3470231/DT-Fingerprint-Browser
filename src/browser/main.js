@@ -24,7 +24,7 @@ const { getEnvironment, getSettings, getActiveFontInfo, ROOT_DIR, DATA_DIR, PROF
 const { applyProxy, closeCurrentBridge, stopRotatingProxy } = require('./proxy-helper');
 const { PIPE_PATH } = require('../manager/ipc-hub');
 const { buildCookieUrl } = require('../shared/cookie-helper');
-const { buildWindowsChromeUa } = require('../../fp-sdk/lib/fp-generator');
+const { effectiveUserAgent } = require('../shared/user-agent');
 
 const LOCAL_TEST_PAGE_PATH = path.join(__dirname, 'testing', 'index.html');
 const LOCAL_TEST_PAGE_URL = url.pathToFileURL(LOCAL_TEST_PAGE_PATH).href;
@@ -896,7 +896,7 @@ function setupTabListeners(tabItem) {
 }
 
 // 5. 创建新标签页 (优先创建 Target 0 确保自动化脚本精准操控)
-async function createTab(targetUrl) {
+async function createTab(targetUrl, history) {
   const tabId = 'tab-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
   const resolvedTarget = resolveNavUrl(targetUrl);
 
@@ -935,7 +935,10 @@ async function createTab(targetUrl) {
 
   const thisSeq = tabItem.navSeq;
   // 关键优化：异步非阻塞导航，绝不卡死主线程事件循环，确保窗口与插件瞬间可点击
-  view.webContents.loadURL(resolvedTarget).catch(err => {
+  const navigation = history?.entries.length
+    ? view.webContents.navigationHistory.restore(history)
+    : view.webContents.loadURL(resolvedTarget);
+  navigation.catch(err => {
     if (tabItem.navSeq !== thisSeq) {
       return; // 已被新导航替代，忽略上一导航中断，绝不清除新 pendingNavUrl
     }
@@ -1045,12 +1048,20 @@ function applySessionFingerprint(ses, config) {
   }
 
   const fp = config.fp;
-  const defaultUa = !fp.uaFormat && fp.ua?.fullVersion && fp.uaString === buildWindowsChromeUa(fp.ua.fullVersion, false)
-    ? buildWindowsChromeUa(fp.ua.fullVersion) : fp.uaString;
-  const effectiveUa = config.customUa || defaultUa;
-  const languages = fp.navigator?.languages || ['en-US', 'en'];
+  const effectiveUa = effectiveUserAgent(config);
+  const savedLanguages = fp.navigator?.languages;
+  const language = config.language || savedLanguages?.[0] || 'en-US';
+  const baseLanguage = language.split('-')[0];
+  const languages = savedLanguages?.[0] === language
+    ? savedLanguages
+    : [...new Set([language, baseLanguage])];
   ses.setUserAgent(effectiveUa, languages.join(','));
-  ses.setFingerprintConfig(JSON.stringify({ ...fp, uaString: effectiveUa }));
+  ses.setFingerprintConfig(JSON.stringify({
+    ...fp,
+    uaString: effectiveUa,
+    navigator: { ...fp.navigator, languages },
+    timezone: config.timezone || fp.timezone,
+  }));
   return effectiveUa;
 }
 
@@ -1276,21 +1287,46 @@ async function handleDispatchedSyncEvent(evt) {
 }
 
 // 6. 热更新指纹
-function applyHotFingerprint(config) {
+function fingerprintState(config) {
+  return JSON.stringify([config.fp, config.customUa, config.language, config.timezone]);
+}
+
+async function applyHotFingerprint(config) {
   for (const s of [session.defaultSession, getEnvSession()]) {
     effectiveBrowserUa = applySessionFingerprint(s, config);
   }
   app.userAgentFallback = effectiveBrowserUa;
   currentEnv.fp = config.fp;
   currentEnv.customUa = config.customUa;
+  currentEnv.language = config.language;
+  currentEnv.timezone = config.timezone;
 
-  // 刷新所有已打开的页面使新指纹即刻生效
-  for (const tab of tabs) {
-    if (tab.view && tab.view.webContents && !tab.view.webContents.isDestroyed()) {
-      tab.view.webContents.setUserAgent(effectiveBrowserUa);
-      tab.view.webContents.reload();
-    }
+  // 指纹在渲染进程启动时下发。保留标签历史并使用同一持久化会话重建内容视图。
+  const activeIndex = tabs.findIndex(tab => tab.id === activeTabId);
+  const previousTabs = tabs.splice(0);
+  const renderers = new Set();
+  const snapshots = [];
+  for (const tab of previousTabs) {
+    clearTimeout(tab.checkTimer);
+    clearTimeout(tab.safetyTimer);
+    const contents = tab.view.webContents;
+    if (contents.isDestroyed()) continue;
+    for (const frame of contents.mainFrame.framesInSubtree) renderers.add(frame.osProcessId);
+    const history = contents.navigationHistory;
+    snapshots.push({
+      url: tab.pendingNavUrl || contents.getURL() || tab.initialUrl,
+      history: tab.pendingNavUrl ? undefined : { entries: history.getAllEntries(), index: history.getActiveIndex() },
+    });
+    mainWindow.contentView.removeChildView(tab.view);
+    contents.close();
   }
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline && app.getAppMetrics().some(metric => renderers.has(metric.pid))) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  if (isWindowClosing || !mainWindow || mainWindow.isDestroyed()) return;
+  const restored = await Promise.all(snapshots.map(tab => createTab(tab.url, tab.history)));
+  if (restored[activeIndex]) switchTab(restored[activeIndex].id);
   notifyShell();
   console.log('[Hot Update] 窗口已热加载新指纹');
 }
@@ -1941,14 +1977,23 @@ if (typeof chrome !== 'undefined') {
 
   // store 已按配置文件的修改时间缓存数据。
   if (envId) {
-    setInterval(() => {
+    let appliedFingerprint = fingerprintState(currentEnv);
+    let applyingFingerprint = false;
+    setInterval(async () => {
+      if (applyingFingerprint || isWindowClosing) return;
+      applyingFingerprint = true;
       try {
         const latestEnv = getEnvironment(envId);
-        if (latestEnv?.fp && latestEnv.fp.seed !== currentEnv.fp?.seed) {
-          applyHotFingerprint(latestEnv);
+        if (!latestEnv?.fp) return;
+        const latestFingerprint = fingerprintState(latestEnv);
+        if (latestFingerprint !== appliedFingerprint) {
+          await applyHotFingerprint(latestEnv);
+          appliedFingerprint = latestFingerprint;
         }
       } catch (err) {
         console.warn('[Hot Update] 读取或更新指纹失败:', err.message);
+      } finally {
+        applyingFingerprint = false;
       }
     }, 1000);
   }

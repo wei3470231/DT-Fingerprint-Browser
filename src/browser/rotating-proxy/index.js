@@ -1,5 +1,7 @@
 'use strict';
 
+const { buildRoutingPac } = require('../proxy-rules');
+
 const { RotatingProxyPool } = require('./proxy-pool');
 const BLOCKED_PROXY_PORT = 1;
 const { RotatingDispatcherServer } = require('./dispatcher-server');
@@ -123,78 +125,12 @@ function buildCombinedPacScript(rotatingPorts, rotatingRules, fallbackEndpoint =
   const ports = (Array.isArray(rotatingPorts) ? rotatingPorts : [rotatingPorts])
     .filter(port => Number.isInteger(port) && port > 0 && port <= 65535);
   if (!ports.length) ports.push(BLOCKED_PROXY_PORT);
-  const rawRules = (rotatingRules || '')
-    .split(/[;\n]/)
-    .map(r => r.trim())
-    .filter(Boolean);
-
-  const ruleSet = new Set();
-  for (const raw of rawRules) {
-    ruleSet.add(raw);
-    // 智能兼容用户直接填入的 URL 路径与协议 (如 "hav.digitaldisbursements.com/s" -> "hav.digitaldisbursements.com")
-    // 以及完整 URL (如 "https://hav.digitaldisbursements.com/s" -> "hav.digitaldisbursements.com")
-    const stripped = raw.replace(/^[a-zA-Z]+:\/\//, '');
-    const domain = stripped.split(/[/?#:]/)[0].trim();
-    if (domain) {
-      ruleSet.add(domain);
-    }
-  }
-
-  const rawBypass = (bypassRules || '')
-    .split(/[;\n,]/)
-    .map(r => r.trim())
-    .filter(Boolean);
-
-  const bypassSet = new Set();
-  for (const raw of rawBypass) {
-    bypassSet.add(raw);
-    const stripped = raw.replace(/^[a-zA-Z]+:\/\//, '');
-    const domain = stripped.split(/[/?#:]/)[0].trim();
-    if (domain) {
-      bypassSet.add(domain);
-    }
-  }
-
-  const ruleList = Array.from(ruleSet).map(r => JSON.stringify(r));
-  const bypassList = Array.from(bypassSet).map(r => JSON.stringify(r));
-
-  return `
-    function FindProxyForURL(url, host) {
-      // 1. 白名单域名走本地 IP (不使用任何代理，直接走 DIRECT)
-      var bypassRules = [${bypassList.join(', ')}];
-      for (var b = 0; b < bypassRules.length; b++) {
-        var bp = bypassRules[b];
-        if (bp === "<local>" && isPlainHostName(host)) {
-          return "DIRECT";
-        }
-        if (
-          shExpMatch(host, bp) ||
-          dnsDomainIs(host, bp.charAt(0) === "." ? bp : "." + bp)
-        ) {
-          return "DIRECT";
-        }
-      }
-
-      // 2. 目标多域名动态轮换代理池 (在 3 个独立端口随机分配，打破连接池复用)
-      var rotatingRules = [${ruleList.join(', ')}];
-      var ports = [${ports.join(', ')}];
-      for (var i = 0; i < rotatingRules.length; i++) {
-        var pattern = rotatingRules[i];
-        if (
-          shExpMatch(host, pattern) || 
-          dnsDomainIs(host, pattern) || 
-          shExpMatch(url, pattern) ||
-          shExpMatch(url, "*" + pattern + "*")
-        ) {
-          var p = ports[Math.floor(Math.random() * ports.length)];
-          return "PROXY 127.0.0.1:" + p;
-        }
-      }
-
-      // 3. 未命中规则流量走环境回退代理或 DIRECT 直连
-      return ${JSON.stringify(fallbackEndpoint)};
-    }
-  `.trim();
+  return buildRoutingPac({
+    rules: rotatingRules,
+    bypass: bypassRules,
+    targets: ports.map(port => 'PROXY 127.0.0.1:' + port),
+    fallback: fallbackEndpoint,
+  });
 }
 
 module.exports = {

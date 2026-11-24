@@ -7,8 +7,8 @@ using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: System.Reflection.AssemblyVersion("2.7.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("2.7.0.0")]
+[assembly: System.Reflection.AssemblyVersion("3.0.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("3.0.0.0")]
 
 namespace BitFPManager
 {
@@ -37,6 +37,39 @@ namespace BitFPManager
             }
             catch {}
         }
+        private static void StopInstalledProcesses(string installDir)
+        {
+            string[] relativeExecutables = {
+                "DT - 指纹浏览器.exe",
+                "DT-Fingerprint-Browser.exe",
+                "DT-CLI.exe",
+                @"runtime\electron.exe",
+                @"runtime\cores\electron\electron.exe",
+                @"runtime\cores\chromium\chrome.exe"
+            };
+
+            foreach (string relativeExecutable in relativeExecutables)
+            {
+                string expectedPath = Path.GetFullPath(Path.Combine(installDir, relativeExecutable));
+                foreach (Process process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(expectedPath)))
+                {
+                    using (process)
+                    {
+                        try
+                        {
+                            string actualPath = Path.GetFullPath(process.MainModule.FileName);
+                            if (!string.Equals(actualPath, expectedPath, StringComparison.OrdinalIgnoreCase)) continue;
+
+                            process.Kill();
+                            process.WaitForExit(1000);
+                        }
+                        catch (InvalidOperationException) {}
+                        catch (System.ComponentModel.Win32Exception) {}
+                    }
+                }
+            }
+        }
+
         [STAThread]
         static void Main()
         {
@@ -55,17 +88,8 @@ namespace BitFPManager
 
             try
             {
-                // 1. 尝试关闭所有正在运行的实例
-                try
-                {
-                    Process[] procs = Process.GetProcessesByName("DT - 指纹浏览器");
-                    foreach (var p in procs) { try { p.Kill(); } catch {} }
-                    Process[] enProcs = Process.GetProcessesByName("DT-Fingerprint-Browser");
-                    foreach (var p in enProcs) { try { p.Kill(); } catch {} }
-                    Process[] cliProcs = Process.GetProcessesByName("DT-CLI");
-                    foreach (var p in cliProcs) { try { p.Kill(); } catch {} }
-                }
-                catch {}
+                // 1. 关闭当前安装目录的进程，避免卸载时文件被占用。
+                StopInstalledProcesses(installDir);
 
                 // 2. 移除快捷方式
                 string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);

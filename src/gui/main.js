@@ -20,9 +20,13 @@ function runManager() {
   const { app, BrowserWindow, ipcMain, shell, Menu, Tray, nativeImage, screen, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const { isDeepStrictEqual } = require('node:util');
 const store = require('../manager/store');
 const processManager = require('../manager/process-manager');
+const { chromiumProfile } = require('../manager/chromium');
 const systemSettings = require('../manager/system-settings');
+const { ensureCore } = require('../../scripts/runtime-path');
+const { chromiumSeed } = require('../shared/chromium-seed');
 const ipcHub = require('../manager/ipc-hub');
 const { parseCookies, exportAsJson, exportAsNetscape } = require('../shared/cookie-helper');
 
@@ -34,7 +38,10 @@ app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-gpu-process-crash-limit');
 app.commandLine.appendSwitch('high-dpi-support', '1');
 
-// 1. 管理器单例互斥锁：严格禁止多开
+// Keep the manager lock away from the older app's userData directory.
+const managerData = path.join(store.DATA_DIR, 'manager-v3');
+fs.mkdirSync(managerData, { recursive: true });
+app.setPath('userData', managerData);
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   console.log('[DT Manager] 检测到管理器已有实例正在运行，禁止多开，当前进程自动退出。');
@@ -337,6 +344,35 @@ function getFullState() {
   return { environments, running, settings, activeFont };
 }
 
+function isElectronWindowConnected(id, running) {
+  return Object.hasOwn(running, id) && running[id].core !== 'chromium' && ipcHub.isClientConnected(id);
+}
+
+function environmentRuntimeCore(env, active) {
+  return active ? (active.core || 'electron') : env.browserCore;
+}
+
+function cookieEnvironmentStatus(id) {
+  if (!id) return { error: '未指定环境ID' };
+  const env = store.getEnvironment(id);
+  if (!env) return { error: '未找到该环境。' };
+  const active = processManager.getRunningStatus()[id];
+  if (environmentRuntimeCore(env, active) === 'chromium') {
+    return { error: 'Chromium 环境暂不支持 Cookie 导入和导出。' };
+  }
+  return { active };
+}
+
+function comparableProxy(value) {
+  const { rawString, ...proxy } = store.parseAndBuildProxyConfig(value);
+  return proxy.enabled ? proxy : { enabled: false };
+}
+
+function comparableRotatingProxy(value) {
+  if (!value?.enabled) return { enabled: false };
+  return { enabled: true, filePath: value.filePath || '', rules: value.rules || '', mode: value.mode || 'random' };
+}
+
 let lastStateStr = '';
 function broadcastState(force = false) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -356,6 +392,16 @@ app.whenReady().then(() => {
   // IPC 接口
   ipcMain.handle('get-state', () => getFullState());
   ipcMain.handle('get-settings', () => store.getSettings());
+  const prepareCore = (sender, core) => ensureCore(core, store.ROOT_DIR, status => {
+    if (!sender.isDestroyed()) sender.send('core-install-progress', status);
+  });
+  ipcMain.handle('prepare-default-browser', event => prepareCore(event.sender, 'chromium'));
+  ipcMain.handle('select-browser-core', async (event, core) => {
+    await prepareCore(event.sender, core);
+    store.updateSettings({ browserCore: core });
+    broadcastState(true);
+    return core;
+  });
   ipcMain.handle('update-settings', (_e, patch) => {
     const updated = store.updateSettings(patch);
     broadcastState(true);
@@ -417,8 +463,25 @@ app.whenReady().then(() => {
     return created;
   });
 
-  ipcMain.handle('update-env', (_e, { id, updates }) => {
+  ipcMain.handle('update-env', async (_e, { id, updates }) => {
+    const previous = store.getEnvironment(id);
+    if (!previous) throw new Error(`未找到环境 ID: ${id}`);
+    const active = processManager.getRunningStatus()[id];
+    if (active?.core === 'chromium') {
+      const proxyChanged = updates.proxy !== undefined &&
+        !isDeepStrictEqual(comparableProxy(previous.proxy), comparableProxy(updates.proxy));
+      const rotatingProxyChanged = updates.rotatingProxy !== undefined &&
+        !isDeepStrictEqual(comparableRotatingProxy(previous.rotatingProxy), comparableRotatingProxy(updates.rotatingProxy));
+      if (proxyChanged || rotatingProxyChanged) {
+        throw new Error('请先停止 Chromium 环境，再修改代理配置。');
+      }
+    }
     const updated = store.updateEnvironment(id, updates);
+    if (previous.fp?.seed !== updated.fp?.seed || chromiumSeed(previous.fp) !== chromiumSeed(updated.fp) ||
+      previous.customUa !== updated.customUa ||
+      previous.language !== updated.language || previous.timezone !== updated.timezone) {
+      await processManager.refreshChromium(id);
+    }
     broadcastState();
     return updated;
   });
@@ -447,8 +510,8 @@ app.whenReady().then(() => {
     return cloned;
   });
 
-  ipcMain.handle('random-fp', (_e, id) => {
-    const updated = store.regenerateFp(id);
+  ipcMain.handle('random-fp', async (_e, id) => {
+    const updated = await processManager.randomizeEnvironment(id);
     broadcastState();
     return updated;
   });
@@ -484,6 +547,22 @@ app.whenReady().then(() => {
     shell.openPath(absPath);
   });
 
+  ipcMain.handle('open-environment-directory', (_e, id) => {
+    const env = store.getEnvironment(id);
+    if (!env) return '未找到该环境。';
+    const active = processManager.getRunningStatus()[id];
+    const electronPath = env.userDataDir || env.id;
+    const target = environmentRuntimeCore(env, active) === 'chromium'
+      ? chromiumProfile(store.DATA_DIR, id)
+      : path.isAbsolute(electronPath) ? electronPath : path.join(store.PROFILES_DIR, path.basename(electronPath));
+    try {
+      fs.mkdirSync(target, { recursive: true });
+    } catch (error) {
+      return error.message;
+    }
+    return shell.openPath(target);
+  });
+
   const { testProxy } = require('../manager/proxy-tester');
   const { parseProxyString } = require('../manager/proxy-parser');
 
@@ -502,12 +581,13 @@ app.whenReady().then(() => {
   // 1. 多窗口一键批量排列与平铺控制器 (Tile / Grid / Cascade)
   ipcMain.handle('arrange-windows', async (_e, { layout = 'grid', envIds = [] } = {}) => {
     const runningStatus = processManager.getRunningStatus();
-    let targetIds = (Array.isArray(envIds) && envIds.length > 0)
-      ? envIds.filter(id => runningStatus[id])
+    const requestedIds = (Array.isArray(envIds) && envIds.length > 0)
+      ? [...new Set(envIds)]
       : Object.keys(runningStatus);
+    const targetIds = requestedIds.filter(id => isElectronWindowConnected(id, runningStatus));
 
     if (targetIds.length === 0) {
-      return { success: false, message: '当前没有正在运行的浏览器窗口！' };
+      return { success: false, count: 0, dispatched: 0, layout, message: '当前没有已连接的 Electron 窗口可排列。' };
     }
 
     const primaryDisplay = screen.getPrimaryDisplay();
@@ -579,6 +659,8 @@ app.whenReady().then(() => {
           }
         });
       }
+    } else {
+      return { success: false, count: 0, dispatched: 0, layout, message: '不支持此窗口排列方式。' };
     }
 
     let dispatched = 0;
@@ -588,41 +670,53 @@ app.whenReady().then(() => {
       }
     }
 
+    const skipped = requestedIds.length - dispatched;
     return {
-      success: true,
-      count,
+      success: dispatched > 0,
+      count: dispatched,
       dispatched,
       layout,
-      message: `已为 ${count} 个运行中窗口应用【${layout}】排列`
+      message: dispatched > 0
+        ? `已向 ${dispatched} 个 Electron 窗口发送排列指令${skipped ? `，跳过 ${skipped} 个窗口` : ''}。`
+        : 'Electron 窗口已断开，未发送排列指令。'
     };
   });
 
   // 2. 多窗口键鼠镜像同步器 (Mouse & Keyboard Synchronizer)
   ipcMain.handle('set-window-sync', (_e, { enabled, masterId, slaveIds = [] } = {}) => {
-    ipcHub.setSyncConfig({
-      enabled: Boolean(enabled),
-      masterId: masterId || null,
-      slaveIds: Array.isArray(slaveIds) ? slaveIds : []
-    });
+    if (!enabled) return ipcHub.setSyncConfig({ enabled: false });
+
+    const running = processManager.getRunningStatus();
+    const targets = Array.isArray(slaveIds) ? [...new Set(slaveIds)].filter(id => id !== masterId) : [];
+    if (!isElectronWindowConnected(masterId, running) || targets.length === 0 ||
+        targets.some(id => !isElectronWindowConnected(id, running))) {
+      throw new Error('键鼠同步需要已连接的 Electron 主控窗口和至少一个已连接的 Electron 从属窗口。');
+    }
+
+    ipcHub.setSyncConfig({ enabled: true, masterId, slaveIds: targets });
     return ipcHub.getSyncStatus();
   });
 
   ipcMain.handle('get-sync-status', () => {
-    return ipcHub.getSyncStatus();
+    const status = ipcHub.getSyncStatus();
+    const running = processManager.getRunningStatus();
+    const connectedEnvIds = status.connectedEnvIds.filter(id => isElectronWindowConnected(id, running));
+    const hasPair = connectedEnvIds.includes(status.masterId) && status.slaveIds.some(id => connectedEnvIds.includes(id));
+    return { ...status, enabled: status.enabled && hasPair, connectedCount: connectedEnvIds.length, connectedEnvIds };
   });
 
   // 3. Cookie / 网站数据一键导入导出 (JSON & Netscape 格式，支持热写入与离线写入)
   ipcMain.handle('import-cookies', async (_e, { envId, rawData, format = 'auto' }) => {
-    if (!envId) return { success: false, error: '未指定环境ID' };
+    const { active, error: environmentError } = cookieEnvironmentStatus(envId);
+    if (environmentError) return { success: false, error: environmentError };
     const { cookies, error } = parseCookies(rawData, format);
     if (error || !cookies || cookies.length === 0) {
       return { success: false, error: error || '未能从输入中解析出任何有效Cookie' };
     }
 
-    const isRunning = processManager.isRunning(envId);
-    if (isRunning && ipcHub.isClientConnected(envId)) {
+    if (active && ipcHub.isClientConnected(envId)) {
       try {
-        const res = await ipcHub.injectCookies(envId, cookies);
+        await ipcHub.injectCookies(envId, cookies);
         return {
           success: true,
           count: cookies.length,
@@ -652,11 +746,11 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('export-cookies', async (_e, { envId, format = 'json' }) => {
-    if (!envId) return { success: false, error: '未指定环境ID' };
-    const isRunning = processManager.isRunning(envId);
+    const { active, error } = cookieEnvironmentStatus(envId);
+    if (error) return { success: false, error };
     let cookies = [];
 
-    if (isRunning && ipcHub.isClientConnected(envId)) {
+    if (active && ipcHub.isClientConnected(envId)) {
       try {
         cookies = await ipcHub.requestCookies(envId);
       } catch (err) {

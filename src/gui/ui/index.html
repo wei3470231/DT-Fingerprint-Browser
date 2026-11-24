@@ -718,7 +718,7 @@
     }
     table {
       width: 100%;
-      min-width: 1180px;
+      min-width: 1080px;
       border-collapse: collapse;
       text-align: left;
       font-size: 12px;
@@ -746,6 +746,30 @@
       box-sizing: border-box;
     }
     tbody tr:hover { background: var(--bg-hover); }
+
+    .environment-meta {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      max-width: 180px;
+      margin-top: 2px;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+    .core-badge { flex: none; white-space: nowrap; }
+    .tag.core-badge[data-core="electron"] {
+      color: #6d28d9; background: #f3e8ff; border-color: #d8b4fe;
+    }
+    .tag.core-badge[data-core="chromium"] {
+      color: #0f766e; background: #ccfbf1; border-color: #99f6e4;
+    }
+    .environment-meta .group-filter-badge { min-width: 0; overflow: hidden; }
+    .environment-meta .group-filter-badge span, .environment-note {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .hardware-summary { width: 102px; white-space: nowrap; }
 
     /* 状态与徽章 (严格防换行错位) */
     .status-badge {
@@ -923,6 +947,11 @@
       z-index: 1000;
       padding: 5px 0;
     }
+    .embedded-icon { display: inline-flex; flex: none; vertical-align: middle; }
+    .embedded-icon svg { display: block; }
+    .core-install-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+    .core-install-status[hidden], #chromiumSeedGroup[hidden] { display: none; }
+    .core-install-status progress { width: 84px; }
     .dropdown-item {
       padding: 8px 14px;
       font-size: 12px;
@@ -1203,19 +1232,31 @@
       <div class="toolbar-left">
         <button class="btn btn-primary" id="btnNewEnv"></button>
         <button class="btn btn-success" id="btnLaunchSelected"></button>
+        <label for="browserCoreSelect" style="display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">
+          新建环境内核
+          <select class="select-box" id="browserCoreSelect" title="为新建环境设置默认内核">
+            <option value="chromium">Chromium</option>
+            <option value="electron">Electron</option>
+          </select>
+        </label>
+        <div class="core-install-status" id="coreInstallStatus" hidden>
+          <span id="coreInstallText" role="status"></span>
+          <progress id="coreInstallProgress" max="100" aria-label="内核安装进度" hidden></progress>
+          <button class="btn btn-secondary btn-sm" type="button" id="btnRetryBrowserCore" hidden>重试下载</button>
+        </div>
         <div class="dropdown-container" id="windowLayoutContainer">
           <button class="btn btn-secondary" id="btnWindowLayout" title="一键批量平铺排列所有运行中的浏览器窗口 (网格/水平/垂直/层叠)">
-            <span>🪟 窗口排列</span>
+            <span class="embedded-icon" data-icon="window-layout" aria-hidden="true"></span><span>窗口排列</span>
           </button>
           <div class="dropdown-menu" id="windowLayoutMenu">
-            <div class="dropdown-item" data-layout="grid">🔲 网格平铺 (Grid 排列)</div>
-            <div class="dropdown-item" data-layout="horizontal">⏸️ 水平平铺 (左右横向)</div>
-            <div class="dropdown-item" data-layout="vertical">⏩ 垂直平铺 (上下纵向)</div>
-            <div class="dropdown-item" data-layout="cascade">📑 层叠排列 (Cascade)</div>
+            <div class="dropdown-item" data-layout="grid"><span class="embedded-icon" data-icon="layout-grid" aria-hidden="true"></span> 网格平铺</div>
+            <div class="dropdown-item" data-layout="horizontal"><span class="embedded-icon" data-icon="layout-columns" aria-hidden="true"></span> 水平平铺</div>
+            <div class="dropdown-item" data-layout="vertical"><span class="embedded-icon" data-icon="layout-rows" aria-hidden="true"></span> 垂直平铺</div>
+            <div class="dropdown-item" data-layout="cascade"><span class="embedded-icon" data-icon="layers" aria-hidden="true"></span> 层叠排列</div>
           </div>
         </div>
         <button class="btn btn-secondary" id="btnSyncCtrl" style="color: #ec4899;" title="多窗口键鼠镜像同步器：将主控窗口的点击、按键、滚动镜像广播至其他窗口">
-          <span>⚡ 键鼠同步</span>
+          <span class="embedded-icon" data-icon="bolt" aria-hidden="true"></span><span>键鼠同步</span>
           <span class="status-dot green" id="syncStatusDot" style="display: none; margin-left: 3px;"></span>
         </button>
         <button class="btn btn-secondary" id="btnBatchSetGroup" title="将勾选的环境批量移至指定分组"></button>
@@ -1247,11 +1288,11 @@
           <thead>
             <tr>
               <th style="width: 40px; white-space: nowrap;"><input type="checkbox" id="checkAll"></th>
-              <th style="width: 170px; white-space: nowrap;">环境名称</th>
+              <th style="width: 170px; white-space: nowrap;">环境 / 内核</th>
               <th style="width: 100px; white-space: nowrap;">运行状态</th>
               <th style="width: 110px; white-space: nowrap;">远程端口</th>
               <th style="width: 160px; white-space: nowrap;">代理信息</th>
-              <th style="min-width: 260px; white-space: nowrap;">硬件指纹摘要</th>
+              <th class="hardware-summary">硬件摘要</th>
               <th style="width: 510px; min-width: 510px; text-align: right; white-space: nowrap;">操作</th>
             </tr>
           </thead>
@@ -1267,16 +1308,16 @@
   <footer class="app-footer">
     <div class="footer-left">
       <div id="btnCopyQQ" class="footer-tag" title="点击一键复制官方技术交流与BUG反馈 QQ 群号">
-        <span>💬 提交BUG Q群：<b style="color: var(--accent); letter-spacing: 0.5px;">328399769</b></span>
+        <span><span class="embedded-icon" data-icon="chat" aria-hidden="true"></span> 提交 BUG Q 群：<b style="color: var(--accent); letter-spacing: 0.5px;">328399769</b></span>
         <span class="footer-badge" id="badgeCopyQQ">点击复制</span>
       </div>
     </div>
     <div class="footer-center">
-      <span class="footer-slogan">🛡️ 商业级对抗内核 · 永久纯免费 · 100%完全开源 · 拒绝收费套路</span>
+      <span class="footer-slogan"><span class="embedded-icon" data-icon="shield" aria-hidden="true"></span> 商业级对抗内核 · 永久纯免费 · 100%完全开源 · 拒绝收费套路</span>
     </div>
     <div class="footer-right">
       <div id="btnVersionCheck" class="footer-tag" title="点击检查更新或前往 GitHub Releases 页面">
-        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v2.7</b></span>
+        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v3.0</b></span>
         <span class="footer-version-badge" id="versionBadge">
           <span class="status-dot green" id="versionDot"></span>
           <span id="versionStatusText">检测更新中...</span>
@@ -1472,7 +1513,7 @@
             <div style="font-size: 12px; font-weight: 600; color: #38bdf8; display: inline-flex; align-items: center; gap: 6px;">
               自定义 User-Agent (UA 头)
             </div>
-            <span style="font-size: 11px; color: var(--text-muted);">手动 UA 用于兼容性测试。随机指纹会替换 UA。</span>
+            <span style="font-size: 11px; color: var(--text-muted);">手动 UA 用于兼容性测试。随机指纹时保留当前 UA。</span>
           </div>
           <div class="form-row">
             <div class="form-group" style="max-width: 260px;">
@@ -1578,13 +1619,13 @@
               <label class="form-label">代理范围</label>
               <select class="form-input" id="formProxyScope">
                 <option value="all">全都走代理 (推荐)</option>
-                <option value="rules">指定 URL 规则走代理</option>
+                <option value="rules">按目标域名走代理</option>
               </select>
             </div>
           </div>
           <div class="form-group" id="proxyRulesRow" style="margin-top: 10px; display: none;">
-            <label class="form-label">指定 URL 规则 (以分号分隔)</label>
-            <input type="text" class="form-input" id="formProxyRules" placeholder="例如：*.browserscan.net;*google.com">
+            <label class="form-label">代理目标域名（以分号分隔）</label>
+            <input type="text" class="form-input" id="formProxyRules" placeholder="例如：example.com;*.example.org">
           </div>
           <div class="form-group" style="margin-top: 10px;">
             <label class="form-label" style="display: flex; justify-content: space-between; align-items: center;">
@@ -1595,11 +1636,11 @@
           </div>
         </div>
 
-        <!-- ⚡ 目标多域名动态轮换代理池 (每连接换 IP) -->
+        <!-- 目标多域名动态轮换代理池 -->
         <div style="background: var(--bg-sub); padding: 12px; border-radius: 6px; border: 1px solid var(--border);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div style="font-size: 12px; font-weight: 600; color: #ec4899; display: inline-flex; align-items: center; gap: 6px;">
-              ⚡ 目标多域名动态轮换代理池 (每连接新建并换新 IP)
+              <span class="embedded-icon" data-icon="bolt" aria-hidden="true"></span> 目标多域名动态轮换代理池
             </div>
             <div style="display: flex; align-items: center; gap: 6px;">
               <input type="checkbox" id="formRotatingEnabled" style="cursor: pointer;">
@@ -1614,12 +1655,12 @@
               </label>
               <div style="display: flex; gap: 8px;">
                 <input type="text" class="form-input" id="formRotatingFilePath" style="flex: 1;" placeholder="请选择或输入本地代理文档路径，如 D:\proxies.txt">
-                <button type="button" class="btn btn-secondary btn-sm" id="btnSelectRotatingFile" style="height: 34px; white-space: nowrap;">📂 选择 .txt 文件</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnSelectRotatingFile" style="height: 34px; white-space: nowrap;"><span class="embedded-icon" data-icon="folder" aria-hidden="true"></span> 选择 .txt 文件</button>
               </div>
             </div>
             <div class="form-row">
               <div class="form-group" style="flex: 2;">
-                <label class="form-label">指定目标域名/URL 规则 (支持多个域名分号 ; 分隔) *</label>
+                <label class="form-label">代理目标域名（以分号分隔）*</label>
                 <input type="text" class="form-input" id="formRotatingRules" placeholder="例如：challenges.cloudflare.com;*.turnstile.com;api.target.com">
               </div>
               <div class="form-group" style="flex: 1; max-width: 150px;">
@@ -1631,12 +1672,12 @@
               </div>
             </div>
             <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5; background: var(--bg-hover); padding: 6px 10px; border-radius: 4px;">
-              💡 <b>运作机制：</b>针对上述指定域名的网络访问，每次有新连接创建时立即从代理池中抽取不同 IP；自动切断长连接复用保证每次刷新或点击必定换新 IP；未匹配的其余流量正常走基础代理或直连。
+              <span class="embedded-icon" data-icon="bulb" aria-hidden="true"></span> <b>运作机制：</b>针对上述指定域名的网络访问，每次有新连接创建时立即从代理池中抽取不同 IP；自动切断长连接复用保证每次刷新或点击必定换新 IP；未匹配的其余流量正常走基础代理或直连。
             </div>
           </div>
         </div>
 
-        <!-- 🛡️ 网页交互行为控制：屏蔽弹窗 -->
+        <!-- 网页弹窗控制 -->
         <div style="background: var(--bg-sub); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <input type="checkbox" id="formBlockDialogs" style="width: 15px; height: 15px; cursor: pointer;">
@@ -1664,6 +1705,11 @@
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div id="titleFp" style="font-size: 12px; font-weight: 600; color: #38bdf8; display: inline-flex; align-items: center; gap: 6px;">硬件与环境指纹</div>
             <button type="button" class="btn btn-secondary btn-sm" id="btnModalRandomFp">随机生成新指纹</button>
+          </div>
+          <p id="chromiumFingerprintHint" hidden style="margin: 8px 0 0; color: var(--text-muted); font-size: 11px;">内存、屏幕和显卡型号由 Chromium 决定。随机指纹会更新种子和 Canvas 读值，保留当前 UA。</p>
+          <div class="form-group" id="chromiumSeedGroup" hidden>
+            <label class="form-label" for="formChromiumSeed">Chromium 32 位种子</label>
+            <input class="form-input" id="formChromiumSeed" type="number" min="0" max="4294967295" step="1" placeholder="自动生成">
           </div>
           <div class="fp-meta-grid">
             <div class="fp-meta-item">
@@ -1768,7 +1814,7 @@
     <div class="modal-card" style="width: 700px; max-height: 88vh;">
       <div class="modal-header">
         <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
-          <span>🍪 Cookie 网站数据管理</span>
+          <span><span class="embedded-icon" data-icon="cookie" aria-hidden="true"></span> Cookie 网站数据管理</span>
           <span class="tag" id="cookieEnvNameTag" style="font-size: 11px; font-weight: normal;"></span>
           <span class="status-badge" id="cookieEnvStatusTag" style="font-size: 11px;"></span>
         </div>
@@ -1777,8 +1823,8 @@
       <div class="modal-body" style="gap: 14px; padding: 18px 22px;">
         <!-- 标签页切换: 导出 vs 导入 -->
         <div style="display: flex; gap: 8px; border-bottom: 1px solid var(--border-sub); padding-bottom: 10px;">
-          <button class="btn btn-primary btn-sm" id="tabCookieExport" style="min-width: 110px;">📤 导出 Cookie</button>
-          <button class="btn btn-secondary btn-sm" id="tabCookieImport" style="min-width: 110px;">📥 导入 Cookie</button>
+          <button class="btn btn-primary btn-sm" id="tabCookieExport" style="min-width: 110px;"><span class="embedded-icon" data-icon="upload" aria-hidden="true"></span> 导出 Cookie</button>
+          <button class="btn btn-secondary btn-sm" id="tabCookieImport" style="min-width: 110px;"><span class="embedded-icon" data-icon="download" aria-hidden="true"></span> 导入 Cookie</button>
         </div>
 
         <!-- 导出面板 -->
@@ -1793,14 +1839,14 @@
                 <input type="radio" name="exportFormat" value="netscape" style="cursor: pointer;"> Netscape TXT 格式
               </label>
             </div>
-            <button class="btn btn-secondary btn-sm" id="btnRefreshExportCookie" title="重新从浏览器提取最新 Cookie">🔄 重新读取</button>
+            <button class="btn btn-secondary btn-sm" id="btnRefreshExportCookie" title="重新从浏览器提取最新 Cookie"><span class="embedded-icon" data-icon="refresh" aria-hidden="true"></span> 重新读取</button>
           </div>
           <textarea id="cookieExportText" class="form-input" style="height: 220px; font-family: monospace; font-size: 11px; white-space: pre; line-height: 1.4; resize: vertical; padding: 10px;" readonly placeholder="正在读取 Cookie..."></textarea>
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <span id="cookieExportCountText" style="font-size: 12px; color: var(--text-muted);">共 0 条 Cookie</span>
             <div style="display: flex; gap: 8px;">
-              <button class="btn btn-secondary" id="btnCopyExportCookie">📋 复制到剪贴板</button>
-              <button class="btn btn-primary" id="btnSaveExportCookie">💾 保存为文件...</button>
+              <button class="btn btn-secondary" id="btnCopyExportCookie"><span class="embedded-icon" data-icon="copy" aria-hidden="true"></span> 复制到剪贴板</button>
+              <button class="btn btn-primary" id="btnSaveExportCookie"><span class="embedded-icon" data-icon="save" aria-hidden="true"></span> 保存为文件</button>
             </div>
           </div>
         </div>
@@ -1820,14 +1866,14 @@
                 <input type="radio" name="importFormat" value="netscape" style="cursor: pointer;"> Netscape 格式
               </label>
             </div>
-            <button class="btn btn-secondary btn-sm" id="btnLoadCookieFile">📁 从本地文件载入</button>
+            <button class="btn btn-secondary btn-sm" id="btnLoadCookieFile"><span class="embedded-icon" data-icon="folder" aria-hidden="true"></span> 从本地文件载入</button>
           </div>
           <textarea id="cookieImportText" class="form-input" style="height: 220px; font-family: monospace; font-size: 11px; white-space: pre; line-height: 1.4; resize: vertical; padding: 10px;" placeholder="请在此处直接粘贴 JSON 格式的 Cookie 数组，或 Netscape 格式的 TXT 内容 (带 # HttpOnly_ 或纯域名 tab 分隔行)..."></textarea>
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <span style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
-              💡 提示：运行中的浏览器将实时热注入；未运行则保存至离线缓存，下次启动时自动注入。
+              <span class="embedded-icon" data-icon="bulb" aria-hidden="true"></span> 提示：运行中的浏览器将实时热注入；未运行则保存至离线缓存，下次启动时自动注入。
             </span>
-            <button class="btn btn-primary" id="btnSubmitImportCookie">🚀 立即导入</button>
+            <button class="btn btn-primary" id="btnSubmitImportCookie"><span class="embedded-icon" data-icon="upload" aria-hidden="true"></span> 立即导入</button>
           </div>
         </div>
       </div>
@@ -1839,24 +1885,24 @@
     <div class="modal-card" style="width: 620px; max-height: 88vh;">
       <div class="modal-header">
         <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
-          <span>⚡ 多窗口键鼠镜像同步器 (Synchronizer)</span>
+          <span><span class="embedded-icon" data-icon="bolt" aria-hidden="true"></span> 多窗口键鼠镜像同步器</span>
         </div>
         <div class="modal-close" id="syncModalClose">&times;</div>
       </div>
       <div class="modal-body" style="gap: 14px; padding: 18px 22px;">
         <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 12px; color: var(--text-sub); line-height: 1.5;">
-          📌 <b>同步原理与说明：</b><br>
+          <span class="embedded-icon" data-icon="pin" aria-hidden="true"></span> <b>同步原理与说明：</b><br>
           选择一个运行中的浏览器作为<b>主控端</b>，选中的<b>从属端</b>将实时毫秒级镜像接收主控端的<b>鼠标点击、滚轮滚动、键盘敲击、页面跳转与刷新</b>。支持配合一键平铺使用！
         </div>
 
         <div class="form-group">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
             <label class="form-label" style="font-weight: 600; color: var(--text-main); margin-bottom: 0;">
-              👑 1. 选择主控端浏览器 (Master) *
+              <span class="embedded-icon" data-icon="crown" aria-hidden="true"></span> 选择主控窗口
             </label>
             <div style="display: flex; align-items: center; gap: 8px;">
               <span id="syncRunningCountTip" style="font-size: 11px; color: var(--text-muted); font-weight: normal;"></span>
-              <button class="btn btn-secondary btn-sm" id="btnRefreshSyncList" style="padding: 2px 8px; font-size: 11px;" title="重新扫描并刷新运行中的浏览器窗口">🔄 刷新窗口</button>
+              <button class="btn btn-secondary btn-sm" id="btnRefreshSyncList" style="padding: 2px 8px; font-size: 11px;" title="重新扫描并刷新运行中的浏览器窗口"><span class="embedded-icon" data-icon="refresh" aria-hidden="true"></span> 刷新窗口</button>
             </div>
           </div>
           <!-- 主控选择区：直观卡片点选（默认自动选中第1个运行中窗口） -->
@@ -1869,7 +1915,7 @@
         <div class="form-group">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
             <label class="form-label" style="margin-bottom: 0; font-weight: 600; color: var(--text-main);">
-              👥 2. 勾选跟随镜像同步的从属窗口 (Slaves) *
+              <span class="embedded-icon" data-icon="users" aria-hidden="true"></span> 选择跟随窗口
             </label>
             <div style="display: flex; gap: 6px;">
               <button class="btn btn-secondary btn-sm" id="btnSelectAllSlaves" style="padding: 2px 8px; font-size: 11px;">全选从属</button>
@@ -1888,7 +1934,7 @@
           </div>
           <div style="display: flex; gap: 8px;">
             <button class="btn btn-danger" id="btnStopSync" style="display: none;">停止同步</button>
-            <button class="btn btn-success" id="btnStartSync">🚀 开启键鼠同步</button>
+            <button class="btn btn-success" id="btnStartSync"><span class="embedded-icon" data-icon="rocket" aria-hidden="true"></span> 开启键鼠同步</button>
           </div>
         </div>
       </div>
@@ -1901,6 +1947,8 @@
   <script>
     const { ipcRenderer } = require('electron');
     const { getIconSvg } = require('../../shared/icon-loader');
+    const { chromiumSeed, isChromiumSeed } = require('../../shared/chromium-seed');
+    const { browserCoreName } = require('../../shared/browser-core');
 
     function icon(name, opts = {}) {
       return getIconSvg(name, opts);
@@ -1917,6 +1965,9 @@
     }
 
     function initStaticIcons() {
+      document.querySelectorAll('[data-icon]').forEach(element => {
+        element.innerHTML = icon(element.dataset.icon, { size: 13 });
+      });
       const logoBadge = document.getElementById('logoBadge');
       if (logoBadge) logoBadge.innerHTML = icon('bolt', { size: 16, color: '#38bdf8' });
 
@@ -2021,6 +2072,7 @@
     let runningStatus = {};
     let selectedIds = new Set();
     let modalFpData = null;
+    let modalPreviewCore = 'chromium';
     let allGroups = ['默认分组'];
 
     function showToast(msg) {
@@ -2045,6 +2097,7 @@
       initStaticIcons();
       await refreshGroups();
       const state = await ipcRenderer.invoke('get-state');
+      updateBrowserCore(state.settings?.browserCore);
       allEnvironments = state.environments || [];
       runningStatus = state.running || {};
       updateGroupsDropdown();
@@ -2154,9 +2207,10 @@
         const safeGroup = escapeHtml(envGroup);
         tdName.innerHTML = `
           <div style="font-weight: 600; color: var(--text-main); font-size: 13px;">${safeName}</div>
-          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px; display: flex; align-items: center; gap: 5px;">
-            <span class="tag group-filter-badge" style="cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 3px;" title="点击切换至只看该分类">${icon('folder', { size: 11 })} ${safeGroup}</span>
-            ${safeNotes ? `<span>${safeNotes}</span>` : ''}
+          <div class="environment-meta">
+            <span class="tag core-badge" data-core="${env.browserCore === 'electron' ? 'electron' : 'chromium'}" title="环境内核">${browserCoreName(env.browserCore)}</span>
+            <span class="tag group-filter-badge" style="cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 3px;" title="只看该分类：${safeGroup}">${icon('folder', { size: 11 })}<span>${safeGroup}</span></span>
+            ${safeNotes ? `<span class="environment-note" title="${safeNotes}">${safeNotes}</span>` : ''}
           </div>
         `;
         const groupBadge = tdName.querySelector('.group-filter-badge');
@@ -2177,7 +2231,7 @@
           tdStatus.innerHTML = `
             <div class="status-badge running" style="white-space: nowrap;">
               <div class="pulse-dot"></div>
-              <span>运行中</span>
+              <span title="${browserCoreName(runInfo.core || 'electron')}">运行中</span>
             </div>
           `;
         } else {
@@ -2218,39 +2272,22 @@
         }
         tr.appendChild(tdProxy);
 
-        // 硬件指纹摘要 (显卡名称智能清洗截断，紧凑两行保持固定行高，绝不撑大表格)
         const tdFp = document.createElement('td');
-        tdFp.style.whiteSpace = 'nowrap';
-        tdFp.style.maxWidth = '320px';
+        tdFp.className = 'hardware-summary';
         const fp = env.fp || {};
-        const cores = fp.navigator?.hardwareConcurrency || '?';
-        const mem = fp.navigator?.deviceMemory || '?';
-        
-        let rawGpu = '默认显卡';
-        if (fp.webgl?.renderer) {
-          const s = String(fp.webgl.renderer);
-          if (s.includes('(')) {
-            const inner = s.split('(')[1]?.split(')')[0] || '';
-            const parts = inner.split(',').map(p => p.trim()).filter(Boolean);
-            rawGpu = parts[1] || parts[0] || s;
-            rawGpu = rawGpu.replace(/\s*Direct3D\d+.*$/i, '').trim();
-          } else {
-            rawGpu = s.slice(0, 28);
-          }
-        }
-        const gpu = escapeHtml(rawGpu);
-        const res = fp.screen ? `${fp.screen.width}x${fp.screen.height}` : '?';
-        const lang = escapeHtml(env.language || 'en-US');
-        const tz = escapeHtml(env.timezone || fp.timezone || 'America/New_York');
-
-        tdFp.innerHTML = `
-          <div style="font-size: 12px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; line-height: 1.4;" title="${escapeHtml(fp.webgl?.renderer || '')}">
-            <b style="color: var(--accent);">${cores}核/${mem}G</b> · <span style="color: var(--text-sub);">${gpu}</span>${env.customUa ? `<span class="tag" style="color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); margin-left: 4px; font-size: 10px;" title="自定义UA: ${escapeHtml(env.customUa)}">自定义UA</span>` : ''}
-          </div>
-          <div style="font-size: 11px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px; line-height: 1.4;">
-            ${res} | <span style="color: var(--text-sub);">${tz}</span> | <span style="color: var(--text-sub);">${lang}</span>
-          </div>
-        `;
+        const cores = fp.navigator?.hardwareConcurrency;
+        const memory = fp.navigator?.deviceMemory;
+        const hardware = [cores ? cores + ' 核' : ''];
+        const isElectron = env.browserCore === 'electron';
+        if (isElectron && memory) hardware.push(memory + ' GB');
+        tdFp.textContent = hardware.filter(Boolean).join(' · ') || '—';
+        tdFp.title = [
+          isElectron ? fp.webgl?.renderer : '',
+          isElectron && fp.screen ? fp.screen.width + ' × ' + fp.screen.height : '',
+          env.timezone || fp.timezone,
+          env.language,
+          env.customUa ? '自定义 UA: ' + env.customUa : '',
+        ].filter(Boolean).join('\n');
         tr.appendChild(tdFp);
 
         // 操作组
@@ -2291,11 +2328,19 @@
         // 随机指纹 (支持热生效)
         const btnRandom = document.createElement('button');
         btnRandom.className = 'btn btn-secondary btn-sm';
-        btnRandom.title = '一键随机重置指纹 (运行中即刻热生效并自动刷新页面)';
+        btnRandom.title = runInfo?.core === 'chromium' ? '随机指纹并重启 Chromium 窗口' : '随机指纹并自动刷新运行中的页面';
         btnRandom.innerHTML = `${icon('dice', { size: 12 })} 改指纹`;
         btnRandom.addEventListener('click', async () => {
-          await ipcRenderer.invoke('random-fp', env.id);
-          showToast(`已重置 "${env.name}" 的硬件指纹！${isRunning ? '(已实时热同步到运行窗口)' : ''}`);
+          btnRandom.disabled = true;
+          try {
+            const result = await ipcRenderer.invoke('random-fp', env.id);
+            const status = result.restarted ? '，Chromium 已重启' : result.hotReloaded ? '，已热更新运行窗口' : '';
+            showToast(`已重置 "${env.name}" 的硬件指纹${status}`);
+          } catch (error) {
+            alert('修改指纹失败：' + error.message);
+          } finally {
+            btnRandom.disabled = false;
+          }
         });
         actionGroup.appendChild(btnRandom);
 
@@ -2319,8 +2364,10 @@
         // Cookie 导入导出
         const btnCookie = document.createElement('button');
         btnCookie.className = 'btn btn-secondary btn-sm';
-        btnCookie.title = 'Cookie 网站数据一键导入导出 (支持 JSON 与 Netscape TXT 格式)';
-        btnCookie.innerHTML = `🍪 Cookie`;
+        const canManageCookies = (runInfo ? runInfo.core || 'electron' : env.browserCore) === 'electron';
+        btnCookie.disabled = !canManageCookies;
+        btnCookie.title = canManageCookies ? '导入或导出 Cookie (JSON / Netscape)' : 'Cookie 导入导出适用于 Electron 内核';
+        btnCookie.innerHTML = `${icon('cookie', { size: 12 })} Cookie`;
         btnCookie.addEventListener('click', () => openCookieModal(env));
         actionGroup.appendChild(btnCookie);
 
@@ -2329,8 +2376,13 @@
         btnDir.className = 'btn btn-secondary btn-sm';
         btnDir.title = '在资源管理器中打开该环境的独立缓存目录';
         btnDir.innerHTML = `${icon('folder', { size: 12 })} 目录`;
-        btnDir.addEventListener('click', () => {
-          ipcRenderer.invoke('open-path', env.userDataDir);
+        btnDir.addEventListener('click', async () => {
+          try {
+            const error = await ipcRenderer.invoke('open-environment-directory', env.id);
+            if (error) alert(error);
+          } catch (err) {
+            alert('无法打开环境目录：' + err.message);
+          }
         });
         actionGroup.appendChild(btnDir);
 
@@ -2510,13 +2562,17 @@
         document.getElementById('formExtensions').value = env ? (env.extensions || '') : '';
 
         // 快速粘贴框与测试状态重置
-        document.getElementById('formProxyQuickPaste').value = proxy.rawString || (proxy.host ? `${proxy.host}:${proxy.port}${proxy.username ? `:${proxy.username}:${proxy.password}` : ''}` : '');
+        document.getElementById('formProxyQuickPaste').value = proxy.rawString || '';
         const testResEl = document.getElementById('proxyTestResult');
         testResEl.style.display = 'none';
         testResEl.textContent = '';
 
         // 指纹
+        modalPreviewCore = env?.browserCore ?? currentBrowserCore;
+        document.getElementById('chromiumFingerprintHint').hidden = modalPreviewCore !== 'chromium';
+        document.getElementById('chromiumSeedGroup').hidden = modalPreviewCore !== 'chromium';
         modalFpData = env?.fp || null;
+        syncChromiumSeed();
         updateFpPreview();
 
         modal.classList.add('show');
@@ -2526,12 +2582,29 @@
       }
     }
 
+    function syncChromiumSeed() {
+      document.getElementById('formChromiumSeed').value = chromiumSeed(modalFpData) ?? '';
+    }
+
     function updateFpPreview() {
       const tzVal = (modalFpData && modalFpData.timezone) || document.getElementById('formTimezone')?.value || 'America/New_York';
       const prevTzEl = document.getElementById('prevTimezone');
       if (prevTzEl) prevTzEl.textContent = tzVal;
 
-      if (modalFpData) {
+      const noise = modalFpData?.noise || {};
+      const disabled = modalFpData?.disable || [];
+      const enabled = [
+        ['Canvas', 'canvas', 'canvas'], ['Audio', 'audio', 'audio'], ['Rects', 'rects', 'clientrects'],
+      ].filter(([, option, key]) => noise[option] !== false && !disabled.includes(key)).map(([name]) => name);
+      document.getElementById('prevNoise').textContent = enabled.join(' · ') || '已关闭';
+
+      if (modalPreviewCore === 'chromium') {
+        const cores = modalFpData?.navigator?.hardwareConcurrency;
+        document.getElementById('prevCores').textContent = cores ? `${cores} 核心` : '自动随机';
+        document.getElementById('prevMemory').textContent = '由内核决定';
+        document.getElementById('prevRes').textContent = '由内核决定';
+        document.getElementById('prevGpu').textContent = '由内核决定';
+      } else if (modalFpData) {
         document.getElementById('prevCores').textContent = `${modalFpData.navigator?.hardwareConcurrency || '?'} 核心`;
         document.getElementById('prevMemory').textContent = `${modalFpData.navigator?.deviceMemory || '?'} GB`;
         document.getElementById('prevRes').textContent = modalFpData.screen ? `${modalFpData.screen.width}x${modalFpData.screen.height}` : '-';
@@ -2548,13 +2621,10 @@
       try {
         const lang = document.getElementById('formLang').value;
         const tz = document.getElementById('formTimezone').value || 'America/New_York';
-        const input = document.getElementById('formCustomUa');
-        const previousUa = input.value.trim() || modalFpData?.uaString;
-        modalFpData = await ipcRenderer.invoke('get-random-fp', { language: lang, timezone: tz, previousUa });
-        input.value = '';
-        document.getElementById('formUaPreset').value = '';
+        modalFpData = await ipcRenderer.invoke('get-random-fp', { language: lang, timezone: tz, previousFp: modalFpData });
+        syncChromiumSeed();
         updateFpPreview();
-        showToast('已随机生成新指纹和 UA');
+        showToast('已随机生成新指纹');
       } catch (err) {
         console.error('随机生成指纹失败:', err);
         alert('随机指纹生成失败: ' + err.message);
@@ -2809,17 +2879,27 @@
         extensions: document.getElementById('formExtensions').value.trim()
       };
 
-      if (modalFpData) {
-        modalFpData.timezone = tzVal;
-        data.fp = modalFpData;
-      }
-
       try {
+        const seedInput = document.getElementById('formChromiumSeed');
+        if (!document.getElementById('chromiumSeedGroup').hidden && seedInput.value !== '') {
+          const nextSeed = seedInput.valueAsNumber;
+          if (!isChromiumSeed(nextSeed)) {
+            alert('Chromium 种子必须是 0 到 4294967295 的整数。');
+            return;
+          }
+          if (!modalFpData) modalFpData = await ipcRenderer.invoke('get-random-fp', { language: data.language, timezone: tzVal });
+          if (nextSeed !== chromiumSeed(modalFpData)) modalFpData = { ...modalFpData, chromiumSeed: nextSeed };
+        }
+        if (modalFpData) {
+          modalFpData.timezone = tzVal;
+          data.fp = modalFpData;
+        }
+
         if (id) {
           await ipcRenderer.invoke('update-env', { id, updates: data });
           showToast(`已更新环境配置 "${name}"`);
         } else {
-          await ipcRenderer.invoke('create-env', data);
+          await ipcRenderer.invoke('create-env', { ...data, browserCore: modalPreviewCore });
           showToast(`成功创建环境 "${name}"`);
         }
         modal.classList.remove('show');
@@ -3025,7 +3105,7 @@
       }
       try {
         btnBatchGroupConfirm.disabled = true;
-        btnBatchGroupConfirm.textContent = '⏳ 正在移动...';
+        btnBatchGroupConfirm.textContent = '正在移动…';
         const res = await ipcRenderer.invoke('batch-set-group', {
           ids: Array.from(selectedIds),
           group: targetGroup
@@ -3317,7 +3397,7 @@
     btnThemeModalSave.addEventListener('click', async () => {
       try {
         btnThemeModalSave.disabled = true;
-        btnThemeModalSave.textContent = '⏳ 保存中...';
+        btnThemeModalSave.textContent = '保存中…';
         currentManagerTheme = pendingManagerTheme;
         document.documentElement.setAttribute('data-theme', currentManagerTheme);
         themeSelect.value = currentManagerTheme;
@@ -3461,7 +3541,7 @@
     if (btnRefreshFonts) {
       btnRefreshFonts.addEventListener('click', async () => {
         btnRefreshFonts.disabled = true;
-        btnRefreshFonts.textContent = '⏳ 正在扫描...';
+        btnRefreshFonts.textContent = '正在扫描…';
         await loadFontsList();
         btnRefreshFonts.disabled = false;
         btnRefreshFonts.innerHTML = `${icon('refresh', { size: 13 })} 刷新字体`;
@@ -3475,8 +3555,64 @@
       });
     }
 
+    const browserCoreSelect = document.getElementById('browserCoreSelect');
+    let currentBrowserCore = 'chromium';
+    function updateBrowserCore(value) {
+      currentBrowserCore = value === 'electron' ? 'electron' : 'chromium';
+      if (!browserCoreSelect.disabled) browserCoreSelect.value = currentBrowserCore;
+    }
+
+    const coreStatus = document.getElementById('coreInstallStatus');
+    const coreStatusText = document.getElementById('coreInstallText');
+    const coreProgress = document.getElementById('coreInstallProgress');
+    const retryCore = document.getElementById('btnRetryBrowserCore');
+    function prepareDefaultBrowser() {
+      retryCore.hidden = true;
+      coreStatus.hidden = false;
+      coreStatusText.textContent = '正在检查 Chromium…';
+      ipcRenderer.invoke('prepare-default-browser').catch(() => {
+        coreStatusText.textContent = 'Chromium 安装失败';
+        coreProgress.hidden = true;
+        retryCore.hidden = false;
+      });
+    }
+    ipcRenderer.on('core-install-progress', (_event, status) => {
+      const { core, phase, bytes, total } = status;
+      const label = core === 'chromium' ? 'Chromium' : 'Electron';
+      const percent = total ? Math.min(100, Math.floor(100 * bytes / total)) : 0;
+      coreStatus.hidden = phase === 'ready';
+      retryCore.hidden = phase !== 'error' || core !== 'chromium';
+      coreProgress.hidden = phase !== 'download' && phase !== 'extracting';
+      if (phase === 'download') {
+        coreStatusText.textContent = '正在下载 ' + label + ' · ' + percent + '%';
+        coreProgress.value = percent;
+      } else {
+        coreProgress.removeAttribute('value');
+        coreStatusText.textContent = phase === 'extracting' ? '正在解压 ' + label + '…' :
+          phase === 'error' ? label + ' 安装失败' : '正在校验 ' + label + '…';
+      }
+    });
+    retryCore.addEventListener('click', prepareDefaultBrowser);
+    prepareDefaultBrowser();
+
+    browserCoreSelect.addEventListener('change', async () => {
+      const core = browserCoreSelect.value;
+      browserCoreSelect.disabled = true;
+      showToast('正在准备 ' + browserCoreSelect.selectedOptions[0].textContent + ' 内核…');
+      try {
+        updateBrowserCore(await ipcRenderer.invoke('select-browser-core', core));
+        showToast('新建环境将使用 ' + browserCoreName(core));
+      } catch (error) {
+        alert('切换内核失败：' + error.message);
+      } finally {
+        browserCoreSelect.disabled = false;
+        browserCoreSelect.value = currentBrowserCore;
+      }
+    });
+
     // 初始化时从全局设置同步
     ipcRenderer.invoke('get-settings').then(settings => {
+      updateBrowserCore(settings?.browserCore);
       if (settings && settings.managerTheme) {
         const norm = normalizeThemeName(settings.managerTheme);
         if (!localStorage.getItem('dt_manager_theme')) {
@@ -3515,7 +3651,7 @@
       if (!id) return;
       try {
         btnClearCacheConfirm.disabled = true;
-        btnClearCacheConfirm.textContent = '⏳ 清理中...';
+        btnClearCacheConfirm.textContent = '清理中…';
         await ipcRenderer.invoke('clear-env-cache', id);
         showToast(`已成功彻底清空 "${name}" 的缓存目录！`);
         closeClearCacheModal();
@@ -3558,10 +3694,18 @@
         alert('请先勾选需要启动的环境！');
         return;
       }
+      let count = 0;
+      const errors = [];
       for (const id of selectedIds) {
-        await ipcRenderer.invoke('launch-env', id);
+        try {
+          await ipcRenderer.invoke('launch-env', id);
+          count++;
+        } catch (error) {
+          errors.push(error.message);
+        }
       }
-      showToast(`已批量启动 ${selectedIds.size} 个环境`);
+      if (count) showToast(`已批量启动 ${count} 个环境`);
+      if (errors.length) alert(errors.join('\n'));
     });
 
     document.getElementById('btnStopAll').addEventListener('click', async () => {
@@ -3602,6 +3746,7 @@
         }
       }
 
+      updateBrowserCore(state.settings?.browserCore);
       allEnvironments = state.environments || [];
       runningStatus = state.running || {};
       await refreshGroups();
@@ -3614,7 +3759,7 @@
     const QQ_GROUP_NUMBER = '328399769';
     const GITHUB_REPO_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser';
     const GITHUB_RELEASES_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser/releases';
-    const APP_CURRENT_VERSION = '2.7';
+    const APP_CURRENT_VERSION = '3.0';
 
     const btnCopyQQ = document.getElementById('btnCopyQQ');
     const badgeCopyQQ = document.getElementById('badgeCopyQQ');
@@ -3686,7 +3831,7 @@
         if (hasNew) {
           versionBadge.className = 'footer-version-badge has-update';
           if (versionDot) versionDot.className = 'status-dot orange';
-          if (versionStatusText) versionStatusText.textContent = `🎉 发现新版本 ${latestTag} (点击更新)`;
+          if (versionStatusText) versionStatusText.textContent = `发现新版本 ${latestTag} (点击更新)`;
           versionBadge.title = `发现新版本 ${latestTag}，点击前往 GitHub 下载更新`;
         } else {
           versionBadge.className = 'footer-version-badge';
@@ -3867,7 +4012,7 @@
         const fmtRadio = document.querySelector('input[name="importFormat"]:checked');
         const format = fmtRadio ? fmtRadio.value : 'auto';
         btnSubmitImportCookie.disabled = true;
-        btnSubmitImportCookie.textContent = '⏳ 正在导入...';
+        btnSubmitImportCookie.textContent = '正在导入…';
         try {
           const res = await ipcRenderer.invoke('import-cookies', {
             envId: currentCookieEnv.id,
@@ -3885,7 +4030,7 @@
           alert(`导入发生异常: ${err.message}`);
         } finally {
           btnSubmitImportCookie.disabled = false;
-          btnSubmitImportCookie.textContent = '🚀 立即导入';
+          btnSubmitImportCookie.innerHTML = `${icon('upload', { size: 13 })} 立即导入`;
         }
       });
     }
@@ -3969,7 +4114,7 @@
         if (status && status.enabled && status.masterId) {
           if (syncStatusBadge) {
             syncStatusBadge.className = 'status-badge running';
-            syncStatusBadge.textContent = '⚡ 同步运行中';
+            syncStatusBadge.innerHTML = `${icon('bolt', { size: 12 })} 同步运行中`;
           }
           if (syncStatusDot) syncStatusDot.style.display = 'inline-block';
           if (btnStartSync) btnStartSync.style.display = 'none';
@@ -4003,9 +4148,9 @@
           runningStatus = state.running || {};
         }
 
-        const runningIds = Object.keys(runningStatus || {});
+        const runningIds = (syncStatus?.connectedEnvIds || []).filter(id => runningStatus[id]);
         if (syncRunningCountTip) {
-          syncRunningCountTip.textContent = `当前运行中: ${runningIds.length} 个窗口`;
+          syncRunningCountTip.textContent = `可同步的 Electron 窗口：${runningIds.length}`;
         }
 
         // 维护当前选中的 MasterId
@@ -4033,20 +4178,20 @@
       if (runningIds.length === 0) {
         syncMasterContainer.innerHTML = `
           <div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; gap: 8px;">
-            <div>⚠️ 当前暂无运行中的浏览器窗口！请先启动窗口方可进行键鼠同步。</div>
-            <button class="btn btn-primary btn-sm" id="btnSyncQuickStartTwo" style="font-size: 11px; padding: 3px 12px;">🚀 一键启动前 2 个环境</button>
+            <div>${icon('alert-triangle', { size: 13 })} 请先启动 Electron 环境进行键鼠同步。</div>
+            <button class="btn btn-primary btn-sm" id="btnSyncQuickStartTwo" style="font-size: 11px; padding: 3px 12px;">${icon('rocket', { size: 13 })} 一键启动前 2 个环境</button>
           </div>
         `;
         const btnQuick = document.getElementById('btnSyncQuickStartTwo');
         if (btnQuick) {
           btnQuick.addEventListener('click', async () => {
-            if (allEnvironments.length === 0) {
-              alert('当前没有可用的浏览器环境，请先在主界面创建环境！');
+            const toStart = allEnvironments.filter(env => env.browserCore === 'electron' && !runningStatus[env.id]).slice(0, 2);
+            if (!toStart.length) {
+              alert('没有可启动的 Electron 环境。');
               return;
             }
             btnQuick.disabled = true;
             btnQuick.textContent = '正在启动窗口...';
-            const toStart = allEnvironments.slice(0, 2);
             for (const env of toStart) {
               try {
                 await ipcRenderer.invoke('launch-env', env.id);
@@ -4115,7 +4260,7 @@
       if (candidateSlaves.length === 0) {
         syncSlavesContainer.innerHTML = `
           <div style="font-size: 12px; color: var(--text-muted); text-align: center; padding: 12px 10px; line-height: 1.6;">
-            ⚠️ 当前仅有 1 个运行中的窗口（已设为主控端）。<br>
+            ${icon('alert-triangle', { size: 13 })} 当前仅有 1 个运行中的窗口（已设为主控端）。<br>
             需<b>至少启动 2 个窗口</b>才能进行键鼠镜像同步，请在主界面再启动一个窗口！
           </div>
         `;
@@ -4188,7 +4333,7 @@
         btnRefreshSyncList.textContent = '扫描中...';
         await refreshSyncModalData();
         showToast('已刷新运行中的窗口列表');
-        setTimeout(() => { btnRefreshSyncList.textContent = '🔄 刷新窗口'; }, 500);
+        setTimeout(() => { btnRefreshSyncList.innerHTML = `${icon('refresh', { size: 13 })} 刷新窗口`; }, 500);
       });
     }
 

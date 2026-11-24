@@ -3,8 +3,21 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-// 核心增强：将全部 32 个系统基础图标作为内置资源内嵌打包，彻底杜绝打包后或不同工作目录下找不到资源导致的 UI 图片缺失问题！
+// Icons ship inline so they work even when the OS has no emoji font.
 const BUILTIN_ICONS = {
+  "window-layout": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 9h18m-6 0v11\"/></svg>",
+  "layout-grid": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/><path d=\"M12 3v18M3 12h18\"/></svg>",
+  "layout-columns": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M12 4v16\"/></svg>",
+  "layout-rows": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"M3 12h18\"/></svg>",
+  "layers": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"8\" width=\"13\" height=\"12\" rx=\"2\"/><path d=\"M7 8V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-3\"/></svg>",
+  "cookie": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20.7 12a8.8 8.8 0 1 1-8.7-8.7 3.1 3.1 0 0 0 3.4 3.5 3.3 3.3 0 0 0 5.3 5.2Z\"/><path d=\"M8 11h.02m5 5h.02m-4 1h.02m6-6h.02\"/></svg>",
+  "download": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3\"/></svg>",
+  "upload": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 15V3m-4 4 4-4 4 4M4 17v3h16v-3\"/></svg>",
+  "chat": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.2-3A7.5 7.5 0 0 1 12.5 4 7.5 7.5 0 0 1 20 11.5Z\"/><path d=\"M9 11h7\"/></svg>",
+  "bulb": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 18h6m-5 3h4M8.5 15a6 6 0 1 1 7 0c-.5.4-.5.9-.5 1H9c0-.1 0-.6-.5-1Z\"/></svg>",
+  "users": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"9\" cy=\"8\" r=\"3\"/><path d=\"M3 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2m3-14a3 3 0 0 1 0 6m3 8v-2a4 4 0 0 0-2-3.5\"/></svg>",
+  "crown": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m3 7 4 4 5-6 5 6 4-4-2 11H5L3 7Z\"/></svg>",
+  "pin": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M8 3h8l-2 5 3 4v2H7v-2l3-4-2-5Zm4 11v7\"/></svg>",
   "alert-triangle": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg>",
   "arrow-left": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"19\" y1=\"12\" x2=\"5\" y2=\"12\"/><polyline points=\"12 19 5 12 12 5\"/></svg>",
   "arrow-right": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"/><polyline points=\"12 5 19 12 12 19\"/></svg>",
@@ -79,7 +92,7 @@ function getIconSvg(name, options = {}) {
     let replaced = svg;
     if (width) replaced = replaced.replace(/width="[^"]*"/, `width="${width}"`);
     if (height) replaced = replaced.replace(/height="[^"]*"/, `height="${height}"`);
-    if (options.className) replaced = replaced.replace(/<svg\\s+/, `<svg class="${options.className}" `);
+    if (options.className) replaced = replaced.replace(/<svg\s+/, `<svg class="${options.className}" `);
     let extraStyle = options.style || '';
     if (options.color) {
       extraStyle = (extraStyle ? extraStyle + ';' : '') + `color:${options.color}`;
@@ -89,7 +102,7 @@ function getIconSvg(name, options = {}) {
       if (replaced.includes('style="')) {
         replaced = replaced.replace(/style="([^"]*)"/, `style="$1;${extraStyle}"`);
       } else {
-        replaced = replaced.replace(/<svg\\s+/, `<svg style="${extraStyle}" `);
+        replaced = replaced.replace(/<svg\s+/, `<svg style="${extraStyle}" `);
       }
     }
     return replaced;

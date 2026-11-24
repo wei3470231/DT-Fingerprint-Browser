@@ -7,12 +7,13 @@ using System.IO;
 using System.IO.Compression;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyVersion("2.7.0.0")]
-[assembly: AssemblyFileVersion("2.7.0.0")]
+[assembly: AssemblyVersion("3.0.0.0")]
+[assembly: AssemblyFileVersion("3.0.0.0")]
 
 namespace BitFPManager
 {
@@ -452,33 +453,43 @@ namespace BitFPManager
             worker.Start();
         }
 
-        private void DoInstall(string installDir, bool addPath, bool createShortcut, bool autoStart)
+        private static void StopInstalledProcesses(string installDir)
         {
-            // 0. 安装前尝试关闭已在运行的实例，避免文件占用导致解压失败
-            try
-            {
-                Process[] procs = Process.GetProcessesByName("DT - 指纹浏览器");
-                foreach (var p in procs) { try { p.Kill(); p.WaitForExit(1000); } catch {} }
-                Process[] cliProcs = Process.GetProcessesByName("DT-CLI");
-                foreach (var p in cliProcs) { try { p.Kill(); p.WaitForExit(1000); } catch {} }
+            string[] relativeExecutables = {
+                "DT - 指纹浏览器.exe",
+                "DT-Fingerprint-Browser.exe",
+                "DT-CLI.exe",
+                @"runtime\electron.exe",
+                @"runtime\cores\electron\electron.exe",
+                @"runtime\cores\chromium\chrome.exe"
+            };
 
-                // 关闭属于当前安装目录下的 electron 浏览器进程，防止 runtime/electron.exe 被独占锁定
-                Process[] elecs = Process.GetProcessesByName("electron");
-                foreach (var ep in elecs)
+            foreach (string relativeExecutable in relativeExecutables)
+            {
+                string expectedPath = Path.GetFullPath(Path.Combine(installDir, relativeExecutable));
+                foreach (Process process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(expectedPath)))
                 {
-                    try
+                    using (process)
                     {
-                        string pPath = ep.MainModule.FileName;
-                        if (!string.IsNullOrEmpty(pPath) && pPath.StartsWith(installDir, StringComparison.OrdinalIgnoreCase))
+                        try
                         {
-                            ep.Kill();
-                            ep.WaitForExit(1000);
+                            string actualPath = Path.GetFullPath(process.MainModule.FileName);
+                            if (!string.Equals(actualPath, expectedPath, StringComparison.OrdinalIgnoreCase)) continue;
+
+                            process.Kill();
+                            process.WaitForExit(1000);
                         }
+                        catch (InvalidOperationException) {}
+                        catch (System.ComponentModel.Win32Exception) {}
                     }
-                    catch {}
                 }
             }
-            catch {}
+        }
+
+        private void DoInstall(string installDir, bool addPath, bool createShortcut, bool autoStart)
+        {
+            // 关闭当前安装目录的进程，避免升级时文件被占用。
+            StopInstalledProcesses(installDir);
 
             // 1. 创建目标目录
             Directory.CreateDirectory(installDir);
@@ -592,6 +603,9 @@ namespace BitFPManager
                     }
                 }
             }
+
+            PreserveEmbeddedAppOnUpgrade(installDir);
+            RemoveLegacyDiagnosticAssets(installDir);
 
             // 最终守护：若覆盖安装前存在有效的 environments.json，确保其绝对不被置空或覆盖
             try
@@ -755,7 +769,7 @@ namespace BitFPManager
                     if (key != null)
                     {
                         key.SetValue("DisplayName", "DT - 指纹浏览器");
-                        key.SetValue("DisplayVersion", "2.7.0");
+                        key.SetValue("DisplayVersion", "3.0.0");
                         key.SetValue("Publisher", "DT Studio");
                         key.SetValue("DisplayIcon", Path.Combine(installDir, "app.ico"));
                         key.SetValue("InstallLocation", installDir);
@@ -774,6 +788,63 @@ namespace BitFPManager
             }));
 
             Thread.Sleep(300);
+        }
+
+        private static void RemoveLegacyDiagnosticAssets(string installDir)
+        {
+            string folder = Path.Combine(installDir, "fingerprint-test");
+            var shipped = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "fingerprint-probe.js", "42F5EC110DEA8B903281186A88465686A39EB3D81FADD3E0C819DAFA5AABFB97" },
+                { "index.html", "346C038B22C3F08FB7537E7A765AD0E5B3D41A8F104D867BE96D406B48E35207" },
+                { "page.js", "15D9383FE4317090B30F4FADD57B6354C0B237F2222D9D657E53CCC00B6EFE18" },
+                { "styles.css", "819CC3521E2B75358D63C216C9CA0352C316BD69A450A9040E478C129CFE526C" }
+            };
+            try
+            {
+                if (!Directory.Exists(folder) || (File.GetAttributes(folder) & FileAttributes.ReparsePoint) != 0) return;
+                string[] entries = Directory.GetFileSystemEntries(folder);
+                if (entries.Length != shipped.Count) return;
+
+                // Only remove the exact diagnostic assets shipped by the previous v3.0 package.
+                using (SHA256 sha = SHA256.Create())
+                {
+                    foreach (string entry in entries)
+                    {
+                        string expected;
+                        if (!shipped.TryGetValue(Path.GetFileName(entry), out expected) ||
+                            (File.GetAttributes(entry) & (FileAttributes.Directory | FileAttributes.ReparsePoint)) != 0) return;
+                        using (FileStream file = File.OpenRead(entry))
+                        {
+                            if (BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "") != expected) return;
+                        }
+                    }
+                }
+
+                foreach (string entry in entries) File.Delete(entry);
+                Directory.Delete(folder);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        private static void PreserveEmbeddedAppOnUpgrade(string installDir)
+        {
+            if (!File.Exists(Path.Combine(installDir, "app.asar"))) return;
+
+            string resources = Path.Combine(installDir, "runtime", "resources");
+            string suffix = ".before-v3-" + Guid.NewGuid().ToString("N");
+            string bundledArchive = Path.Combine(resources, "app.asar");
+            string bundledDirectory = Path.Combine(resources, "app");
+
+            // Electron loads an embedded app ahead of a root archive passed on the command line.
+            try
+            {
+                if (File.Exists(bundledArchive)) File.Move(bundledArchive, bundledArchive + suffix);
+                if (Directory.Exists(bundledDirectory)) Directory.Move(bundledDirectory, bundledDirectory + suffix);
+            }
+            catch (IOException) { /* The launcher can use a clean core if a previous process holds a file lock. */ }
+            catch (UnauthorizedAccessException) { /* Leave the embedded app intact and let the launcher choose a clean core. */ }
         }
 
         private void CreateShortcut(string shortcutPath, string targetPath, string workingDir, string iconPath, string desc)

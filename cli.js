@@ -2,9 +2,11 @@
 'use strict';
 
 const path = require('node:path');
+const { isDeepStrictEqual } = require('node:util');
 const store = require('./src/manager/store');
+const { browserCoreName } = require('./src/shared/browser-core');
 const processManager = require('./src/manager/process-manager');
-const { electronPath } = require('./scripts/runtime-path');
+const { ensureCore } = require('./scripts/runtime-path');
 
 const KNOWN_COMMANDS = new Set([
   'list', 'start', 'open', 'stop', 'close', 'status',
@@ -33,26 +35,26 @@ function printUsage() {
 常用管理命令 (支持 --json 结构化输出供自动化脚本解析):
   [环境启动与控制]
     dt-cli start --name "环境名" [--url 网址] [--headless] [--rotating-file 文件] [--rotating-rules 规则] [--block-dialogs] [--json] 启动浏览器并等待CDP就绪
-    dt-cli start --id "env-xxxx" [--url 网址] [--json]              按环境ID启动
+    dt-cli start --id "env-xxxx" [--core electron|chromium] [--url 网址] [--json] 按已保存内核启动，--core 仅覆盖本次启动
     dt-cli start --group "分组名" [--headless] [--json]             批量启动指定分组下的所有环境
     dt-cli start --names "A,B,C" [--headless] [--json]              批量启动指定名称或ID的环境
     dt-cli stop --name "环境名" [--json]                            停止指定浏览器环境
     dt-cli stop --group "分组名" [--json]                           停止指定业务分组下的所有环境
     dt-cli stop --all [--json]                                      一键停止全部正在运行的环境
     dt-cli status --name "环境名" [--json]                          查询环境运行状态、PID及CDP地址
-    dt-cli cdp-url --name "环境名" [--ws] [--http] [--port]         直接获取并输出环境 CDP WebSocket 地址
+    dt-cli cdp-url --name "环境名" [--ws|--http|--port]             查询已运行且开启 CDP 的环境地址
 
   [环境配置与 CRUD]
     dt-cli list [--group 组名] [--search 关键词] [--running] [--json] 列出环境配置及其实时运行状态
     dt-cli get --name "环境名" [--json]                             查看环境完整配置与指纹详情 (别名: info)
-    dt-cli create --name "新环境" [--group 组名] [--proxy 代理] [--proxy-scope all|rules] [--proxy-rules 规则] [--proxy-bypass "域名;域名"] [--rotating-file 文件.txt] [--rotating-rules 规则] [--block-dialogs] [--port 9222] [--url 网址] [--ext 插件] [--lang en-US] 创建新环境
+    dt-cli create --name "新环境" [--core electron|chromium] [--group 组名] [--proxy 代理] [--proxy-scope all|rules] [--proxy-rules 规则] [--proxy-bypass "域名;域名"] [--rotating-file 文件.txt] [--rotating-rules 规则] [--block-dialogs] [--port 9222] [--url 网址] [--ext 插件] [--lang en-US] 创建新环境
     dt-cli update --name "环境名" [--new-name 新名] [--url 网址] [--group 组] [--port 端口] [--proxy 代理] [--proxy-scope 范围] [--proxy-rules 规则] [--proxy-bypass "白名单"] [--rotating-file 文件] [--rotating-rules 规则] [--clear-rotating] [--block-dialogs] [--no-block-dialogs] [--ext 插件] 修改环境配置
     dt-cli clone --name "已有环境" [--new-name "新名"] [--json]     快速克隆环境 (继承设置并分配新端口与新指纹)
     dt-cli delete --name "环境名" [--json]                          删除环境配置
     dt-cli clear-cache [--name "环境名"|--group 组|--names A,B|--all] [--json] 深度清理环境用户缓存数据 (Cookies/Cache/LevelDB)
 
   [指纹与代理专项控制]
-    dt-cli random-fp --name "环境名" [--json]                       一键随机重置硬件指纹 (运行中1秒内热生效)
+    dt-cli random-fp --name "环境名" [--json]                       随机重置硬件指纹 (运行中的 Electron 热加载，Chromium 自动重启)
     dt-cli set-proxy --name "环境名" --proxy "代理串" [--scope all|rules] [--rules 规则] [--bypass "白名单"] [--json] 设置代理
     dt-cli set-proxy --name "环境名" --clear [--json]               清除代理 (切换为直连模式)
     dt-cli set-rotating --name "环境名" --file "代理.txt" --rules "域名1;域名2" [--mode random|round-robin] [--json] 配置目标多域名动态轮换代理池 (每次连接必换IP)
@@ -61,6 +63,7 @@ function printUsage() {
     dt-cli test-proxy --proxy "代理串" [--json]                     独立测试代理服务器连通性与网络延迟
     dt-cli test-proxy --name "环境名" [--json]                      测试已配置环境的代理连通性
     dt-cli set-ext --name "环境名" --ext "插件路径" [--json]        设置加载扩展插件 (支持多路径分号分割)
+    修改 Chromium 代理前，请先停止该环境。
 
   [分组管理与批量操作]
     dt-cli group list [--json]                                      列出所有分组及各组环境统计
@@ -94,11 +97,48 @@ function printUsage() {
     dt-cli gui [--minimized]                                        启动可视化桌面管理器 (可选静默托盘模式)
     dt-cli compile [--json]                                         一键编译原生可执行文件 (无需安装开发工具)
 
-  [Chrome 原生无感替代模式 (Drop-in Chrome Mode)]
-    dt-cli --version                                                输出兼容的 Chrome 内核版本号
-    dt-cli --remote-debugging-port=9222 [URL]                       直接作为独立 Chromium 运行 (支持自动化框架直连)
-    dt-cli https://example.com                                      直接作为浏览器打开网页 (自动注入指纹)
+  [旧版直通模式 (Electron)]
+    dt-cli --version                                                输出兼容版本字符串
+    dt-cli --remote-debugging-port=9222 [URL]                       启动独立 Electron 实例，可通过 CDP 连接
+    dt-cli https://example.com                                      通过 Electron 直通实例打开网页
 `);
+}
+
+function proxyConfigFromOption(raw, { scope, rules, bypass }) {
+  const proxy = store.parseAndBuildProxyConfig(raw);
+  if (!proxy.enabled) throw new Error('代理地址无效。请提供有效代理，或明确清除代理以切换为直连。');
+  if (!scope && rules === undefined && bypass === undefined) return raw;
+  proxy.rawString = '';
+  if (scope) proxy.scope = scope;
+  if (rules !== undefined) proxy.rules = rules;
+  if (bypass !== undefined) proxy.bypass = bypass;
+  return proxy;
+}
+
+function comparableProxy(value) {
+  const { rawString, ...proxy } = store.parseAndBuildProxyConfig(value);
+  return proxy.enabled ? proxy : { enabled: false };
+}
+
+function comparableRotatingProxy(value) {
+  if (!value?.enabled) return { enabled: false };
+  return { enabled: true, filePath: value.filePath || '', rules: value.rules || '', mode: value.mode || 'random' };
+}
+
+function requireStoppedChromiumForProxyChanges(env, updates, isJson) {
+  if (updates.proxy === undefined && updates.rotatingProxy === undefined) return;
+  if (processManager.getRunningStatus()[env.id]?.core !== 'chromium') return;
+
+  const proxyChanged = updates.proxy !== undefined &&
+    !isDeepStrictEqual(comparableProxy(env.proxy), comparableProxy(updates.proxy));
+  const rotatingChanged = updates.rotatingProxy !== undefined &&
+    !isDeepStrictEqual(comparableRotatingProxy(env.rotatingProxy), comparableRotatingProxy(updates.rotatingProxy));
+  if (!proxyChanged && !rotatingChanged) return;
+
+  const message = '请先停止 Chromium 环境，再修改代理配置。';
+  if (isJson) console.log(JSON.stringify({ code: 1, success: false, message }));
+  else console.error(`❌ ${message}`);
+  process.exit(1);
 }
 
 function parseArgs() {
@@ -154,12 +194,13 @@ async function main() {
   // 2.5 管理器 GUI 启动分支 (显式请求启动图形界面)
   if (command === 'gui' || command === 'start-gui' || command === 'manager' || rawArgs.includes('--gui') || rawArgs.includes('--minimized') || rawArgs.includes('--silent')) {
     const cp = require('node:child_process');
-    const isAsar = __filename.includes('app.asar');
+    const isAsar = __filename.match(/^(.+?[/\\]app\.asar)(?:[/\\]|$)/i);
     const envVars = { ...process.env };
     delete envVars.ELECTRON_RUN_AS_NODE;
 
-    const guiArgs = isAsar ? rawArgs : [path.resolve(__dirname, 'src/gui/main.js'), ...rawArgs];
-    const child = cp.spawn(electronPath(), guiArgs, {
+    const guiEntry = isAsar?.[1] || path.resolve(__dirname, 'src/gui/main.js');
+    const guiArgs = [guiEntry, ...rawArgs];
+    const child = cp.spawn(await ensureCore('electron'), guiArgs, {
       detached: true,
       stdio: 'ignore',
       env: envVars
@@ -190,7 +231,7 @@ async function main() {
       const envVars = { ...process.env };
       delete envVars.ELECTRON_RUN_AS_NODE;
 
-      const child = cp.spawn(electronPath(), ['--browser-mode', browserEntry, ...rawArgs], {
+      const child = cp.spawn(await ensureCore('electron'), [browserEntry, '--browser-mode', ...rawArgs], {
         stdio: 'inherit',
         env: envVars
       });
@@ -251,7 +292,7 @@ async function main() {
         const dialogStr = env.blockDialogs ? ' | 🛡️屏蔽弹窗' : '';
 
         console.log(`\n[${index + 1}] ${env.name} (ID: ${env.id}) [分组: ${env.group || '默认分组'}]`);
-        console.log(`    状态: ${statusStr}`);
+        console.log(`    内核: ${browserCoreName(env.browserCore)} | 状态: ${statusStr}`);
         console.log(`    调试端口: ${env.remotePortEnabled ? env.remotePort : '关闭'} | 语言: ${env.language}`);
         console.log(`    硬件指纹: ${hwStr}`);
         console.log(`    代理: ${proxyStr}${rotStr}${dialogStr}`);
@@ -296,6 +337,7 @@ async function main() {
 
       console.log(`\n==== 环境详细信息: "${env.name}" (ID: ${env.id}) ====`);
       console.log(`  所属分组: ${env.group || '默认分组'}`);
+      console.log(`  环境内核: ${browserCoreName(env.browserCore)}`);
       console.log(`  运行状态: ${runningInfo ? `🟢 运行中 [PID: ${runningInfo.pid} | CDP端口: ${runningInfo.port || '无'}]` : '⚪ 已停止'}`);
       console.log(`  调试端口: ${env.remotePortEnabled ? env.remotePort : '关闭'}`);
       console.log(`  目标网址: ${env.url}`);
@@ -332,6 +374,7 @@ async function main() {
       const blockDialogs = options['block-dialogs'] ? true : (options['no-block-dialogs'] ? false : undefined);
 
       const commonLaunchOpts = {
+        core: options.core,
         url: options.url || undefined,
         headless: Boolean(options.headless),
         rotatingFile: rotFile ? (path.isAbsolute(rotFile) ? rotFile : path.resolve(process.cwd(), rotFile)) : undefined,
@@ -401,6 +444,7 @@ async function main() {
               id: res.env.id,
               name: res.env.name,
               pid: res.pid,
+              core: res.core,
               port: res.port,
               http: res.http,
               ws: res.ws,
@@ -590,8 +634,7 @@ async function main() {
       try {
         const env = store.getEnvironment(nameOrId);
         if (!env) throw new Error(`未找到环境: ${nameOrId}`);
-        const updated = store.regenerateFp(env.id, options.timezone);
-        const running = processManager.isRunning(env.id);
+        const { env: updated, hotReloaded, restarted } = await processManager.randomizeEnvironment(env.id, options.timezone);
 
         if (isJson) {
           console.log(JSON.stringify({
@@ -601,7 +644,8 @@ async function main() {
               id: updated.id,
               name: updated.name,
               seed: updated.fp.seed,
-              hotReloaded: running,
+              hotReloaded,
+              restarted,
               fp: updated.fp
             }
           }, null, 2));
@@ -611,9 +655,10 @@ async function main() {
           console.log(`   CPU核心: ${updated.fp.navigator.hardwareConcurrency} | 内存: ${updated.fp.navigator.deviceMemory}G`);
           console.log(`   显卡: ${updated.fp.webgl.renderer}`);
           console.log(`   分辨率: ${updated.fp.screen.width}x${updated.fp.screen.height}`);
-          if (running) {
+          if (hotReloaded) {
             console.log('⚡ 该窗口当前处于运行中，新指纹将在 1 秒内自动热生效并刷新页面！');
           }
+          if (restarted) console.log('Chromium 窗口已重新启动并加载新指纹。');
         }
       } catch (e) {
         if (isJson) {
@@ -646,7 +691,7 @@ async function main() {
       }
       let count = 0;
       for (const e of targetEnvs) {
-        store.regenerateFp(e.id);
+        await processManager.randomizeEnvironment(e.id);
         count++;
       }
       if (isJson) {
@@ -676,9 +721,9 @@ async function main() {
       }
 
       if (options.clear || options.proxy === 'none' || options.proxy === 'direct' || options.proxy === '') {
-        const updated = store.updateEnvironment(env.id, {
-          proxy: { enabled: false, type: 'socks5', host: '', port: '', username: '', password: '', rawString: '', scope: 'all', rules: '', bypass: '<local>;localhost;127.0.0.1' }
-        });
+        const updates = { proxy: null };
+        requireStoppedChromiumForProxyChanges(env, updates, isJson);
+        const updated = store.updateEnvironment(env.id, updates);
         if (isJson) console.log(JSON.stringify({ code: 0, success: true, message: `已将环境 "${updated.name}" 设为直连模式`, data: updated.proxy }, null, 2));
         else console.log(`🌐 已将环境 "${updated.name}" 设为直连模式 (已关闭代理)`);
         break;
@@ -694,20 +739,14 @@ async function main() {
         process.exit(1);
       }
       try {
-        let proxyConfig = options.proxy;
-        if (options.scope || options.rules !== undefined || options.bypass !== undefined || options['proxy-bypass'] !== undefined) {
-          const { parseProxyString } = require('./src/manager/proxy-parser');
-          const parsed = typeof proxyConfig === 'string' ? parseProxyString(proxyConfig) : (proxyConfig || {});
-          if (parsed) {
-            if (options.scope) parsed.scope = options.scope;
-            if (options.rules !== undefined) parsed.rules = options.rules;
-            if (options.bypass !== undefined || options['proxy-bypass'] !== undefined) {
-              parsed.bypass = options.bypass || options['proxy-bypass'];
-            }
-            proxyConfig = parsed;
-          }
-        }
-        const updated = store.updateEnvironment(env.id, { proxy: proxyConfig });
+        const proxy = proxyConfigFromOption(options.proxy, {
+          scope: options.scope,
+          rules: options.rules,
+          bypass: options.bypass ?? options['proxy-bypass']
+        });
+        const updates = { proxy };
+        requireStoppedChromiumForProxyChanges(env, updates, isJson);
+        const updated = store.updateEnvironment(env.id, updates);
 
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, data: updated.proxy }, null, 2));
@@ -755,9 +794,11 @@ async function main() {
       }
 
       if (options.clear) {
-        const updated = store.updateEnvironment(env.id, {
+        const updates = {
           rotatingProxy: { enabled: false, filePath: '', rules: '', mode: 'random' }
-        });
+        };
+        requireStoppedChromiumForProxyChanges(env, updates, isJson);
+        const updated = store.updateEnvironment(env.id, updates);
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: `已关闭环境 "${updated.name}" 的动态轮换代理池`, data: updated.rotatingProxy }, null, 2));
         } else {
@@ -793,9 +834,26 @@ async function main() {
         process.exit(1);
       }
 
+      const updates = {
+        rotatingProxy: {
+          enabled: true,
+          filePath: resolvedPath,
+          rules,
+          mode: mode === 'round-robin' ? 'round-robin' : 'random'
+        }
+      };
+      requireStoppedChromiumForProxyChanges(env, updates, isJson);
+
       const { RotatingProxyPool } = require('./src/browser/rotating-proxy/proxy-pool');
       const pool = new RotatingProxyPool();
-      const loadRes = pool.loadFromFile(resolvedPath);
+      const log = console.log;
+      let loadRes;
+      try {
+        if (isJson) console.log = console.error;
+        loadRes = pool.loadFromFile(resolvedPath);
+      } finally {
+        console.log = log;
+      }
       if (!loadRes.success || pool.proxies.length === 0) {
         const msg = loadRes.error || `代理文档中未解析到有效的代理记录 (支持4种单行格式: host:port, host:port:u:p, http://u:p@host:port, socks5://u:p@host:port)`;
         if (isJson) console.log(JSON.stringify({ code: 1, success: false, message: msg }));
@@ -803,14 +861,7 @@ async function main() {
         process.exit(1);
       }
 
-      const updated = store.updateEnvironment(env.id, {
-        rotatingProxy: {
-          enabled: true,
-          filePath: resolvedPath,
-          rules,
-          mode: mode === 'round-robin' ? 'round-robin' : 'random'
-        }
-      });
+      const updated = store.updateEnvironment(env.id, updates);
 
       if (isJson) {
         console.log(JSON.stringify({
@@ -971,19 +1022,14 @@ async function main() {
       try {
         const extVal = options.ext || options.extensions;
         const portDisabled = Boolean(options['no-port'] || options['disable-port']);
-        let proxyConfig = options.proxy || undefined;
-        if (proxyConfig && (options['proxy-scope'] || options['proxy-rules'] !== undefined || options['proxy-bypass'] !== undefined || options.bypass !== undefined)) {
-          const { parseProxyString } = require('./src/manager/proxy-parser');
-          const parsed = typeof proxyConfig === 'string' ? parseProxyString(proxyConfig) : proxyConfig;
-          if (parsed) {
-            if (options['proxy-scope']) parsed.scope = options['proxy-scope'];
-            if (options['proxy-rules'] !== undefined) parsed.rules = options['proxy-rules'];
-            if (options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
-              parsed.bypass = options['proxy-bypass'] || options.bypass;
-            }
-            proxyConfig = parsed;
-          }
-        }
+        const rawProxy = options.proxy;
+        const proxyConfig = rawProxy && rawProxy !== 'none' && rawProxy !== 'direct'
+          ? proxyConfigFromOption(rawProxy, {
+            scope: options['proxy-scope'],
+            rules: options['proxy-rules'],
+            bypass: options['proxy-bypass'] ?? options.bypass
+          })
+          : undefined;
 
         let rotatingProxy = undefined;
         const rotFile = options['rotating-file'] || options['rotating-proxy-file'] || options['rot-file'];
@@ -1000,6 +1046,7 @@ async function main() {
 
         const created = store.addEnvironment({
           name: options.name,
+          browserCore: options.core,
           group: options.group || '默认分组',
           notes: options.notes || undefined,
           remotePortEnabled: !portDisabled,
@@ -1075,30 +1122,20 @@ async function main() {
         if (options['clear-ext']) updates.extensions = '';
         else if (options.ext || options.extensions) updates.extensions = options.ext || options.extensions;
 
+        const bypass = options['proxy-bypass'] ?? options.bypass;
         if (options['clear-proxy'] || options.proxy === 'none' || options.proxy === 'direct' || options.proxy === '') {
-          updates.proxy = { enabled: false, type: 'socks5', host: '', port: '', username: '', password: '', rawString: '', scope: 'all', rules: '', bypass: '<local>;localhost;127.0.0.1' };
+          updates.proxy = null;
         } else if (options.proxy) {
-          let p = options.proxy;
-          if (options['proxy-scope'] || options['proxy-rules'] !== undefined || options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
-            const { parseProxyString } = require('./src/manager/proxy-parser');
-            const parsed = typeof p === 'string' ? parseProxyString(p) : p;
-            if (parsed) {
-              if (options['proxy-scope']) parsed.scope = options['proxy-scope'];
-              if (options['proxy-rules'] !== undefined) parsed.rules = options['proxy-rules'];
-              if (options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
-                parsed.bypass = options['proxy-bypass'] || options.bypass;
-              }
-              p = parsed;
-            }
-          }
-          updates.proxy = p;
-        } else if (options['proxy-scope'] || options['proxy-rules'] !== undefined || options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
+          updates.proxy = proxyConfigFromOption(options.proxy, {
+            scope: options['proxy-scope'],
+            rules: options['proxy-rules'],
+            bypass
+          });
+        } else if (options['proxy-scope'] || options['proxy-rules'] !== undefined || bypass !== undefined) {
           const curProxy = env.proxy ? { ...env.proxy } : {};
           if (options['proxy-scope']) curProxy.scope = options['proxy-scope'];
           if (options['proxy-rules'] !== undefined) curProxy.rules = options['proxy-rules'];
-          if (options['proxy-bypass'] !== undefined || options.bypass !== undefined) {
-            curProxy.bypass = options['proxy-bypass'] || options.bypass;
-          }
+          if (bypass !== undefined) curProxy.bypass = bypass;
           updates.proxy = curProxy;
         }
 
@@ -1124,7 +1161,12 @@ async function main() {
           updates.blockDialogs = false;
         }
 
+        requireStoppedChromiumForProxyChanges(env, updates, isJson);
         const updated = store.updateEnvironment(env.id, updates);
+        if (env.fp?.seed !== updated.fp?.seed || env.customUa !== updated.customUa ||
+          env.language !== updated.language || env.timezone !== updated.timezone) {
+          await processManager.refreshChromium(env.id);
+        }
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: `成功更新环境: "${updated.name}"`, data: updated }, null, 2));
         } else {
