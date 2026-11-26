@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const net = require('node:net');
 const { generateFingerprint, buildWindowsChromeUa } = require('../../fp-sdk');
 const { parseProxyString } = require('./proxy-parser');
+const { withProcessLock } = require('./process-lock');
 
 function parseAndBuildProxyConfig(proxyInput) {
   const result = {
@@ -73,6 +74,10 @@ const ROOT_DIR = resolveRootDir();
 
 function resolveDataDir(root) {
   const defaultData = path.join(root, 'data');
+  const appData = process.env.APPDATA || (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'AppData', 'Roaming') : null);
+  const fallbackDir = appData ? path.join(appData, 'DT-Fingerprint-Browser', 'data') : null;
+  if (fallbackDir && fs.existsSync(path.join(root, '.dt-roaming-data'))) return fallbackDir;
+
   let writable = false;
   try {
     if (!fs.existsSync(defaultData)) fs.mkdirSync(defaultData, { recursive: true });
@@ -87,9 +92,7 @@ function resolveDataDir(root) {
   if (writable) return defaultData;
 
   // 若默认目录无写权限 (如安装在 C:\Program Files)，自动回退到 AppData/Roaming 目录
-  const appData = process.env.APPDATA || (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'AppData', 'Roaming') : null);
-  if (appData) {
-    const fallbackDir = path.join(appData, 'DT-Fingerprint-Browser', 'data');
+  if (fallbackDir) {
     try {
       if (!fs.existsSync(fallbackDir)) {
         fs.mkdirSync(fallbackDir, { recursive: true });
@@ -113,42 +116,6 @@ const CONFIG_FILE = path.join(DATA_DIR, 'environments.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const BOOKMARKS_FILE = path.join(DATA_DIR, 'bookmarks.json');
 const PROFILES_DIR = path.join(DATA_DIR, 'profiles');
-
-function findHistoricDataDirectories() {
-  const dirs = [];
-  try {
-    if (process.platform === 'win32') {
-      try {
-        const cp = require('node:child_process');
-        const regOut = cp.execSync('reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\DT-Fingerprint-Browser" /v InstallLocation 2>nul', { encoding: 'utf8' });
-        const match = regOut.match(/InstallLocation\s+REG_SZ\s+(.+)/i);
-        if (match && match[1] && match[1].trim()) {
-          const loc = path.join(match[1].trim(), 'data');
-          if (fs.existsSync(loc) && path.resolve(loc) !== path.resolve(DATA_DIR)) {
-            dirs.push(loc);
-          }
-        }
-      } catch (_) {}
-    }
-
-    const localAppData = process.env.LOCALAPPDATA;
-    if (localAppData) {
-      const candidate = path.join(localAppData, 'Programs', 'DT-Fingerprint-Browser', 'data');
-      if (fs.existsSync(candidate) && path.resolve(candidate) !== path.resolve(DATA_DIR)) {
-        dirs.push(candidate);
-      }
-    }
-
-    const appData = process.env.APPDATA;
-    if (appData) {
-      const candidate = path.join(appData, 'DT-Fingerprint-Browser', 'data');
-      if (fs.existsSync(candidate) && path.resolve(candidate) !== path.resolve(DATA_DIR)) {
-        dirs.push(candidate);
-      }
-    }
-  } catch (_) {}
-  return Array.from(new Set(dirs));
-}
 
 function resolveFontsDir() {
   const candidates = [
@@ -256,11 +223,10 @@ function usedProfileBirthtime(directory, markers) {
   return fs.statSync(directory, { throwIfNoEntry: false })?.birthtimeMs ?? Infinity;
 }
 
-function inferBrowserCore(env, defaultCore, dataDir = DATA_DIR) {
+function inferBrowserCore(env, dataDir = DATA_DIR) {
   const existingElectron = path.join(dataDir, 'profiles', path.basename(env.userDataDir || env.id));
   const electron = usedProfileBirthtime(existingElectron, ['Preferences', 'Local State', 'Partitions']);
   const chromium = usedProfileBirthtime(chromiumProfile(dataDir, env.id), ['Local State', path.join('Default', 'Preferences')]);
-  if (electron === chromium) return defaultCore;
   return chromium < electron ? 'chromium' : 'electron';
 }
 
@@ -269,7 +235,7 @@ function getDefaultBrowserCore() {
   return isBrowserCore(core) ? core : DEFAULT_BROWSER_CORE;
 }
 
-function normalizeRecord(env, defaultCore) {
+function normalizeRecord(env) {
   if (!env) return env;
   if (!env.userDataDir || path.isAbsolute(env.userDataDir)) {
     const norm = (env.userDataDir || '').replace(/\\/g, '/');
@@ -298,7 +264,7 @@ function normalizeRecord(env, defaultCore) {
   if (!env.url) {
     env.url = 'dt://fingerprint-test';
   }
-  if (!isBrowserCore(env.browserCore)) env.browserCore = inferBrowserCore(env, defaultCore);
+  if (!isBrowserCore(env.browserCore)) env.browserCore = inferBrowserCore(env);
   if (env.customUa === undefined) {
     env.customUa = '';
   } else if (typeof env.customUa === 'string') {
@@ -307,19 +273,22 @@ function normalizeRecord(env, defaultCore) {
   return env;
 }
 
-let cachedLoadList = null;
-let lastLoadMtime = 0;
+let writingStore = false;
+
+function withStoreWrite(operation) {
+  ensureDirs();
+  return withProcessLock(DATA_DIR, 'configuration', async () => {
+    writingStore = true;
+    try {
+      return await operation();
+    } finally {
+      writingStore = false;
+    }
+  });
+}
 
 function loadAll() {
   ensureDirs();
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const mtime = fs.statSync(CONFIG_FILE).mtimeMs;
-      if (cachedLoadList && mtime === lastLoadMtime) {
-        return cachedLoadList;
-      }
-    }
-  } catch (_) {}
 
   let list = [];
   let loaded = false;
@@ -329,7 +298,7 @@ function loadAll() {
       const content = fs.readFileSync(CONFIG_FILE, 'utf8').trim();
       if (content) {
         const parsed = JSON.parse(content);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed) && parsed.every(record => record && typeof record.id === 'string')) {
           list = parsed;
           loaded = true;
         }
@@ -339,8 +308,8 @@ function loadAll() {
     }
   }
 
-  // 1. 如果主配置文件为空（或曾被覆盖安装误置空），尝试从备份中自动恢复
-  if (!loaded || list.length === 0) {
+  // A valid empty list is a saved user choice. Only repair missing or invalid files.
+  if (!loaded) {
     const backupCandidates = [
       path.join(DATA_DIR, 'environments.bak.json'),
       path.join(DATA_DIR, 'environments_backup_pre_update.json')
@@ -362,11 +331,11 @@ function loadAll() {
           const bContent = fs.readFileSync(bkp, 'utf8').trim();
           if (bContent) {
             const bParsed = JSON.parse(bContent);
-            if (Array.isArray(bParsed) && bParsed.length > 0) {
+            if (Array.isArray(bParsed) && bParsed.every(record => record && typeof record.id === 'string')) {
               console.error(`[Store] 成功从备份 ${path.basename(bkp)} 自动恢复 ${bParsed.length} 个配置！`);
               list = bParsed;
               loaded = true;
-              saveAll(list);
+              if (writingStore) saveAll(list, false);
               break;
             }
           }
@@ -376,7 +345,7 @@ function loadAll() {
   }
 
   // 2. 核心智能救援：如果配置仍为空，但 profiles 目录中存在已有的历史环境缓存目录，自动重建关联恢复环境！
-  if (!loaded || list.length === 0) {
+  if (!loaded) {
     try {
       if (fs.existsSync(PROFILES_DIR)) {
         const entries = fs.readdirSync(PROFILES_DIR, { withFileTypes: true });
@@ -396,7 +365,7 @@ function loadAll() {
             portOffset++;
             list.push(rec);
           }
-          saveAll(list);
+          if (writingStore) saveAll(list, false);
           loaded = true;
         }
       }
@@ -405,69 +374,8 @@ function loadAll() {
     }
   }
 
-  // 2.5 跨目录与注册表历史安装路径全自动继承：若新安装目录数据为空，自动从系统历史目录或注册表安装位置无缝继承
-  if (!loaded || list.length === 0) {
-    try {
-      const historicDirs = findHistoricDataDirectories();
-      for (const hDir of historicDirs) {
-        const hEnvJson = path.join(hDir, 'environments.json');
-        if (fs.existsSync(hEnvJson)) {
-          try {
-            const raw = fs.readFileSync(hEnvJson, 'utf8').trim();
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                console.error(`[Store] 成功从历史安装位置 ${hDir} 无损继承 ${parsed.length} 个指纹环境配置！`);
-                list = parsed;
-                loaded = true;
-
-                // 同步继承历史 settings.json
-                const hSetJson = path.join(hDir, 'settings.json');
-                const curSetJson = path.join(DATA_DIR, 'settings.json');
-                if (fs.existsSync(hSetJson) && !fs.existsSync(curSetJson)) {
-                  try { fs.copyFileSync(hSetJson, curSetJson); } catch (_) {}
-                }
-
-                const importedDefault = getDefaultBrowserCore();
-                list = list.map(env => isBrowserCore(env.browserCore) ? env : {
-                  ...env,
-                  browserCore: inferBrowserCore(env, importedDefault, hDir),
-                });
-                saveAll(list);
-
-                // 同步继承历史 bookmarks.json
-                const hBmkJson = path.join(hDir, 'bookmarks.json');
-                const curBmkJson = path.join(DATA_DIR, 'bookmarks.json');
-                if (fs.existsSync(hBmkJson) && !fs.existsSync(curBmkJson)) {
-                  try { fs.copyFileSync(hBmkJson, curBmkJson); } catch (_) {}
-                }
-
-                // 复制关联 profiles 缓存目录 (若当前目录尚无)
-                const hProfiles = path.join(hDir, 'profiles');
-                if (fs.existsSync(hProfiles) && fs.existsSync(PROFILES_DIR)) {
-                  try {
-                    const profEntries = fs.readdirSync(hProfiles, { withFileTypes: true });
-                    for (const pe of profEntries) {
-                      if (pe.isDirectory()) {
-                        const targetProf = path.join(PROFILES_DIR, pe.name);
-                        if (!fs.existsSync(targetProf)) {
-                          fs.mkdirSync(targetProf, { recursive: true });
-                        }
-                      }
-                    }
-                  } catch (_) {}
-                }
-                break;
-              }
-            }
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-  }
-
   // 3. 若确实没有任何历史数据（真正的崭新首次安装），创建默认的测试环境
-  if (!loaded || list.length === 0) {
+  if (!loaded) {
     const defaultList = [
       createRecord({
         name: '环境 1 · 纽约',
@@ -488,32 +396,25 @@ function loadAll() {
         url: 'dt://fingerprint-test',
       })
     ];
-    saveAll(defaultList);
+    if (writingStore) saveAll(defaultList);
     return defaultList;
   }
 
   // 规范化所有环境记录
   let dirty = false;
-  const defaultCore = getDefaultBrowserCore();
   const normalized = list.map(env => {
     const originalUserData = env.userDataDir;
     const originalExt = env.extensions;
     const originalCore = env.browserCore;
-    const norm = normalizeRecord(env, defaultCore);
+    const norm = normalizeRecord(env);
     if (norm.userDataDir !== originalUserData || norm.extensions !== originalExt || norm.browserCore !== originalCore) {
       dirty = true;
     }
     return norm;
   });
-  if (dirty) {
-    saveAll(normalized);
+  if (dirty && writingStore) {
+    saveAll(normalized, false);
   }
-  cachedLoadList = normalized;
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      lastLoadMtime = fs.statSync(CONFIG_FILE).mtimeMs;
-    }
-  } catch (_) {}
   return normalized;
 }
 
@@ -523,31 +424,16 @@ function safeWriteJsonSync(targetFile, data) {
   const dir = path.dirname(targetFile);
   const tmp = path.join(dir, `.${path.basename(targetFile)}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`);
   try {
-    fs.writeFileSync(tmp, content, 'utf8');
-    try {
-      fs.renameSync(tmp, targetFile);
-    } catch (_) {
-      // Windows 平台跨卷或被占用重试复制再清理
-      fs.copyFileSync(tmp, targetFile);
-      try { fs.unlinkSync(tmp); } catch (_) {}
-    }
-  } catch (err) {
-    try {
-      fs.writeFileSync(targetFile, content, 'utf8');
-    } catch (_) {}
-    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch (_) {}
+    fs.writeFileSync(tmp, content, { encoding: 'utf8', flag: 'wx' });
+    fs.renameSync(tmp, targetFile);
+  } finally {
+    try { fs.unlinkSync(tmp); } catch (_) {}
   }
 }
 
-function saveAll(list) {
+function saveAll(list, updateBackup = true) {
   safeWriteJsonSync(CONFIG_FILE, list);
-  cachedLoadList = list;
-  try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      lastLoadMtime = fs.statSync(CONFIG_FILE).mtimeMs;
-    }
-  } catch (_) {}
-  if (Array.isArray(list) && list.length > 0) {
+  if (updateBackup) {
     try {
       safeWriteJsonSync(path.join(DATA_DIR, 'environments.bak.json'), list);
     } catch (_) {}
@@ -704,9 +590,20 @@ function addEnvironment(input) {
     throw new Error(`已存在名为 "${input.name}" 的环境`);
   }
   const env = createRecord(input);
+  if (list.some(item => item.id === env.id)) throw new Error('环境 ID 已存在。');
+  checkConfiguredPort(env, list);
   list.push(env);
   saveAll(list);
   return env;
+}
+
+function checkConfiguredPort(env, list) {
+  if (!env.remotePortEnabled) return;
+  const port = Number(env.remotePort);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('调试端口必须为 1 到 65535 的整数。');
+  if (list.some(other => other.id !== env.id && other.remotePortEnabled && Number(other.remotePort) === port)) {
+    throw new Error('调试端口已分配给其他环境：' + port);
+  }
 }
 
 function updateEnvironment(id, updates) {
@@ -743,13 +640,17 @@ function updateEnvironment(id, updates) {
     }
   }
 
-  list[index] = {
+  const updated = {
     ...current,
     ...updates,
     fp,
     browserCore: current.browserCore,
     updatedAt: new Date().toISOString()
   };
+  if (current.remotePortEnabled !== updated.remotePortEnabled || Number(current.remotePort) !== Number(updated.remotePort)) {
+    checkConfiguredPort(updated, list);
+  }
+  list[index] = updated;
   saveAll(list);
   return list[index];
 }
@@ -767,42 +668,25 @@ function clearEnvironmentCache(id) {
   const env = getEnvironment(id);
   if (!env) throw new Error(`未找到环境 ID: ${id}`);
   const sub = env.userDataDir ? path.basename(env.userDataDir) : env.id;
-  const targetDir = (env.userDataDir && path.isAbsolute(env.userDataDir)) ? env.userDataDir : path.join(PROFILES_DIR, sub);
-  if (fs.existsSync(targetDir)) {
-    let deleted = false;
-    // Windows 文件锁短暂延迟重试机制 (最多尝试 3 次)
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        fs.rmSync(targetDir, { recursive: true, force: true });
-        deleted = true;
-        break;
-      } catch (e) {
-        if (attempt === 2) {
-          // 若父目录依然被特定句柄锁定，降级逐项清空子项
-          console.warn(`[Clear Cache Warn] rmSync 异常，尝试逐项清空内容: ${e.message}`);
-          try {
-            const files = fs.readdirSync(targetDir);
-            for (const file of files) {
-              try {
-                fs.rmSync(path.join(targetDir, file), { recursive: true, force: true });
-              } catch (_) {}
-            }
-          } catch (_) {}
-        } else {
-          // 毫秒级微等待系统释放文件锁
-          const start = Date.now();
-          while (Date.now() - start < 120) {}
-        }
-      }
-    }
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
-  } else {
-    fs.mkdirSync(targetDir, { recursive: true });
+  const targetDir = path.resolve(PROFILES_DIR, sub);
+  if (path.dirname(targetDir).toLowerCase() !== PROFILES_DIR.toLowerCase() || sub.includes(':')) {
+    throw new Error('无法清理无效的浏览器资料目录。');
+  }
+  if (loadAll().some(other => other.id !== env.id &&
+      path.basename(other.userDataDir || other.id).toLowerCase() === sub.toLowerCase())) {
+    throw new Error('此浏览器资料目录由多个环境共用，无法单独清理。');
   }
   const nativeProfile = chromiumProfile(DATA_DIR, env.id);
-  fs.rmSync(nativeProfile, { recursive: true, force: true, maxRetries: 3, retryDelay: 120 });
+  for (const target of [targetDir, nativeProfile]) {
+    const parent = path.dirname(target);
+    if (fs.lstatSync(parent, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      throw new Error('无法通过链接清理浏览器资料目录。');
+    }
+  }
+  for (const target of [targetDir, nativeProfile]) {
+    fs.rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 120 });
+  }
+  fs.mkdirSync(targetDir, { recursive: true });
   return { success: true, message: `已彻底清空 "${env.name}" 的独立缓存与数据目录！` };
 }
 
@@ -853,7 +737,6 @@ function getSettings() {
       try {
         const rawBkp = fs.readFileSync(bkp, 'utf8');
         const parsed = JSON.parse(rawBkp);
-        safeWriteJsonSync(SETTINGS_FILE, parsed);
         return { ...DEFAULT_SETTINGS, ...parsed };
       } catch (_) {}
     }
@@ -1009,32 +892,18 @@ function loadBookmarks() {
   } catch (err) {
     console.error('读取书签失败:', err.message);
   }
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    fs.writeFileSync(BOOKMARKS_FILE, JSON.stringify(DEFAULT_BOOKMARKS, null, 2), 'utf8');
-  } catch (_) {}
   return [...DEFAULT_BOOKMARKS];
 }
 
 function saveBookmarks(bookmarks) {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    const cleanList = (Array.isArray(bookmarks) ? bookmarks : []).map(b => ({
-      id: b.id || ('bm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)),
-      title: String(b.title || '未命名书签').trim(),
-      url: String(b.url || 'https://www.browserscan.net/').trim(),
-      createdAt: b.createdAt || Date.now()
-    }));
-    fs.writeFileSync(BOOKMARKS_FILE, JSON.stringify(cleanList, null, 2), 'utf8');
-    return cleanList;
-  } catch (err) {
-    console.error('保存书签失败:', err.message);
-    return [];
-  }
+  const cleanList = (Array.isArray(bookmarks) ? bookmarks : []).map(b => ({
+    id: b.id || ('bm-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)),
+    title: String(b.title || '未命名书签').trim(),
+    url: String(b.url || 'https://www.browserscan.net/').trim(),
+    createdAt: b.createdAt || Date.now()
+  }));
+  safeWriteJsonSync(BOOKMARKS_FILE, cleanList);
+  return cleanList;
 }
 
 module.exports = {
@@ -1046,6 +915,7 @@ module.exports = {
   resolveRootDir,
   getRandomFp,
   loadAll,
+  withStoreWrite,
   saveAll,
   getEnvironment,
   createRecord,

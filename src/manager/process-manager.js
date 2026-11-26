@@ -6,9 +6,11 @@ const { promisify } = require('node:util');
 const { createHash, randomUUID } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { getEnvironment, getSettings, regenerateFp, isPortAvailable, DATA_DIR, ROOT_DIR } = require('./store');
+const { getEnvironment, getSettings, regenerateFp, isPortAvailable, withStoreWrite,
+  deleteEnvironment, clearEnvironmentCache, DATA_DIR, ROOT_DIR } = require('./store');
 const { ensureCore, runtimeTools, systemExecutable, windowsPowerShell } = require('../../scripts/runtime-path');
-const { launchArgs, chromiumProfile } = require('./chromium');
+const { prepareChromiumLaunch, chromiumProfile } = require('./chromium');
+const { startChromiumSocks5 } = require('./chromium-socks5');
 const { prepareCanvasAssets } = require('./chromium-canvas');
 const { withProcessLock } = require('./process-lock');
 const run = promisify(execFile);
@@ -18,7 +20,7 @@ const ACTIVE_FILE = path.join(DATA_DIR, 'active-instances.json');
 
 // 跨进程探活：检查 PID 是否真实存在
 function isPidAlive(pid) {
-  if (!pid) return false;
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true; // 进程存在且有权限
@@ -112,14 +114,16 @@ async function launchEnvironment(env, options) {
     };
   }
 
-  const args = core === 'chromium' ? launchArgs(env, options, ROOT_DIR, DATA_DIR) : electronArgs(env, options, settings);
+  const plan = core === 'chromium'
+    ? prepareChromiumLaunch(env, options, ROOT_DIR, DATA_DIR)
+    : { args: () => electronArgs(env, options, settings) };
   const executable = await ensureCore(core, ROOT_DIR);
   const port = env.remotePortEnabled ? Number(env.remotePort) || null : null;
-  const start = () => startEnvironment(env, options, core, executable, args, port);
+  const start = () => startEnvironment(env, options, core, executable, plan, port);
   return port ? withProcessLock(DATA_DIR, 'debug-port:' + port, start) : start();
 }
 
-async function startEnvironment(env, options, core, executable, args, port) {
+async function startEnvironment(env, options, core, executable, plan, port) {
   if (port && (Object.values(getRunningStatus()).some(record => Number(record.port) === port) ||
       !await isPortAvailable(port))) {
     throw new Error('调试端口已被占用：' + port);
@@ -128,10 +132,20 @@ async function startEnvironment(env, options, core, executable, args, port) {
   delete envVars.ELECTRON_RUN_AS_NODE;
 
   if (core === 'chromium') prepareCanvasAssets(chromiumProfile(DATA_DIR, env.id), env.fp);
-  const branding = core === 'chromium' && !args.some(arg => /^--headless(?:=|$)/.test(arg))
-    ? chromiumBranding(env.id)
-    : null;
-  const pid = await spawnBrowser(executable, args, envVars, branding);
+  const bridge = plan.socksAuth && await startChromiumSocks5(plan.socksAuth);
+  let pid;
+  try {
+    const args = plan.args(bridge?.port);
+    const branding = core === 'chromium' && !args.some(arg => /^--headless(?:=|$)/.test(arg))
+      ? chromiumBranding(env.id)
+      : null;
+    pid = await spawnBrowser(executable, args, envVars, branding);
+    if (bridge) await bridge.follow(pid);
+  } catch (error) {
+    bridge?.abort();
+    if (pid) await terminateBrowser({ pid, core, port });
+    throw error;
+  }
   const record = {
     pid,
     core,
@@ -250,6 +264,23 @@ async function stop(idOrName) {
   return withEnvironment(idOrName, stopEnvironment);
 }
 
+async function removeEnvironment(idOrName, { stopRunning = false } = {}) {
+  return withEnvironment(idOrName, async env => {
+    if (isRunning(env.id)) {
+      if (!stopRunning) return false;
+      await stopEnvironment(env);
+    }
+    return withStoreWrite(() => deleteEnvironment(env.id));
+  });
+}
+
+async function clearCache(idOrName) {
+  return withEnvironment(idOrName, env => {
+    if (isRunning(env.id)) return null;
+    return withStoreWrite(() => clearEnvironmentCache(env.id));
+  });
+}
+
 async function stopEnvironment(env) {
   const activeMap = getRunningStatus();
   const record = activeMap[env.id];
@@ -341,7 +372,7 @@ async function restartChromium(env) {
   const options = active.launchOptions || {};
   // Validate the changed configuration before closing the running window.
   const restart = { ...options, core: 'chromium', restoreSession: !options.headless };
-  launchArgs(env, restart, ROOT_DIR, DATA_DIR);
+  prepareChromiumLaunch(env, restart, ROOT_DIR, DATA_DIR);
   await stopEnvironment(env);
   await launchEnvironment(env, restart);
   return true;
@@ -350,7 +381,7 @@ async function restartChromium(env) {
 async function randomizeEnvironment(id, timezone) {
   return withEnvironment(id, async current => {
     const running = getRunningStatus()[current.id];
-    const env = regenerateFp(current.id, timezone);
+    const env = await withStoreWrite(() => regenerateFp(current.id, timezone));
     const restarted = running?.core === 'chromium' && await restartChromium(env);
     return { env, restarted, hotReloaded: Boolean(running && running.core !== 'chromium') };
   });
@@ -371,6 +402,8 @@ module.exports = {
   randomizeEnvironment,
   stop,
   stopAll,
+  removeEnvironment,
+  clearCache,
   isRunning,
   getRunningStatus
 };

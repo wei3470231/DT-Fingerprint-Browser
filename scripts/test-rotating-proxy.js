@@ -37,7 +37,7 @@ async function runTest() {
     13.14.15.16:9999
     socks5://13.14.15.16:9999
     # IPRoyal 住宅长会话格式 (带下划线与横杠特殊字符)
-    NIJwjCTdhTGSOKbH:nW6TNfehjy9w7lgY_session-jQTfhgay_lifetime-2m@geo.iproyal.com:12321
+    fixture-proxy-user:fixture-password_session-abc_lifetime-2m@proxy-session.example.test:12321
     # 重复项
     http://user1:pass1@1.2.3.4:8080
   `;
@@ -45,13 +45,13 @@ async function runTest() {
   const loadRes = pool.loadFromString(sampleText);
   assert(loadRes.success && loadRes.count === 5, `成功解析多种格式并去重 (实际解析到: ${loadRes.count})`);
 
-  const iproyal = pool.proxies.find(p => p.host === 'geo.iproyal.com');
+  const iproyal = pool.proxies.find(p => p.host === 'proxy-session.example.test');
   assert(
     iproyal &&
     iproyal.port === 12321 &&
-    iproyal.username === 'NIJwjCTdhTGSOKbH' &&
-    iproyal.password === 'nW6TNfehjy9w7lgY_session-jQTfhgay_lifetime-2m',
-    '精确解析 IPRoyal 用户名与长会话密文参数 (NIJwjCTdhTGSOKbH:nW6TNfehjy9w7lgY_session-jQTfhgay_lifetime-2m@geo.iproyal.com:12321)'
+    iproyal.username === 'fixture-proxy-user' &&
+    iproyal.password === 'fixture-password_session-abc_lifetime-2m',
+    '精确解析 IPRoyal 用户名与长会话密文参数 (fixture-proxy-user:fixture-password_session-abc_lifetime-2m@proxy-session.example.test:12321)'
   );
 
   // 2. 测试每次新连接抽取任意代理
@@ -129,7 +129,7 @@ async function runTest() {
         const u = chunk.slice(2, 2 + uLen).toString();
         const pLen = chunk[2 + uLen];
         const p = chunk.slice(3 + uLen, 3 + uLen + pLen).toString();
-        if (u === 'NIJwjCTdhTGSOKbH' && p === 'nW6TNfehjy9w7lgY_session-jQTfhgay_lifetime-2m') {
+        if (u === 'fixture-proxy-user' && p === 'fixture-password_session-abc_lifetime-2m') {
           mockAuthPassed = true;
           s.write(Buffer.from([0x01, 0x00])); // 认证成功
           step = 2;
@@ -150,7 +150,7 @@ async function runTest() {
   const mockPort = mockServer.address().port;
 
   const testPool = new RotatingProxyPool();
-  testPool.loadFromString(`NIJwjCTdhTGSOKbH:nW6TNfehjy9w7lgY_session-jQTfhgay_lifetime-2m@127.0.0.1:${mockPort}`);
+  testPool.loadFromString(`fixture-proxy-user:fixture-password_session-abc_lifetime-2m@127.0.0.1:${mockPort}`);
 
   const testDispatcher = new RotatingDispatcherServer(testPool);
   const dispPort = await testDispatcher.start();

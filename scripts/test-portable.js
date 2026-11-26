@@ -11,7 +11,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { generateFingerprint } = require('../fp-sdk');
 
-const zip = path.resolve(__dirname, '../dist/DT-Fingerprint-Browser-v3.0-Portable.zip');
+const fullInstaller = process.argv.includes('--full');
+const packageFile = path.resolve(__dirname, '../dist', fullInstaller
+  ? 'DT-Fingerprint-Browser-v3.1-Full-Setup.exe'
+  : 'DT-Fingerprint-Browser-v3.1-Portable.zip');
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'dt-portable-v30-'));
 const app = path.join(sandbox, 'Portable app');
 const data = path.join(app, 'data');
@@ -118,9 +121,30 @@ async function freePort() {
   return port;
 }
 
+function extractPackage() {
+  if (!fullInstaller) {
+    execFileSync('tar.exe', ['-xf', packageFile, '-C', app], { windowsHide: true });
+    return;
+  }
+
+  const extract = [
+    "$ErrorActionPreference = 'Stop'",
+    'Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem',
+    '$setup = [Reflection.Assembly]::LoadFile($env:DT_TEST_SETUP_FILE)',
+    "$payload = $setup.GetManifestResourceStream('payload.zip')",
+    '$archive = [IO.Compression.ZipArchive]::new($payload, [IO.Compression.ZipArchiveMode]::Read)',
+    'try { [IO.Compression.ZipFileExtensions]::ExtractToDirectory($archive, $env:DT_TEST_SETUP_TARGET) }',
+    'finally { $archive.Dispose() }',
+  ].join('\n');
+  execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', extract], {
+    env: { ...process.env, DT_TEST_SETUP_FILE: packageFile, DT_TEST_SETUP_TARGET: app },
+    windowsHide: true,
+  });
+}
+
 async function main() {
   fs.mkdirSync(app);
-  execFileSync('tar.exe', ['-xf', zip, '-C', app], { windowsHide: true });
+  extractPackage();
   assert.ok(fs.existsSync(launcher));
   assert.ok(fs.existsSync(path.join(app, 'DT-Fingerprint-Browser.exe')));
   assert.ok(fs.existsSync(path.join(app, 'app.asar')));
@@ -132,13 +156,14 @@ async function main() {
   assert.ok(fs.existsSync(path.join(app, 'scripts', 'ChromiumWindowIcon.exe')));
   assert.ok(fs.readdirSync(path.join(app, 'Fonts')).length);
   assert.ok(fs.existsSync(path.join(runtime, 'cores', 'electron', 'electron.exe')));
-  assert.ok(!fs.existsSync(path.join(runtime, 'cores', 'chromium')), 'Chromium remains available on demand');
+  assert.equal(fs.existsSync(path.join(runtime, 'cores', 'chromium', 'chrome.exe')), fullInstaller);
 
   const port = await freePort();
   fs.mkdirSync(data, { recursive: true });
+  assert.equal(json('settings', 'get').browserCore, 'chromium', 'Fresh packages must start with independent settings');
   fs.writeFileSync(path.join(data, 'environments.json'), JSON.stringify([{
-    id: envId, name: envId, customUa: 'DT-Portable-Fixture/1.0',
-    remotePortEnabled: true, remotePort: port, fp: generateFingerprint(),
+    id: envId, name: envId, customUa: 'DT-Portable-Fixture/1.0', browserCore: 'chromium',
+    remotePortEnabled: false, remotePort: null, fp: generateFingerprint(),
   }]));
 
   assert.match(cli('--version'), /^Google Chrome 152\./);
@@ -172,17 +197,21 @@ async function main() {
   assert.equal(electronStart.core, 'electron');
   assert.match(electronStart.ws, /^ws:\/\/127\.0\.0\.1:/);
   assert.equal(json('status', '--id', electronFixture.id).info.pid, electronStart.pid);
-  assert.ok(!fs.existsSync(chromium), 'Electron can run before Chromium is installed');
+  assert.equal(fs.existsSync(chromium), fullInstaller);
   json('stop', '--id', electronFixture.id);
   running = false;
-  console.log('PASS newly created Electron environment opens with empty PATH before Chromium is installed');
+  console.log('PASS newly created Electron environment opens with empty PATH');
 
-  if (process.env.DT_TEST_CORE_ARCHIVES) {
-    fs.copyFileSync(path.join(process.env.DT_TEST_CORE_ARCHIVES, 'runtime_chromium.zip'), path.join(app, 'runtime_chromium.zip'));
+  if (fullInstaller) {
+    assert.ok(!fs.existsSync(path.join(app, 'runtime_chromium.zip')));
+    assert.ok(!fs.existsSync(path.join(app, 'runtime_electron.zip')));
+  } else {
+    if (process.env.DT_TEST_CORE_ARCHIVES) {
+      fs.copyFileSync(path.join(process.env.DT_TEST_CORE_ARCHIVES, 'runtime_chromium.zip'), path.join(app, 'runtime_chromium.zip'));
+    }
+    await warmUpChromium(electron, chromium);
+    console.log('PASS fresh manager automatically prepared Chromium with empty PATH and native tools');
   }
-
-  await warmUpChromium(electron, chromium);
-  console.log('PASS fresh manager automatically prepared Chromium with empty PATH and native tools');
 
   const independent = json('create', '--name', 'Parallel Chromium', '--core', 'chromium', '--no-port', '--url', 'about:blank');
   running = true;
@@ -200,6 +229,7 @@ async function main() {
   assert.equal(json('status', '--id', id).info.pid, started.pid);
   console.log('PASS three independent CLI processes, same-env deduplication and separate registry entries');
   assert.equal(started.core, 'chromium');
+  if (fullInstaller) console.log('PASS bundled Chromium opens with empty PATH and without a local core ZIP');
   assert.equal(started.port, port);
   assert.match(started.ws, /^ws:\/\/127\.0\.0\.1:/);
   assert.equal(cli('cdp-url', '--id', id, '--ws'), started.ws);

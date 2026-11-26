@@ -59,7 +59,7 @@ async function readInterface(executable, args) {
 
 async function main() {
   fs.mkdirSync(install);
-  fs.copyFileSync(path.join(project, 'dist', 'payload-v3.0', path.basename(launcher)), launcher);
+  fs.copyFileSync(path.join(project, 'dist', 'payload-v3.1', path.basename(launcher)), launcher);
   // Copy from the real directory even when the development runtime is a junction.
   const runtime = fs.realpathSync(path.dirname(electronPath()));
   const filter = source => !['cores', 'resources\\app.asar', 'resources\\app'].includes(path.relative(runtime, source));
@@ -69,24 +69,24 @@ async function main() {
   assert.ok(fs.lstatSync(legacy).isDirectory());
   assert.ok(fs.lstatSync(fresh).isDirectory());
   packProbe('v2.6', false, embedded);
-  packProbe('v3.0', true, rootArchive);
+  packProbe('v3.1', true, rootArchive);
 
   assert.deepEqual(await readInterface(path.join(legacy, 'electron.exe'), [rootArchive]), {
     version: 'v2.6', selector: false,
   });
   const previousApp = fs.readFileSync(embedded);
   assert.deepEqual(await readInterface(launcher, ['--minimized']), {
-    version: 'v3.0', selector: true,
+    version: 'v3.1', selector: true,
   });
   assert.deepEqual(fs.readFileSync(embedded), previousApp);
-  console.log('PASS overwrite upgrade uses the v3.0 GUI even when the v2.6 embedded app is still present');
+  console.log('PASS overwrite upgrade uses the v3.1 GUI even when the v2.6 embedded app is still present');
 
   fs.renameSync(embedded, embedded + '.before-v3');
   fs.rmSync(path.join(legacy, 'resources', 'default_app.asar'));
   assert.deepEqual(await readInterface(launcher, ['--minimized']), {
-    version: 'v3.0', selector: true,
+    version: 'v3.1', selector: true,
   });
-  console.log('PASS a legacy core without a default bootstrap cannot prevent the v3.0 GUI from opening');
+  console.log('PASS a legacy core without a default bootstrap cannot prevent the v3.1 GUI from opening');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; })

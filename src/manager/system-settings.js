@@ -12,103 +12,62 @@ function normalizePath(p) {
   return path.resolve(p).toLowerCase().replace(/[\\/]+$/, '');
 }
 
-/**
- * 获取开机自启状态
- */
-function getAutoStart(app) {
-  const settings = store.getSettings();
-  let enabled = Boolean(settings.autoStart);
-  let silent = Boolean(settings.autoStartSilent);
+const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 
-  if (app && typeof app.getLoginItemSettings === 'function') {
-    try {
-      const loginItem = app.getLoginItemSettings();
-      if (loginItem && typeof loginItem.openAtLogin === 'boolean') {
-        enabled = loginItem.openAtLogin;
-      }
-    } catch (_) {}
+function readRunCommand(name) {
+  try {
+    const result = cp.execFileSync('reg.exe', ['query', RUN_KEY, '/v', name], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
+    });
+    return result.match(/\sREG_(?:EXPAND_)?SZ\s+([^\r\n]+)/i)?.[1]?.trim() || '';
+  } catch {
+    return '';
   }
-
-  // Windows 注册表校验
-  if (process.platform === 'win32') {
-    try {
-      const output = cp.execSync('reg query "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v "DTFingerprintBrowser"', {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore']
-      });
-      if (output && output.includes('DTFingerprintBrowser')) {
-        enabled = true;
-        if (output.includes('--minimized') || output.includes('--hidden')) {
-          silent = true;
-        }
-      }
-    } catch (_) {
-      // 注册表不存在该键值说明未开启
-      if (settings.autoStart === undefined) {
-        enabled = false;
-      }
-    }
-  }
-
-  return { enabled, silent };
 }
 
-/**
- * 设置开机自启 (必须严格绑定 DT - 指纹浏览器.exe，严禁直接启动 Chromium/chrome.exe)
- */
+function ownsRunCommand(command) {
+  const executable = command.match(/^"([^"]+)"|^(.+?\.exe)(?:\s|$)/i);
+  const target = normalizePath(executable?.[1] || executable?.[2]);
+  return ['DT-Fingerprint-Browser.exe', 'DT - 指纹浏览器.exe',
+    'runtime/electron.exe', 'runtime/cores/electron/electron.exe'].some(name =>
+    target === normalizePath(path.join(ROOT_DIR, name)));
+}
+
+function getAutoStart(app) {
+  if (process.platform === 'win32') {
+    const command = ['DTFingerprintBrowser', 'electron.app.Electron'].map(readRunCommand).find(ownsRunCommand);
+    return { enabled: Boolean(command), silent: /--(?:minimized|hidden)\b/i.test(command || '') };
+  }
+  const settings = store.getSettings();
+  const login = app?.getLoginItemSettings?.();
+  return { enabled: login?.openAtLogin ?? Boolean(settings.autoStart), silent: Boolean(settings.autoStartSilent) };
+}
+
 function setAutoStart(app, enabled, silent = false) {
-  const baseDir = store.ROOT_DIR || process.env.DT_APP_ROOT || path.resolve(__dirname, '../../');
-  const targetExe = fs.existsSync(path.resolve(baseDir, 'DT-Fingerprint-Browser.exe'))
-    ? path.resolve(baseDir, 'DT-Fingerprint-Browser.exe')
-    : path.resolve(baseDir, 'DT - 指纹浏览器.exe');
+  const targetExe = [path.join(ROOT_DIR, 'DT-Fingerprint-Browser.exe'), path.join(ROOT_DIR, 'DT - 指纹浏览器.exe')]
+    .find(file => fs.existsSync(file));
   const isEnabled = Boolean(enabled);
   const isSilent = Boolean(silent);
-
-  // 1. Electron API
-  if (app && typeof app.setLoginItemSettings === 'function') {
-    try {
-      app.setLoginItemSettings({
-        openAtLogin: isEnabled,
-        openAsHidden: isSilent,
-        path: targetExe,
-        args: isSilent ? ['--minimized'] : []
-      });
-    } catch (err) {
-      console.warn('[AutoStart] app.setLoginItemSettings error:', err.message);
-    }
-  }
-
-  // 2. Windows 注册表直写 (保证双击原生 EXE 或便携版绝对生效，清理历史遗留冗余键)
-  if (process.platform === 'win32') {
-    try {
+  return store.withStoreWrite(() => {
+    if (process.platform === 'win32') {
       if (isEnabled) {
-        const cmdVal = isSilent ? `"${targetExe}" --minimized` : `"${targetExe}"`;
-        cp.execFileSync('reg.exe', ['add', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'DTFingerprintBrowser', '/t', 'REG_SZ', '/d', cmdVal, '/f'], {
-          stdio: 'ignore'
-        });
-      } else {
-        cp.execFileSync('reg.exe', ['delete', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'DTFingerprintBrowser', '/f'], {
-          stdio: 'ignore'
-        });
+        if (!targetExe) throw new Error('找不到 DT 指纹浏览器启动程序。');
+        const command = '"' + targetExe + '"' + (isSilent ? ' --minimized' : '');
+        cp.execFileSync('reg.exe', ['add', RUN_KEY, '/v', 'DTFingerprintBrowser', '/t', 'REG_SZ', '/d', command, '/f'],
+          { stdio: 'ignore' });
       }
-      // 清理可能遗留的旧 electron.app.Electron 注册表键
-      try {
-        cp.execFileSync('reg.exe', ['delete', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', '/v', 'electron.app.Electron', '/f'], {
-          stdio: 'ignore'
-        });
-      } catch (_) {}
-    } catch (err) {
-      console.warn('[AutoStart] Registry error:', err.message);
+      const values = isEnabled ? ['electron.app.Electron'] : ['DTFingerprintBrowser', 'electron.app.Electron'];
+      for (const value of values) {
+        if (ownsRunCommand(readRunCommand(value))) {
+          cp.execFileSync('reg.exe', ['delete', RUN_KEY, '/v', value, '/f'], { stdio: 'ignore' });
+        }
+      }
+    } else {
+      app?.setLoginItemSettings?.({ openAtLogin: isEnabled, openAsHidden: isSilent });
     }
-  }
-
-  // 3. 持久化到 settings.json
-  store.updateSettings({
-    autoStart: isEnabled,
-    autoStartSilent: isSilent
+    store.updateSettings({ autoStart: isEnabled, autoStartSilent: isSilent });
+    return { success: true, enabled: isEnabled, silent: isSilent };
   });
-
-  return { success: true, enabled: isEnabled, silent: isSilent };
 }
 
 /**

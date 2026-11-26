@@ -385,7 +385,8 @@ function broadcastState(force = false) {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await store.withStoreWrite(store.loadAll);
   createWindow();
   createTray();
 
@@ -398,12 +399,12 @@ app.whenReady().then(() => {
   ipcMain.handle('prepare-default-browser', event => prepareCore(event.sender, 'chromium'));
   ipcMain.handle('select-browser-core', async (event, core) => {
     await prepareCore(event.sender, core);
-    store.updateSettings({ browserCore: core });
+    await store.withStoreWrite(() => store.updateSettings({ browserCore: core }));
     broadcastState(true);
     return core;
   });
-  ipcMain.handle('update-settings', (_e, patch) => {
-    const updated = store.updateSettings(patch);
+  ipcMain.handle('update-settings', async (_e, patch) => {
+    const updated = await store.withStoreWrite(() => store.updateSettings(patch));
     broadcastState(true);
     return updated;
   });
@@ -418,8 +419,8 @@ app.whenReady().then(() => {
     fonts: store.getAvailableFonts(),
     current: store.getActiveFontInfo()
   }));
-  ipcMain.handle('set-font', (_e, fontId) => {
-    store.updateSettings({ fontFamily: fontId });
+  ipcMain.handle('set-font', async (_e, fontId) => {
+    await store.withStoreWrite(() => store.updateSettings({ fontFamily: fontId }));
     const active = store.getActiveFontInfo();
     broadcastState(true);
     return { success: true, active };
@@ -434,31 +435,31 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('get-groups', () => store.getGroups());
-  ipcMain.handle('add-group', (_e, name) => {
-    const res = store.addGroup(name);
+  ipcMain.handle('add-group', async (_e, name) => {
+    const res = await store.withStoreWrite(() => store.addGroup(name));
     broadcastState();
     return res;
   });
-  ipcMain.handle('delete-group', (_e, name) => {
-    const res = store.deleteGroup(name);
+  ipcMain.handle('delete-group', async (_e, name) => {
+    const res = await store.withStoreWrite(() => store.deleteGroup(name));
     broadcastState();
     return res;
   });
-  ipcMain.handle('rename-group', (_e, { oldName, newName }) => {
-    const res = store.renameGroup(oldName, newName);
+  ipcMain.handle('rename-group', async (_e, { oldName, newName }) => {
+    const res = await store.withStoreWrite(() => store.renameGroup(oldName, newName));
     broadcastState();
     return res;
   });
-  ipcMain.handle('batch-set-group', (_e, payload) => {
+  ipcMain.handle('batch-set-group', async (_e, payload) => {
     const ids = (payload && payload.ids) || [];
     const targetGroup = (payload && (payload.group || payload.groupName)) || '默认分组';
-    const count = store.batchSetGroup(ids, targetGroup);
+    const count = await store.withStoreWrite(() => store.batchSetGroup(ids, targetGroup));
     broadcastState();
     return { success: true, count };
   });
 
-  ipcMain.handle('create-env', (_e, data) => {
-    const created = store.addEnvironment(data);
+  ipcMain.handle('create-env', async (_e, data) => {
+    const created = await store.withStoreWrite(() => store.addEnvironment(data));
     broadcastState();
     return created;
   });
@@ -476,7 +477,7 @@ app.whenReady().then(() => {
         throw new Error('请先停止 Chromium 环境，再修改代理配置。');
       }
     }
-    const updated = store.updateEnvironment(id, updates);
+    const updated = await store.withStoreWrite(() => store.updateEnvironment(id, updates));
     if (previous.fp?.seed !== updated.fp?.seed || chromiumSeed(previous.fp) !== chromiumSeed(updated.fp) ||
       previous.customUa !== updated.customUa ||
       previous.language !== updated.language || previous.timezone !== updated.timezone) {
@@ -487,25 +488,22 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('delete-env', async (_e, id) => {
-    if (processManager.isRunning(id)) {
-      await processManager.stop(id);
-    }
-    const res = store.deleteEnvironment(id);
+    const res = await processManager.removeEnvironment(id, { stopRunning: true });
     broadcastState();
     return res;
   });
 
   ipcMain.handle('clear-env-cache', async (_e, id) => {
-    if (processManager.isRunning(id)) {
+    const res = await processManager.clearCache(id);
+    if (!res) {
       throw new Error('当前环境正在运行中，清理缓存前请先停止该环境！');
     }
-    const res = store.clearEnvironmentCache(id);
     broadcastState();
     return res;
   });
 
-  ipcMain.handle('clone-env', (_e, { id, newName }) => {
-    const cloned = store.cloneEnvironment(id, newName);
+  ipcMain.handle('clone-env', async (_e, { id, newName }) => {
+    const cloned = await store.withStoreWrite(() => store.cloneEnvironment(id, newName));
     broadcastState();
     return cloned;
   });
@@ -854,6 +852,9 @@ app.whenReady().then(() => {
   setInterval(() => {
     broadcastState();
   }, 1500);
+}).catch(error => {
+  dialog.showErrorBox('DT 指纹浏览器启动失败', error.message);
+  app.quit();
 });
 
 app.on('before-quit', () => {

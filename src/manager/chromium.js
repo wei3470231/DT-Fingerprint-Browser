@@ -13,33 +13,44 @@ function chromiumProfile(dataDir, id) {
   return path.join(dataDir, 'chromium-profiles', key);
 }
 
-function proxyFlags(proxy = {}, rotating = {}) {
+function prepareProxy(proxy = {}, rotating = {}) {
   if (rotating.enabled) throw new Error('此环境启用了轮换代理，请使用 Electron 内核启动。');
-  if (!proxy.enabled) return ['--no-proxy-server'];
-  if (proxy.username || proxy.password) {
-    throw new Error('此环境使用了认证代理，请使用 Electron 内核启动。');
-  }
+  if (!proxy.enabled) return { flags: () => ['--no-proxy-server'] };
   if (!proxy.host || !proxy.port) throw new Error('Chromium 代理地址或端口无效。');
   const protocol = proxy.type === 'socks5' ? 'socks5' : 'http';
   const host = proxy.host.includes(':') && !proxy.host.startsWith('[') ? '[' + proxy.host + ']' : proxy.host;
   if (!/^(?:[\w.-]+|\[[0-9a-f:]+\])$/i.test(host) || !Number.isInteger(Number(proxy.port)) || proxy.port < 1 || proxy.port > 65535) {
     throw new Error('Chromium 代理地址或端口无效。');
   }
-  const bypass = proxy.bypass ?? DEFAULT_PROXY_BYPASS;
-  if (proxy.scope === 'rules') {
-    if (!proxyHostRules(proxy.rules).length) throw new Error('请至少提供一个有效的代理目标域名。');
-    const endpoint = (protocol === 'socks5' ? 'SOCKS5 ' : 'PROXY ') + host + ':' + proxy.port;
-    return ['--proxy-pac-url=' + pacDataUrl(buildRoutingPac({
-      rules: proxy.rules, bypass, targets: [endpoint],
-    }))];
+  const username = String(proxy.username || '');
+  const password = String(proxy.password || '');
+  let socksAuth;
+  if (username || password) {
+    if (protocol !== 'socks5') throw new Error('此环境使用了 HTTP 认证代理，请使用 Electron 内核启动。');
+    if (!username || !password || Buffer.byteLength(username) > 255 || Buffer.byteLength(password) > 255) {
+      throw new Error('SOCKS5 认证需要填写账号和密码，两项均不得超过 255 字节。');
+    }
+    socksAuth = { host: host.replace(/^\[|\]$/g, ''), port: Number(proxy.port), username, password };
   }
-  return [
-    '--proxy-server=' + protocol + '://' + host + ':' + proxy.port,
-    '--proxy-bypass-list=' + bypass,
-  ];
+  const bypass = proxy.bypass ?? DEFAULT_PROXY_BYPASS;
+  if (proxy.scope === 'rules' && !proxyHostRules(proxy.rules).length) {
+    throw new Error('请至少提供一个有效的代理目标域名。');
+  }
+  return {
+    socksAuth,
+    flags(localPort) {
+      if (socksAuth && !localPort) throw new Error('SOCKS5 认证桥未启动。');
+      const address = socksAuth ? '127.0.0.1:' + localPort : host + ':' + proxy.port;
+      if (proxy.scope === 'rules') {
+        const endpoint = (protocol === 'socks5' ? 'SOCKS5 ' : 'PROXY ') + address;
+        return ['--proxy-pac-url=' + pacDataUrl(buildRoutingPac({ rules: proxy.rules, bypass, targets: [endpoint] }))];
+      }
+      return ['--proxy-server=' + protocol + '://' + address, '--proxy-bypass-list=' + bypass];
+    },
+  };
 }
 
-function launchArgs(env, options, root, dataDir) {
+function prepareChromiumLaunch(env, options, root, dataDir) {
   if (!env.fp?.seed) throw new Error('缺少环境指纹，请先生成指纹。');
   if (options.blockDialogs ?? env.blockDialogs) throw new Error('此环境启用了弹窗屏蔽，请使用 Electron 内核启动。');
 
@@ -49,6 +60,9 @@ function launchArgs(env, options, root, dataDir) {
   const seed = chromiumSeed(fp);
   const language = env.language || fp.navigator?.languages?.[0] || 'en-US';
   const languages = fp.navigator?.languages?.join(',') || language;
+  const proxy = prepareProxy(env.proxy, {
+    enabled: Boolean(env.rotatingProxy?.enabled || options.rotatingFile || options.rotatingRules),
+  });
   // Use the profile's Canvas compatibility code in place of the blocking native readback hook.
   const disable = new Set(['canvas', ...(fp.disable || []).filter(value =>
     ['font', 'audio', 'clientrects', 'gpu'].includes(value))]);
@@ -66,7 +80,6 @@ function launchArgs(env, options, root, dataDir) {
     '--lang=' + language,
     '--accept-lang=' + languages,
     '--timezone=' + (env.timezone || fp.timezone || 'America/New_York'),
-    ...proxyFlags(env.proxy, { enabled: Boolean(env.rotatingProxy?.enabled || options.rotatingFile || options.rotatingRules) }),
   ];
   if (fp.navigator?.hardwareConcurrency > 0) args.push('--fingerprint-hardware-concurrency=' + fp.navigator.hardwareConcurrency);
   const ua = effectiveUserAgent(env);
@@ -101,7 +114,7 @@ function launchArgs(env, options, root, dataDir) {
       args.push('--', url);
     }
   }
-  return args;
+  return { socksAuth: proxy.socksAuth, args: port => [...proxy.flags(port), ...args] };
 }
 
-module.exports = { chromiumProfile, launchArgs };
+module.exports = { chromiumProfile, prepareChromiumLaunch };

@@ -7,10 +7,13 @@ const http = require('node:http');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const { execFile } = require('node:child_process');
+const { promisify } = require('node:util');
 const { setTimeout: delay } = require('node:timers/promises');
 const { executableFor } = require('./runtime-path');
 
 const project = path.resolve(__dirname, '..');
+const packagedRoot = process.env.DT_TEST_PROXY_PACKAGE;
 const chromium = executableFor('chromium', project);
 assert.ok(fs.existsSync(chromium), 'The installed Chromium core is required for this offline test');
 
@@ -19,10 +22,14 @@ const sandbox = fs.mkdtempSync(path.join(tempRoot, 'dt-chromium-proxy-'));
 const junction = path.join(sandbox, 'runtime', 'cores', 'chromium');
 fs.mkdirSync(path.dirname(junction), { recursive: true });
 fs.symlinkSync(path.dirname(chromium), junction, 'junction');
+if (packagedRoot) {
+  fs.cpSync(path.join(packagedRoot, 'scripts'), path.join(sandbox, 'scripts'), { recursive: true });
+}
 process.env.DT_APP_ROOT = sandbox;
 
 const store = require('../src/manager/store');
 const browsers = require('../src/manager/process-manager');
+const run = promisify(execFile);
 
 const listen = server => new Promise((resolve, reject) => {
   server.once('error', reject);
@@ -105,7 +112,7 @@ async function navigate(page, url, expected) {
   throw new Error(url + ' did not return ' + expected + '; received ' + JSON.stringify(received));
 }
 
-function createSocksProxy(host, port, sockets, hits) {
+function createSocksProxy(host, port, sockets, hits, credentials) {
   return net.createServer(socket => {
     sockets.add(socket);
     socket.once('close', () => sockets.delete(socket));
@@ -117,9 +124,25 @@ function createSocksProxy(host, port, sockets, hits) {
       if (stage === 'greeting') {
         if (buffer.length < 2 || buffer.length < 2 + buffer[1]) return;
         const methods = buffer.subarray(2, 2 + buffer[1]);
-        if (buffer[0] !== 5 || !methods.includes(0)) return socket.destroy();
+        const method = credentials ? 2 : 0;
+        if (buffer[0] !== 5 || !methods.includes(method)) return socket.destroy();
         buffer = buffer.subarray(2 + methods.length);
-        socket.write(Buffer.from([5, 0]));
+        socket.write(Buffer.from([5, method]));
+        stage = credentials ? 'auth' : 'connect';
+      }
+
+      if (stage === 'auth') {
+        if (buffer.length < 2 || buffer.length < 3 + buffer[1]) return;
+        const userEnd = 2 + buffer[1];
+        const passwordEnd = userEnd + 1 + buffer[userEnd];
+        if (buffer.length < passwordEnd) return;
+        if (buffer[0] !== 1 || buffer.toString('utf8', 2, userEnd) !== credentials.username ||
+            buffer.toString('utf8', userEnd + 1, passwordEnd) !== credentials.password) {
+          socket.end(Buffer.from([1, 1]));
+          return;
+        }
+        buffer = buffer.subarray(passwordEnd);
+        socket.write(Buffer.from([1, 0]));
         stage = 'connect';
       }
 
@@ -187,33 +210,76 @@ async function main() {
 
   let page;
   let socks;
+  let authenticatedSocks;
   try {
     const originPort = await listen(origin);
     const proxyPort = await listen(proxy);
     const tlsProbePort = await listen(tlsProbe);
     socks = createSocksProxy('target.release.test', originPort, socksSockets, socksHits);
     const socksPort = await listen(socks);
+    const credentials = { username: 'release-socks-user', password: 'release-socks-password' };
+    authenticatedSocks = createSocksProxy('target.release.test', originPort, socksSockets, socksHits, credentials);
+    const authenticatedPort = await listen(authenticatedSocks);
     const debugPort = await freePort();
     const id = 'chromium-routing';
     const options = {
       headless: true,
-      args: '--disable-background-networking --disable-component-update --disable-domain-reliability --disable-sync --no-pings '
-        + '--host-resolver-rules="MAP *.release.test 127.0.0.1, EXCLUDE 127.0.0.1, MAP * ~NOTFOUND"',
+      args: '--disable-background-networking --disable-component-update --disable-domain-reliability --disable-sync '
+        + '--host-resolver-rules="MAP *.release.test 127.0.0.1, EXCLUDE 127.0.0.1, MAP * ~NOTFOUND" --no-pings',
     };
     const config = {
       enabled: true, host: '127.0.0.1', port: proxyPort, type: 'http',
       scope: 'rules', rules: 'target.release.test;white.target.release.test;*.wild.release.test',
       bypass: 'white.target.release.test',
     };
+    const authenticatedProxy = { ...config, type: 'socks5', port: authenticatedPort, ...credentials };
+    const url = (host, route) => 'http://' + host + ':' + originPort + route;
     store.saveAll([store.createRecord({
       id, name: id, url: 'about:blank', remotePortEnabled: true, remotePort: debugPort,
-      browserCore: 'chromium', proxy: config,
+      browserCore: 'chromium', proxy: { ...authenticatedProxy, scope: 'all' },
     })]);
 
+    const cli = packagedRoot ? path.join(packagedRoot, 'app.asar', 'cli.js') : path.join(project, 'cli.js');
+    const executable = packagedRoot ? executableFor('electron', project) : process.execPath;
+    const { stdout } = await run(executable, [
+      cli, 'start', '--id', id, '--headless', '--args=' + options.args, '--json',
+    ], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, windowsHide: true, timeout: 30000 });
+    assert.equal(JSON.parse(stdout).data.core, 'chromium');
+    page = await openPage(debugPort);
+    await navigate(page, url('target.release.test', '/authenticated-global'), 'socks:/authenticated-global');
+    await navigate(page, url('white.target.release.test', '/authenticated-whitelist'), 'direct:/authenticated-whitelist');
+    assert.ok(!originHits.includes('/authenticated-global'));
+    page.close();
+    page = null;
+    await browsers.stop(id);
+    console.log('PASS Chromium authenticated SOCKS5 global proxy remains available after CLI exit');
+
+    store.updateEnvironment(id, { proxy: authenticatedProxy });
+    await browsers.launch(id, options);
+    page = await openPage(debugPort);
+    await navigate(page, url('target.release.test', '/authenticated-rule'), 'socks:/authenticated-rule');
+    await navigate(page, url('other.release.test', '/authenticated-unmatched'), 'direct:/authenticated-unmatched');
+    assert.ok(!originHits.includes('/authenticated-rule'));
+    page.close();
+    page = null;
+    await browsers.stop(id);
+    console.log('PASS Chromium authenticated SOCKS5 rule proxy and direct exceptions');
+
+    store.updateEnvironment(id, { proxy: { ...authenticatedProxy, password: 'incorrect-test-password' } });
+    await browsers.launch(id, options);
+    page = await openPage(debugPort);
+    const rejected = await page.send('Page.navigate', { url: url('target.release.test', '/rejected-auth') });
+    assert.match(rejected.errorText || '', /ERR_SOCKS_CONNECTION_FAILED|ERR_PROXY_CONNECTION_FAILED/);
+    assert.ok(!originHits.includes('/rejected-auth'));
+    page.close();
+    page = null;
+    await browsers.stop(id);
+    console.log('PASS failed SOCKS5 authentication prevents direct fallback');
+
+    store.updateEnvironment(id, { proxy: config });
     const launched = await browsers.launch(id, options);
     assert.equal(launched.core, 'chromium');
     page = await openPage(debugPort);
-    const url = (host, route) => 'http://' + host + ':' + originPort + route;
     await navigate(page, url('target.release.test', '/target'), 'proxy:/target');
     await navigate(page, url('sub.wild.release.test', '/wildcard'), 'proxy:/wildcard');
     await navigate(page, url('white.target.release.test', '/whitelist'), 'direct:/whitelist');
@@ -275,6 +341,7 @@ async function main() {
       for (const socket of socksSockets) socket.destroy();
       const servers = [origin, proxy, tlsProbe];
       if (socks) servers.push(socks);
+      if (authenticatedSocks) servers.push(authenticatedSocks);
       await Promise.all(servers.map(close));
     }
   }

@@ -134,13 +134,13 @@ async function main() {
   // Force a separate on-disk read, as it happens when an older app is upgraded.
   const { execFileSync } = require('node:child_process');
   const migration = execFileSync(process.execPath, ['-e',
-    'console.log(JSON.stringify(require("./src/manager/store").loadAll().map(item => item.browserCore)))',
+    'const store = require("./src/manager/store"); store.withStoreWrite(store.loadAll).then(items => console.log(JSON.stringify(items.map(item => item.browserCore))))',
   ], { cwd: project, env: process.env, encoding: 'utf8' });
   assert.deepEqual(JSON.parse(migration), ['chromium', 'chromium', 'electron']);
   assert.equal(JSON.parse(fs.readFileSync(path.join(store.DATA_DIR, 'environments.json'), 'utf8'))[2].browserCore, 'electron');
 
   store.updateSettings({ browserCore: 'electron' });
-  const electronRecord = store.addEnvironment({ ...environment, id: 'v30-electron', name: 'v30-electron' });
+  const electronRecord = store.addEnvironment({ ...environment, id: 'v30-electron', name: 'v30-electron', remotePort: await freePort() });
   assert.equal(electronRecord.browserCore, 'electron');
   const clone = store.cloneEnvironment(electronRecord.id, 'v30-electron-copy');
   assert.equal(clone.browserCore, 'electron');
@@ -232,6 +232,7 @@ async function main() {
     assert.equal(after.timezone, before.timezone);
     assert.ok(requests.some(request => request.ua === after.ua && request.cookie?.includes('dtV30=works')));
 
+    store.saveAll(store.loadAll().map(item => item.id === electronRecord.id ? { ...item, remotePort: active.port } : item));
     await assert.rejects(browsers.launch(electronRecord.id, { headless: true }), /调试端口已被占用/);
     store.updateEnvironment(electronRecord.id, { remotePort: await freePort() });
     const mixed = await browsers.launch(electronRecord.id, { headless: true });

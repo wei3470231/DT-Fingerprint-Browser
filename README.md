@@ -12,7 +12,7 @@
 > 📥 **Release 官方最新版本下载（纯英文标准命名，含版本号）**：
 > - 📦 **独立安装向导包**：在最新发布中下载 `*-Setup.exe`（支持配置用户 PATH 环境变量与开机自启）
 > - 🗜️ **绿色便携压缩包**：在最新发布中下载 `*-Portable.zip`（解压即用）
-> - 🌐 [GitHub Releases 发布页面](https://github.com/wei3470231/DT-Fingerprint-Browser/releases) · [v3.0 更新记录](RELEASE_NOTES_v3.0.md)
+> - 🌐 [GitHub Releases 发布页面](https://github.com/wei3470231/DT-Fingerprint-Browser/releases) · [v3.1 更新记录](RELEASE_NOTES_v3.1.md)
 
 ---
 
@@ -66,9 +66,9 @@
 
 ## 1. 系统要求与跨设备便携移植指南
 
-### v3.0 双内核
+### v3.1 双内核
 
-安装包和便携包内置 **Electron**，管理器首次启动即可打开。管理器会自动准备默认的 **Chromium** 内核，并在顶部显示下载和解压进度。顶部选择决定新建环境的内核。环境会保存该内核并在列表显示，之后启动按各自的配置打开。已有环境配置与自定义 UA 通用，浏览器的登录状态和站点数据按内核隔离。Chromium 使用 DT 的窗口和任务栏图标。详情见 [v3.0 更新记录](RELEASE_NOTES_v3.0.md)。
+安装包和便携包内置 **Electron**，管理器首次启动即可打开。管理器会自动准备默认的 **Chromium** 内核，并在顶部显示下载和解压进度。顶部选择决定新建环境的内核。环境会保存该内核并在列表显示，之后启动按各自的配置打开。已有环境配置与自定义 UA 通用，浏览器的登录状态和站点数据按内核隔离。Chromium 使用 DT 的窗口和任务栏图标。详情见 [v3.1 更新记录](RELEASE_NOTES_v3.1.md)。
 
 ### 1.1 目标设备环境要求
 本项目已经过**全链路便携化加固**，没有任何硬编码绝对路径。当您把软件目录复制到其他任意 Windows 计算机、更换盘符（如从 E 盘复制到 C 盘或 D 盘、U盘）运行时，无需修改任何代码配置，开箱即用：
@@ -81,11 +81,11 @@
 | **Node.js** | 推荐安装 **Node.js 22 或更新版本**。<br>*注：即使目标设备完全没有安装 Node.js，`DT-CLI.exe` 与管理器也会使用内置的 Electron 内核运行。* | 推荐（开发时需要，便携运行非必须） |
 | **Visual C++ 运行库** | Microsoft Visual C++ 2015–2022 Redistributable (x64) | 推荐（若纯净系统提示缺失 VC 运行时安装） |
 
-### 1.2 便携包结构规范 (dist/payload-v3.0)
+### 1.2 便携包结构规范 (dist/payload-v3.1)
 为了保障源码清洁与商业分发安全，项目根目录保持纯源码形态，所有独立可执行文件集中生成并运行于便携包目录中：
 
 ```text
-dist/payload-v3.0/ (独立免安装便携版)
+dist/payload-v3.1/ (独立免安装便携版)
 ├── DT-Fingerprint-Browser.exe # 桌面端 GUI 管理器主程序（双击运行，纯英文文件名，内置原生图标）
 ├── DT - 指纹浏览器.exe        # 中文兼容副本（双击直接拉起桌面端管理器）
 ├── DT-CLI.exe                 # 原生命令行控制工具（支持外部脚本无缝调用）
@@ -107,7 +107,7 @@ dist/payload-v3.0/ (独立免安装便携版)
 
 ## 2. 便携包极速测试与构建指南
 
-便携包验收会把 v3.0 压缩包解压到临时目录，验证首次下载和两个内核的切换。
+便携包验收会把 v3.1 压缩包解压到临时目录，验证首次下载和两个内核的切换。
 
 ### 2.1 一键运行便携包自动化测试套件
 在项目根目录下执行：
@@ -120,7 +120,7 @@ node scripts/test-portable.js
 * 验证精简系统兜底字体库 `Fonts/`；
 * 验证 CLI Chrome Drop-in 模式（`--version`、`--product-version`）；
 * 验证 CLI JSON 管理指令（`list`、`font status`、`theme status`、`settings get`）；
-* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v3.0-Portable.zip`。
+* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v3.1-Portable.zip`。
 
 ### 2.2 一键生成便携包与商业安装程序
 将内核发布页的 `runtime_electron.zip` 放入项目根目录，再运行构建脚本。也可通过 `DT_ELECTRON_ARCHIVE` 指定该 ZIP 的路径。构建脚本校验 SHA-256 后打包。 [内核发布页](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/tag/core)
@@ -129,13 +129,21 @@ node scripts/build-installer.js
 ```
 构建脚本将全自动完成：
 1. **源码脱敏加密**：使用 Terser 进行变量混淆并打包进虚拟归档 `app.asar`；
-2. **生成便携目录**：在 `dist/payload-v3.0/` 编译生成原生无黑框启动器与 CLI 工具；
-3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v3.0-Portable.zip`（内置 Electron，Chromium 按需准备）；
-4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v3.0-Setup.exe`（自动配置用户 PATH 与开机自启）。
+2. **生成便携目录**：在 `dist/payload-v3.1/` 编译生成原生无黑框启动器与 CLI 工具；
+3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v3.1-Portable.zip`（内置 Electron，Chromium 按需准备）；
+4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v3.1-Setup.exe`（自动配置用户 PATH 与开机自启）。
+
+要构建可离线启动两种内核的完整版安装包，请同时准备 `runtime_electron.zip` 和 `runtime_chromium.zip`，然后执行下列命令。
+
+```powershell
+node scripts/build-installer.js --full
+```
+
+构建程序会校验两份内核 ZIP，输出 `dist/DT-Fingerprint-Browser-v3.1-Full-Setup.exe`。可通过 `DT_CHROMIUM_ARCHIVE` 指定 Chromium ZIP 的路径。
 
 ### 2.3 根目录快捷调用机制
 在根目录下提供了 `dt-cli.cmd` 与 `dt.cmd` 包装脚本：
-* 若 `dist/payload-v3.0/DT-CLI.exe` 存在，优先以编译后的原生便携程序执行；
+* 若 `dist/payload-v3.1/DT-CLI.exe` 存在，优先以编译后的原生便携程序执行；
 * 若未生成便携包，自动回退到 `node cli.js`，保证在开发调试阶段无感切换。
 
 ---
@@ -404,7 +412,7 @@ dt-cli --remote-debugging-port=9222 --user-data-dir="data\profiles\direct-test" 
 
 ### 4.4 环境生命周期与运行控制指令
 
-#### Chromium 快速调用（v3.0）
+#### Chromium 快速调用（v3.1）
 
 示例在软件目录的 PowerShell 中运行。若端口 9230 已被占用，换成一个空闲端口。已配置环境可跳过 `create`，直接使用 `list --json` 查到的 ID。
 
@@ -568,7 +576,7 @@ dt-cli clear-cache --all --json
 ### 4.6 指纹与代理专项控制
 
 #### 1. 一键随机修改指纹 (`random-fp`)
-重新生成硬件指纹，保留环境当前的 UA。运行中的 Electron 热加载并刷新标签页。运行中的 Chromium 自动重启，`data.restarted` 为 `true` 时需重新查询 CDP 地址并连接。Chromium 可控的指纹字段见 [v3.0 更新记录](RELEASE_NOTES_v3.0.md#指纹切换)。
+重新生成硬件指纹，保留环境当前的 UA。运行中的 Electron 热加载并刷新标签页。运行中的 Chromium 自动重启，`data.restarted` 为 `true` 时需重新查询 CDP 地址并连接。Chromium 可控的字段见 [双内核指纹功能说明](RELEASE_NOTES_v3.0.md#指纹切换)。
 ```powershell
 dt-cli random-fp --name "环境 1 · 纽约" --json
 ```
@@ -587,7 +595,7 @@ dt-cli batch-random-fp --all --json
 
 #### 3. 设置代理或切换直连 (`set-proxy`)
 
-Chromium 支持无密码 HTTP／SOCKS5 固定代理。修改运行中的 Chromium 路由前，先停止该环境。`--rules` 是代理目标域名，`--bypass` 是优先直连的白名单。规则参数包含分号时，在 PowerShell 中用引号包住。`create` 和 `update` 的对应选项为 `--proxy-scope`、`--proxy-rules` 和 `--proxy-bypass`。
+Chromium 支持无密码的 HTTP 固定代理，以及带或不带账号密码的 SOCKS5 固定代理。修改运行中的 Chromium 路由前，先停止该环境。`--rules` 是代理目标域名，`--bypass` 是优先直连的白名单。规则参数包含分号时，在 PowerShell 中用引号包住。`create` 和 `update` 的对应选项为 `--proxy-scope`、`--proxy-rules` 和 `--proxy-bypass`。
 
 ```powershell
 # Chromium 分流示例，端口 7890 需要有可用的代理监听
@@ -619,7 +627,7 @@ dt-cli test-proxy --name "环境 1 · 纽约" --json
 
 #### 5. 目标多域名动态轮换代理池 (`set-rotating` / `set-rotating-proxy`)
 
-轮换代理和认证代理需要 Electron 环境。DT 的网页弹窗屏蔽功能也由 Electron 提供。
+轮换代理和 HTTP 认证代理需要 Electron 环境。DT 的网页弹窗屏蔽功能也由 Electron 提供。
 
 > ⚡ **每连接换新 IP 核心特性**：专门用于高频需要更换出口 IP 的特定业务目标（如 Turnstile 验证码、目标 API、三方风控域）。
 > * **本地代理文档**：支持传入本地 `.txt` 文本路径（一行一个，支持数千条海量代理）；
@@ -1215,7 +1223,7 @@ dt-cli gui --minimized
   2. **内嵌原生高清图标**：编译时将根目录的 `app.ico` 原生嵌入 PE 资源头，任务栏、桌面、文件管理器均显示高清定制图标。
   3. **Win32 级别防多开互斥**：对于 GUI 管理器，通过 Win32 API `FindWindow` + `SetForegroundWindow` 实现进程级防多开，双击已运行的程序会自动将已有窗口激活并置顶。
   4. **全自动环境 Fallback**：若目标机安装了 Node.js 则使用系统 Node；若无 Node.js，自动以 `ELECTRON_RUN_AS_NODE=1` 调用已识别或按需安装的 Electron 内核，无需安装任何第三方运行库，保证 100% 独立可用。
-  5. **便携输出规范**：二进制可执行程序统一编译输出至 `dist/payload-v3.0/` 便携发布目录，绝不污染项目根源码目录。
+  5. **便携输出规范**：二进制可执行程序统一编译输出至 `dist/payload-v3.1/` 便携发布目录，绝不污染项目根源码目录。
 
 ---
 
@@ -1243,11 +1251,11 @@ node scripts/build-installer.js
 
 构建完成后将在 `dist/` 目录下生成两类产物（文件名均为标准纯英文并带版本号，兼容 GitHub Releases 上传与海外环境）：
 1. **独立单文件安装程序**：
-   * 路径：`dist\DT-Fingerprint-Browser-v3.0-Setup.exe`（内置 Electron）
+   * 路径：`dist\DT-Fingerprint-Browser-v3.1-Setup.exe`（内置 Electron）
    * 适用场景：GitHub Release 发布、对外分享的标准安装包，带安装向导界面、开机自启复选框、PATH 自动注册与控制面板卸载项。
 2. **便携即用免安装包与目录**：
-   * 压缩包路径：`dist\DT-Fingerprint-Browser-v3.0-Portable.zip`（内置 Electron，Chromium 按需准备）
-   * 运行目录：`dist\payload-v3.0\`
+   * 压缩包路径：`dist\DT-Fingerprint-Browser-v3.1-Portable.zip`（内置 Electron，Chromium 按需准备）
+   * 运行目录：`dist\payload-v3.1\`
    * 适用场景：GitHub Release 发布、解压即用的免安装绿色便携版，直接双击 `DT-Fingerprint-Browser.exe` 或 `DT - 指纹浏览器.exe` 即可运行。
 
 ---

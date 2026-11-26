@@ -246,6 +246,7 @@ async function main() {
 
   const nameOrId = options.name || options.id;
   const isJson = Boolean(options.json);
+  await store.withStoreWrite(store.loadAll);
 
   switch (command) {
     case 'list': {
@@ -723,7 +724,7 @@ async function main() {
       if (options.clear || options.proxy === 'none' || options.proxy === 'direct' || options.proxy === '') {
         const updates = { proxy: null };
         requireStoppedChromiumForProxyChanges(env, updates, isJson);
-        const updated = store.updateEnvironment(env.id, updates);
+        const updated = await store.withStoreWrite(() => store.updateEnvironment(env.id, updates));
         if (isJson) console.log(JSON.stringify({ code: 0, success: true, message: `已将环境 "${updated.name}" 设为直连模式`, data: updated.proxy }, null, 2));
         else console.log(`🌐 已将环境 "${updated.name}" 设为直连模式 (已关闭代理)`);
         break;
@@ -746,7 +747,7 @@ async function main() {
         });
         const updates = { proxy };
         requireStoppedChromiumForProxyChanges(env, updates, isJson);
-        const updated = store.updateEnvironment(env.id, updates);
+        const updated = await store.withStoreWrite(() => store.updateEnvironment(env.id, updates));
 
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, data: updated.proxy }, null, 2));
@@ -798,7 +799,7 @@ async function main() {
           rotatingProxy: { enabled: false, filePath: '', rules: '', mode: 'random' }
         };
         requireStoppedChromiumForProxyChanges(env, updates, isJson);
-        const updated = store.updateEnvironment(env.id, updates);
+        const updated = await store.withStoreWrite(() => store.updateEnvironment(env.id, updates));
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: `已关闭环境 "${updated.name}" 的动态轮换代理池`, data: updated.rotatingProxy }, null, 2));
         } else {
@@ -861,7 +862,7 @@ async function main() {
         process.exit(1);
       }
 
-      const updated = store.updateEnvironment(env.id, updates);
+      const updated = await store.withStoreWrite(() => store.updateEnvironment(env.id, updates));
 
       if (isJson) {
         console.log(JSON.stringify({
@@ -898,7 +899,7 @@ async function main() {
         process.exit(1);
       }
       const block = options.block !== undefined ? Boolean(options.block) : (options.allow ? false : true);
-      const updated = store.updateEnvironment(env.id, { blockDialogs: block });
+      const updated = await store.withStoreWrite(() => store.updateEnvironment(env.id, { blockDialogs: block }));
       if (isJson) {
         console.log(JSON.stringify({ code: 0, success: true, data: { blockDialogs: updated.blockDialogs } }, null, 2));
       } else {
@@ -990,7 +991,7 @@ async function main() {
       try {
         const env = store.getEnvironment(nameOrId);
         if (!env) throw new Error(`未找到环境: ${nameOrId}`);
-        const updated = store.updateEnvironment(env.id, { extensions: options.clear ? '' : extVal });
+        const updated = await store.withStoreWrite(() => store.updateEnvironment(env.id, { extensions: options.clear ? '' : extVal }));
 
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, data: { extensions: updated.extensions } }, null, 2));
@@ -1044,13 +1045,13 @@ async function main() {
         }
         const blockDialogs = Boolean(options['block-dialogs']);
 
-        const created = store.addEnvironment({
+        const created = await store.withStoreWrite(async () => store.addEnvironment({
           name: options.name,
           browserCore: options.core,
           group: options.group || '默认分组',
           notes: options.notes || undefined,
           remotePortEnabled: !portDisabled,
-          remotePort: portDisabled ? null : options.port,
+          remotePort: portDisabled ? null : options.port ?? await store.getNextAvailablePort(),
           url: options.url || 'dt://fingerprint-test',
           language: options.lang || 'en-US',
           timezone: options.timezone || 'America/New_York',
@@ -1059,7 +1060,7 @@ async function main() {
           blockDialogs,
           extensions: extVal || undefined,
           customArgs: options.args || undefined
-        });
+        }));
 
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, data: created }, null, 2));
@@ -1162,7 +1163,7 @@ async function main() {
         }
 
         requireStoppedChromiumForProxyChanges(env, updates, isJson);
-        const updated = store.updateEnvironment(env.id, updates);
+        const updated = await store.withStoreWrite(() => store.updateEnvironment(env.id, updates));
         if (env.fp?.seed !== updated.fp?.seed || env.customUa !== updated.customUa ||
           env.language !== updated.language || env.timezone !== updated.timezone) {
           await processManager.refreshChromium(env.id);
@@ -1193,7 +1194,7 @@ async function main() {
       try {
         const env = store.getEnvironment(nameOrId);
         if (!env) throw new Error(`未找到环境: ${nameOrId}`);
-        const cloned = store.cloneEnvironment(env.id, options['new-name']);
+        const cloned = await store.withStoreWrite(() => store.cloneEnvironment(env.id, options['new-name']));
 
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, data: cloned }, null, 2));
@@ -1224,10 +1225,9 @@ async function main() {
       try {
         const env = store.getEnvironment(nameOrId);
         if (!env) throw new Error(`未找到环境: ${nameOrId}`);
-        if (processManager.isRunning(env.id)) {
+        if (!await processManager.removeEnvironment(env.id)) {
           throw new Error(`环境 "${env.name}" 正在运行中，为保障数据安全禁止删除，请先停止运行！`);
         }
-        store.deleteEnvironment(env.id);
 
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: `成功删除环境: "${env.name}"` }));
@@ -1251,8 +1251,7 @@ async function main() {
         const allEnvs = store.loadAll();
         let cleaned = 0;
         for (const e of allEnvs) {
-          if (!processManager.isRunning(e.id)) {
-            store.clearEnvironmentCache(e.id);
+          if (await processManager.clearCache(e.id)) {
             cleaned++;
           }
         }
@@ -1266,8 +1265,7 @@ async function main() {
         let cleaned = 0;
         let skipped = 0;
         for (const e of allEnvs) {
-          if (!processManager.isRunning(e.id)) {
-            store.clearEnvironmentCache(e.id);
+          if (await processManager.clearCache(e.id)) {
             cleaned++;
           } else {
             skipped++;
@@ -1285,8 +1283,7 @@ async function main() {
         let cleaned = 0;
         let skipped = 0;
         for (const e of allEnvs) {
-          if (!processManager.isRunning(e.id)) {
-            store.clearEnvironmentCache(e.id);
+          if (await processManager.clearCache(e.id)) {
             cleaned++;
           } else {
             skipped++;
@@ -1306,10 +1303,9 @@ async function main() {
       try {
         const env = store.getEnvironment(nameOrId);
         if (!env) throw new Error(`未找到环境: ${nameOrId}`);
-        if (processManager.isRunning(env.id)) {
+        if (!await processManager.clearCache(env.id)) {
           throw new Error(`环境 "${env.name}" 正在运行中，为防文件锁冲突，请先停止运行后再清理缓存！`);
         }
-        store.clearEnvironmentCache(env.id);
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: `已成功清理环境 "${env.name}" 的独立缓存数据` }));
         } else {
@@ -1354,7 +1350,7 @@ async function main() {
           process.exit(1);
         }
         try {
-          const res = store.addGroup(groupName);
+          const res = await store.withStoreWrite(() => store.addGroup(groupName));
           if (isJson) {
             console.log(JSON.stringify({ code: 0, success: true, message: `成功创建分组: ${res.name}`, data: res }, null, 2));
           } else {
@@ -1377,7 +1373,7 @@ async function main() {
           process.exit(1);
         }
         try {
-          const res = store.deleteGroup(groupName);
+          const res = await store.withStoreWrite(() => store.deleteGroup(groupName));
           if (isJson) {
             console.log(JSON.stringify({ code: 0, success: true, message: `成功删除分组 "${res.deletedGroup}"，${res.migratedCount} 个环境已安全转移至默认分组`, data: res }, null, 2));
           } else {
@@ -1401,7 +1397,7 @@ async function main() {
           process.exit(1);
         }
         try {
-          const res = store.renameGroup(oldName, newName);
+          const res = await store.withStoreWrite(() => store.renameGroup(oldName, newName));
           if (isJson) {
             console.log(JSON.stringify({ code: 0, success: true, message: `成功将分组 "${oldName}" 重命名为 "${newName}"`, data: res }, null, 2));
           } else {
@@ -1436,7 +1432,7 @@ async function main() {
       try {
         const env = store.getEnvironment(nameOrId);
         if (!env) throw new Error(`未找到环境: ${nameOrId}`);
-        const updated = store.updateEnvironment(env.id, { group: targetGroup });
+        const updated = await store.withStoreWrite(() => store.updateEnvironment(env.id, { group: targetGroup }));
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, data: { id: updated.id, name: updated.name, group: updated.group } }, null, 2));
         } else {
@@ -1474,7 +1470,7 @@ async function main() {
         else console.error(`❌ ${msg}`);
         process.exit(1);
       }
-      const count = store.batchSetGroup(matchedIds, group);
+      const count = await store.withStoreWrite(() => store.batchSetGroup(matchedIds, group));
       if (isJson) {
         console.log(JSON.stringify({ code: 0, success: true, message: `已成功将 ${count} 个环境移动至分组 "${group}"`, count }));
       } else {
@@ -1497,11 +1493,10 @@ async function main() {
       let deleted = 0;
       let skipped = 0;
       for (const e of matchedEnvs) {
-        if (processManager.isRunning(e.id)) {
+        if (!await processManager.removeEnvironment(e.id)) {
           skipped++;
           continue;
         }
-        store.deleteEnvironment(e.id);
         deleted++;
       }
       if (isJson) {
@@ -1515,9 +1510,8 @@ async function main() {
     case 'bookmarks':
     case 'bookmark': {
       const subAction = positional[0] || (options.add ? 'add' : options.delete ? 'delete' : options.clear ? 'clear' : 'list');
-      const curBookmarks = store.loadBookmarks();
-
       if (subAction === 'list') {
+        const curBookmarks = store.loadBookmarks();
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, count: curBookmarks.length, data: curBookmarks }, null, 2));
         } else {
@@ -1549,8 +1543,7 @@ async function main() {
           url: String(url).trim(),
           createdAt: Date.now()
         };
-        curBookmarks.push(newBm);
-        store.saveBookmarks(curBookmarks);
+        await store.withStoreWrite(() => store.saveBookmarks([...store.loadBookmarks(), newBm]));
 
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: `成功添加书签: "${newBm.title}"`, data: newBm }, null, 2));
@@ -1568,16 +1561,19 @@ async function main() {
           else console.error(`【错误】${msg}`);
           process.exit(1);
         }
-        const initialCount = curBookmarks.length;
-        const filtered = curBookmarks.filter(b => b.id !== target && b.url !== target && b.title !== target);
-        if (filtered.length === initialCount) {
+        const deletedCount = await store.withStoreWrite(() => {
+          const current = store.loadBookmarks();
+          const filtered = current.filter(b => b.id !== target && b.url !== target && b.title !== target);
+          const count = current.length - filtered.length;
+          if (count) store.saveBookmarks(filtered);
+          return count;
+        });
+        if (!deletedCount) {
           const msg = `未找到匹配书签: ${target}`;
           if (isJson) console.log(JSON.stringify({ code: 1, success: false, message: msg }));
           else console.error(`❌ ${msg}`);
           process.exit(1);
         }
-        store.saveBookmarks(filtered);
-        const deletedCount = initialCount - filtered.length;
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: `成功删除 ${deletedCount} 个书签`, deletedCount }));
         } else {
@@ -1587,7 +1583,7 @@ async function main() {
       }
 
       if (subAction === 'clear') {
-        store.saveBookmarks([]);
+        await store.withStoreWrite(() => store.saveBookmarks([]));
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: '已清空所有书签' }));
         } else {
@@ -1637,7 +1633,7 @@ async function main() {
           process.exit(1);
         }
         const targetId = matched ? matched.id : 'system-default';
-        store.updateSettings({ fontFamily: targetId, font: targetId });
+        await store.withStoreWrite(() => store.updateSettings({ fontFamily: targetId, font: targetId }));
         const updatedInfo = store.getActiveFontInfo();
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: `成功切换全局字体为: ${updatedInfo.name}`, data: updatedInfo }, null, 2));
@@ -1705,7 +1701,7 @@ async function main() {
         const updates = {};
         if (targetTheme) updates.browserTheme = targetTheme;
         if (options.manager) updates.managerTheme = options.manager;
-        store.updateSettings(updates);
+        await store.withStoreWrite(() => store.updateSettings(updates));
         if (isJson) {
           console.log(JSON.stringify({ code: 0, success: true, message: `成功更新外观主题`, data: updates }, null, 2));
         } else {
@@ -1736,7 +1732,7 @@ async function main() {
           updates.fontFamily = options.font;
         }
         if (options.url) updates.defaultUrl = options.url;
-        const updated = store.updateSettings(updates);
+        const updated = await store.withStoreWrite(() => store.updateSettings(updates));
         if (isJson) console.log(JSON.stringify({ code: 0, success: true, message: '已更新系统设置', data: updated }, null, 2));
         else console.log('⚙️ 已成功更新系统全局设置！');
         break;
@@ -1802,14 +1798,14 @@ async function main() {
       try {
         if (options.enable || options.on) {
           const silent = Boolean(options.silent || options.minimized || options.hidden);
-          const res = sysSettings.setAutoStart(null, true, silent);
+          const res = await sysSettings.setAutoStart(null, true, silent);
           if (isJson) {
             console.log(JSON.stringify({ code: 0, success: true, message: '已启用开机自动启动', data: res }));
           } else {
             console.log(`✅ 已成功启用开机自动启动${silent ? ' (静默最小化到托盘)' : ''}`);
           }
         } else if (options.disable || options.off) {
-          const res = sysSettings.setAutoStart(null, false, false);
+          const res = await sysSettings.setAutoStart(null, false, false);
           if (isJson) {
             console.log(JSON.stringify({ code: 0, success: true, message: '已关闭开机自动启动', data: res }));
           } else {

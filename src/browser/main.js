@@ -20,7 +20,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const url = require('node:url');
 const net = require('node:net');
-const { getEnvironment, getSettings, getActiveFontInfo, ROOT_DIR, DATA_DIR, PROFILES_DIR, loadBookmarks, saveBookmarks } = require('../manager/store');
+const { isDeepStrictEqual } = require('node:util');
+const { getEnvironment, getSettings, getActiveFontInfo, ROOT_DIR, DATA_DIR, PROFILES_DIR, loadBookmarks, saveBookmarks, withStoreWrite } = require('../manager/store');
 const { applyProxy, closeCurrentBridge, stopRotatingProxy } = require('./proxy-helper');
 const { PIPE_PATH } = require('../manager/ipc-hub');
 const { buildCookieUrl } = require('../shared/cookie-helper');
@@ -278,8 +279,22 @@ function getBookmarks() {
   return cachedBookmarks;
 }
 
-function updateBookmarks(newBookmarks) {
-  cachedBookmarks = saveBookmarks(newBookmarks);
+async function updateBookmarks(newBookmarks) {
+  const prior = getBookmarks();
+  cachedBookmarks = await withStoreWrite(() => {
+    const current = loadBookmarks();
+    if (isDeepStrictEqual(current, prior)) return saveBookmarks(newBookmarks);
+    const changed = new Map(newBookmarks.map(bookmark => [bookmark.id, bookmark]));
+    const baseline = new Map(prior.map(bookmark => [bookmark.id, bookmark]));
+    const merged = new Map(current.map(bookmark => [bookmark.id, bookmark]));
+    for (const id of baseline.keys()) {
+      if (!changed.has(id)) merged.delete(id);
+    }
+    for (const [id, bookmark] of changed) {
+      if (!isDeepStrictEqual(bookmark, baseline.get(id))) merged.set(id, bookmark);
+    }
+    return saveBookmarks([...merged.values()]);
+  });
   notifyShell();
 }
 
@@ -1676,7 +1691,7 @@ if (typeof chrome !== 'undefined') {
   });
   ipcMain.on('action-save-bookmarks', (_event, bookmarks) => {
     if (Array.isArray(bookmarks)) {
-      updateBookmarks(bookmarks);
+      updateBookmarks(bookmarks).catch(error => console.error('保存书签失败:', error));
     }
   });
   ipcMain.on('action-bookmark-context-menu', (_event, { index, bookmark }) => {

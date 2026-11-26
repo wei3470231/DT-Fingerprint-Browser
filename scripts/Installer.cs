@@ -1,19 +1,17 @@
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyVersion("3.0.0.0")]
-[assembly: AssemblyFileVersion("3.0.0.0")]
+[assembly: AssemblyVersion("3.1.0.0")]
+[assembly: AssemblyFileVersion("3.1.0.0")]
 
 namespace BitFPManager
 {
@@ -34,67 +32,13 @@ namespace BitFPManager
         private Button btnFinish;
 
         private string finalInstallDir = "";
+        private bool installing;
 
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessageTimeout(
-            IntPtr hWnd,
-            uint Msg,
-            UIntPtr wParam,
-            string lParam,
-            uint fuFlags,
-            uint uTimeout,
-            out UIntPtr lpdwResult);
-
-        private const int HWND_BROADCAST = 0xffff;
-        private const uint WM_SETTINGCHANGE = 0x001A;
-        private const uint SMTO_ABORTIFHUNG = 0x0002;
-
-        private static void BroadcastEnvironmentChange()
-        {
-            try
-            {
-                UIntPtr result;
-                SendMessageTimeout((IntPtr)HWND_BROADCAST, WM_SETTINGCHANGE, UIntPtr.Zero, "Environment", SMTO_ABORTIFHUNG, 3000, out result);
-            }
-            catch {}
-        }
-
-        private static bool IsDangerousSystemPath(string dir)
-        {
-            if (string.IsNullOrWhiteSpace(dir)) return true;
-            try
-            {
-                string full = Path.GetFullPath(dir).TrimEnd('\\');
-                string root = Path.GetPathRoot(full).TrimEnd('\\');
-                if (string.Equals(full, root, StringComparison.OrdinalIgnoreCase)) return true;
-
-                string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows).TrimEnd('\\');
-                if (!string.IsNullOrEmpty(winDir) && (string.Equals(full, winDir, StringComparison.OrdinalIgnoreCase) || full.StartsWith(winDir + "\\", StringComparison.OrdinalIgnoreCase))) return true;
-
-                string sysDir = Environment.GetFolderPath(Environment.SpecialFolder.System).TrimEnd('\\');
-                if (!string.IsNullOrEmpty(sysDir) && (string.Equals(full, sysDir, StringComparison.OrdinalIgnoreCase) || full.StartsWith(sysDir + "\\", StringComparison.OrdinalIgnoreCase))) return true;
-
-                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles).TrimEnd('\\');
-                if (!string.IsNullOrEmpty(progFiles) && string.Equals(full, progFiles, StringComparison.OrdinalIgnoreCase)) return true;
-
-                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86).TrimEnd('\\');
-                if (!string.IsNullOrEmpty(progFilesX86) && string.Equals(full, progFilesX86, StringComparison.OrdinalIgnoreCase)) return true;
-
-                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('\\');
-                if (!string.IsNullOrEmpty(userProfile))
-                {
-                    if (string.Equals(full, userProfile, StringComparison.OrdinalIgnoreCase)) return true;
-                    string usersParent = Path.GetDirectoryName(userProfile);
-                    if (!string.IsNullOrEmpty(usersParent) && string.Equals(full, usersParent.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)) return true;
-                }
-            }
-            catch {}
-            return false;
-        }
-
+        private string registeredInstall;
         public InstallerForm()
         {
             InitializeComponent();
+            FormClosing += (sender, args) => { if (installing) args.Cancel = true; };
         }
 
         private void InitializeComponent()
@@ -150,38 +94,15 @@ namespace BitFPManager
                 Size = new Size(504, 305)
             };
 
-            string defaultPath = "";
-            bool isUpgrade = false;
-            try
-            {
-                using (RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\DT-Fingerprint-Browser"))
-                {
-                    if (regKey != null)
-                    {
-                        object locObj = regKey.GetValue("InstallLocation");
-                        if (locObj != null && !string.IsNullOrEmpty(locObj.ToString()) && Directory.Exists(locObj.ToString()))
-                        {
-                            defaultPath = locObj.ToString();
-                            isUpgrade = true;
-                        }
-                    }
-                }
-            }
-            catch {}
-
-            if (string.IsNullOrEmpty(defaultPath))
-            {
-                defaultPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Programs",
-                    "DT-Fingerprint-Browser"
-                );
-            }
-
+            registeredInstall = InstallMaintenance.RegisteredInstall();
+            string defaultPath = registeredInstall ?? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Programs", InstallMaintenance.Product);
+            bool isUpgrade = registeredInstall != null;
             Label lblPathTitle = new Label
             {
                 Text = isUpgrade 
-                    ? "📁 请选择目标安装路径 (检测到现有安装，将就地覆盖升级并无损保留全部指纹与配置):"
+                    ? "检测到旧版，将覆盖安装到原目录并保留用户数据"
                     : "📁 请选择目标安装路径:",
                 Location = new Point(4, 8),
                 AutoSize = true,
@@ -254,6 +175,16 @@ namespace BitFPManager
                 Size = new Size(464, 24),
                 ForeColor = Color.FromArgb(15, 23, 42)
             };
+
+            if (isUpgrade)
+            {
+                txtInstallPath.ReadOnly = true;
+                btnBrowse.Enabled = false;
+                using (RegistryKey run = Registry.CurrentUser.OpenSubKey(InstallMaintenance.RunKey))
+                    chkAutoStart.Checked = run != null &&
+                        (InstallMaintenance.IsAppCommand(run.GetValue("DTFingerprintBrowser") as string, registeredInstall) ||
+                         InstallMaintenance.IsAppCommand(run.GetValue("electron.app.Electron") as string, registeredInstall));
+            }
 
             grpOptions.Controls.Add(chkAddPath);
             grpOptions.Controls.Add(chkDesktopShortcut);
@@ -393,20 +324,28 @@ namespace BitFPManager
                 return;
             }
 
-            string resolvedPath = Path.GetFullPath(installPath);
-            if (IsDangerousSystemPath(resolvedPath))
+            try
             {
-                resolvedPath = Path.Combine(resolvedPath, "DT-Fingerprint-Browser");
-                txtInstallPath.Text = resolvedPath;
-                MessageBox.Show(
-                    "为保障 Windows 系统引导与核心文件安全，严禁直接安装在驱动器根目录或系统核心保护目录下！\n\n已自动为您优化安装路径为：\n" + resolvedPath,
-                    "安全防护提醒",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                string root = InstallMaintenance.SafeInstallRoot(registeredInstall ?? installPath);
+                if (registeredInstall == null && Directory.Exists(root) &&
+                    Directory.GetFileSystemEntries(root).Length != 0 && !InstallMaintenance.IsExistingInstall(root) &&
+                    !IsDataOnlyDirectory(root))
+                {
+                    root = InstallMaintenance.SafeInstallRoot(Path.Combine(root, InstallMaintenance.Product));
+                    if (Directory.Exists(root) && Directory.GetFileSystemEntries(root).Length != 0 &&
+                        !InstallMaintenance.IsExistingInstall(root) && !IsDataOnlyDirectory(root))
+                        throw new IOException("所选目录已包含其他文件。请指定专用安装目录。");
+                }
+                finalInstallDir = root;
+                txtInstallPath.Text = root;
+                if (chkAddPath.Checked && root.IndexOf(';') >= 0)
+                    throw new IOException("Windows PATH 使用分号分隔目录。请取消添加到 PATH，再继续安装。");
             }
-
-            finalInstallDir = resolvedPath;
-
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "安装目录", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             // 禁用表单
             txtInstallPath.Enabled = false;
             btnBrowse.Enabled = false;
@@ -423,6 +362,7 @@ namespace BitFPManager
             bool optAddPath = chkAddPath.Checked;
             bool optShortcut = chkDesktopShortcut.Checked;
             bool optAutoStart = chkAutoStart.Checked;
+            installing = true;
 
             Thread worker = new Thread(() =>
             {
@@ -431,6 +371,7 @@ namespace BitFPManager
                     DoInstall(finalInstallDir, optAddPath, optShortcut, optAutoStart);
                     this.Invoke(new Action(() =>
                     {
+                        installing = false;
                         pnlConfig.Visible = false;
                         pnlComplete.Visible = true;
                     }));
@@ -439,9 +380,13 @@ namespace BitFPManager
                 {
                     this.Invoke(new Action(() =>
                     {
+                        installing = false;
                         MessageBox.Show("安装失败: " + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         txtInstallPath.Enabled = true;
-                        btnBrowse.Enabled = true;
+                        btnBrowse.Enabled = registeredInstall == null;
+                        chkAddPath.Enabled = true;
+                        chkDesktopShortcut.Enabled = true;
+                        chkAutoStart.Enabled = true;
                         btnInstall.Enabled = true;
                         btnInstall.Visible = true;
                         lblStatus.Visible = false;
@@ -453,226 +398,105 @@ namespace BitFPManager
             worker.Start();
         }
 
-        private static void StopInstalledProcesses(string installDir)
+        internal static bool IsDataOnlyDirectory(string root)
         {
-            string[] relativeExecutables = {
-                "DT - 指纹浏览器.exe",
-                "DT-Fingerprint-Browser.exe",
-                "DT-CLI.exe",
-                @"runtime\electron.exe",
-                @"runtime\cores\electron\electron.exe",
-                @"runtime\cores\chromium\chrome.exe"
-            };
+            if (!Directory.Exists(Path.Combine(root, "data"))) return false;
+            foreach (string entry in Directory.GetFileSystemEntries(root))
+                if (!InstallMaintenance.SamePath(entry, Path.Combine(root, "data")) &&
+                    !InstallMaintenance.SamePath(entry, Path.Combine(root, InstallMaintenance.RoamingMarker)))
+                    return false;
+            return true;
+        }
 
-            foreach (string relativeExecutable in relativeExecutables)
+        internal static void ExtractPayload(ZipArchive archive, string root, Action<int, int, string> progress)
+        {
+            int count = 0;
+            foreach (ZipArchiveEntry entry in archive.Entries)
             {
-                string expectedPath = Path.GetFullPath(Path.Combine(installDir, relativeExecutable));
-                foreach (Process process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(expectedPath)))
-                {
-                    using (process)
-                    {
-                        try
-                        {
-                            string actualPath = Path.GetFullPath(process.MainModule.FileName);
-                            if (!string.Equals(actualPath, expectedPath, StringComparison.OrdinalIgnoreCase)) continue;
+                count++;
+                string target = Path.GetFullPath(Path.Combine(root, entry.FullName));
+                if (InstallMaintenance.SamePath(root, target)) continue;
+                if (!InstallMaintenance.Below(root, target))
+                    throw new InvalidDataException("安装资源包含越界路径：" + entry.FullName);
+                string data = Path.Combine(root, "data");
+                if (InstallMaintenance.SamePath(data, target) || InstallMaintenance.Below(data, target))
+                    continue;
 
-                            process.Kill();
-                            process.WaitForExit(1000);
-                        }
-                        catch (InvalidOperationException) {}
-                        catch (System.ComponentModel.Win32Exception) {}
+                InstallMaintenance.EnsureNoLinks(target);
+                if (entry.FullName.EndsWith("/") || entry.FullName.EndsWith("\\"))
+                {
+                    Directory.CreateDirectory(target);
+                }
+                else
+                {
+                    string parent = Path.GetDirectoryName(target);
+                    Directory.CreateDirectory(parent);
+                    string staged = Path.Combine(parent, ".dt-install-" + Guid.NewGuid().ToString("N"));
+                    try
+                    {
+                        entry.ExtractToFile(staged);
+                        if (File.Exists(target)) File.Replace(staged, target, null);
+                        else File.Move(staged, target);
+                    }
+                    finally
+                    {
+                        File.Delete(staged);
                     }
                 }
+                progress(count, archive.Entries.Count, entry.Name);
             }
         }
 
         private void DoInstall(string installDir, bool addPath, bool createShortcut, bool autoStart)
         {
-            // 关闭当前安装目录的进程，避免升级时文件被占用。
-            StopInstalledProcesses(installDir);
-
-            // 1. 创建目标目录
+            InstallMaintenance.StopInstalledProcesses(installDir, InstallMaintenance.RuntimeCache(installDir), false);
             Directory.CreateDirectory(installDir);
-
-            // 1.1 覆盖安装核心数据保护与自动快照备份 (内存快照 + 磁盘备份双重保险)
-            string dataDir = Path.Combine(installDir, "data");
-            byte[] preservedEnvBytes = null;
-            byte[] preservedSetBytes = null;
-            byte[] preservedBmkBytes = null;
-
-            if (Directory.Exists(dataDir))
+            string data = Path.Combine(installDir, "data");
+            InstallMaintenance.EnsureNoLinks(data);
+            bool createData = !Directory.Exists(data);
+            string roaming = InstallMaintenance.RoamingData();
+            if (InstallMaintenance.UsesRoamingData(installDir, roaming, registeredInstall != null))
             {
-                try
-                {
-                    string envJson = Path.Combine(dataDir, "environments.json");
-                    if (File.Exists(envJson))
-                    {
-                        byte[] bytes = File.ReadAllBytes(envJson);
-                        if (bytes.Length > 5)
-                        {
-                            preservedEnvBytes = bytes;
-                            string bkp = Path.Combine(dataDir, "environments_backup_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".json");
-                            File.WriteAllBytes(bkp, bytes);
-                            File.WriteAllBytes(Path.Combine(dataDir, "environments.bak.json"), bytes);
-                        }
-                    }
-                    string setJson = Path.Combine(dataDir, "settings.json");
-                    if (File.Exists(setJson))
-                    {
-                        byte[] bytes = File.ReadAllBytes(setJson);
-                        if (bytes.Length > 5)
-                        {
-                            preservedSetBytes = bytes;
-                            File.WriteAllBytes(Path.Combine(dataDir, "settings.bak.json"), bytes);
-                        }
-                    }
-                    string bmkJson = Path.Combine(dataDir, "bookmarks.json");
-                    if (File.Exists(bmkJson))
-                    {
-                        byte[] bytes = File.ReadAllBytes(bmkJson);
-                        if (bytes.Length > 5)
-                        {
-                            preservedBmkBytes = bytes;
-                            File.WriteAllBytes(Path.Combine(dataDir, "bookmarks.bak.json"), bytes);
-                        }
-                    }
-                }
-                catch {}
+                string marker = Path.Combine(installDir, InstallMaintenance.RoamingMarker);
+                InstallMaintenance.EnsureNoLinks(marker);
+                using (File.Open(marker, FileMode.OpenOrCreate, FileAccess.Write)) {}
             }
 
-            // 2. 从嵌入的资源中提取并释放 payload.zip
-            Assembly asm = Assembly.GetExecutingAssembly();
-            using (Stream resStream = asm.GetManifestResourceStream("payload.zip"))
+            using (Stream resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("payload.zip"))
             {
-                if (resStream == null)
-                {
-                    throw new InvalidOperationException("安装包完整性校验失败：未找到内嵌程序资源 (payload.zip)。");
-                }
-
-                using (ZipArchive archive = new ZipArchive(resStream, ZipArchiveMode.Read))
-                {
-                    int total = archive.Entries.Count;
-                    int count = 0;
-
-                    foreach (ZipArchiveEntry entry in archive.Entries)
+                if (resource == null) throw new InvalidDataException("安装包缺少程序资源。");
+                using (var archive = new ZipArchive(resource, ZipArchiveMode.Read))
+                    ExtractPayload(archive, installDir, (count, total, name) => this.Invoke(new Action(() =>
                     {
-                        count++;
-                        string outPath = Path.GetFullPath(Path.Combine(installDir, entry.FullName));
-
-                        // 安全防护：防止 Zip Slip 跨目录攻击
-                        if (!outPath.StartsWith(installDir, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        // 关键修复：彻底去除 entry.FullName 开头的 "./"、"/"、".\" 等所有前缀格式，确保准确匹配 data/ 目录
-                        string relNorm = entry.FullName.Replace('\\', '/');
-                        while (relNorm.StartsWith("./") || relNorm.StartsWith("/"))
-                        {
-                            relNorm = relNorm.Substring(relNorm.StartsWith("./") ? 2 : 1);
-                        }
-
-                        // 关键保护：如果是覆盖安装，凡是 data/ 目录下的已有文件，绝对不覆盖！
-                        if (relNorm.StartsWith("data/", StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (File.Exists(outPath))
-                            {
-                                // 用户本地已有数据，直接跳过解压，完整保留！
-                                continue;
-                            }
-                        }
-
-                        if (string.IsNullOrEmpty(entry.Name))
-                        {
-                            Directory.CreateDirectory(outPath);
-                        }
-                        else
-                        {
-                            string dir = Path.GetDirectoryName(outPath);
-                            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-
-                            entry.ExtractToFile(outPath, true);
-                        }
-
-                        int pct = (int)((count / (float)total) * 80);
-                        this.Invoke(new Action(() =>
-                        {
-                            progressBar.Value = Math.Min(pct, 80);
-                            lblStatus.Text = string.Format("正在解压核心组件 ({0}/{1}): {2}", count, total, entry.Name);
-                        }));
-                    }
-                }
+                        progressBar.Value = count * 80 / total;
+                        lblStatus.Text = string.Format("正在解压核心组件 ({0}/{1})：{2}", count, total, name);
+                    })));
             }
 
             PreserveEmbeddedAppOnUpgrade(installDir);
             RemoveLegacyDiagnosticAssets(installDir);
-
-            // 最终守护：若覆盖安装前存在有效的 environments.json，确保其绝对不被置空或覆盖
-            try
+            string profiles = Path.Combine(data, "profiles");
+            if (!Directory.Exists(profiles))
             {
-                string targetDataDir = Path.Combine(installDir, "data");
-                Directory.CreateDirectory(targetDataDir);
-
-                string finalEnvJson = Path.Combine(targetDataDir, "environments.json");
-                if (preservedEnvBytes != null && preservedEnvBytes.Length > 5)
-                {
-                    bool needRestore = false;
-                    if (!File.Exists(finalEnvJson))
-                    {
-                        needRestore = true;
-                    }
-                    else
-                    {
-                        string currentText = File.ReadAllText(finalEnvJson).Trim();
-                        if (string.IsNullOrEmpty(currentText) || currentText == "[]")
-                        {
-                            needRestore = true;
-                        }
-                    }
-
-                    if (needRestore)
-                    {
-                        File.WriteAllBytes(finalEnvJson, preservedEnvBytes);
-                    }
-                }
-
-                string finalSetJson = Path.Combine(targetDataDir, "settings.json");
-                if (preservedSetBytes != null && preservedSetBytes.Length > 5)
-                {
-                    if (!File.Exists(finalSetJson) || File.ReadAllText(finalSetJson).Trim().Length <= 5)
-                    {
-                        File.WriteAllBytes(finalSetJson, preservedSetBytes);
-                    }
-                }
-
-                string finalBmkJson = Path.Combine(targetDataDir, "bookmarks.json");
-                if (preservedBmkBytes != null && preservedBmkBytes.Length > 5)
-                {
-                    if (!File.Exists(finalBmkJson))
-                    {
-                        File.WriteAllBytes(finalBmkJson, preservedBmkBytes);
-                    }
-                }
+                InstallMaintenance.EnsureNoLinks(profiles);
+                Directory.CreateDirectory(profiles);
             }
-            catch {}
-
-            // 授予 data 目录对所有本地用户的完全控制权限（防止安装在 Program Files 时普通用户无写权限）
-            try
+            // Set access for a newly created data directory without changing existing data ACLs.
+            if (createData)
             {
-                string dataFolder = Path.Combine(installDir, "data");
-                if (Directory.Exists(dataFolder))
+                try
                 {
-                    System.Security.AccessControl.DirectorySecurity sec = Directory.GetAccessControl(dataFolder);
+                    System.Security.AccessControl.DirectorySecurity sec = Directory.GetAccessControl(data);
                     sec.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
-                        new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.BuiltinUsersSid, null),
-                        System.Security.AccessControl.FileSystemRights.FullControl,
+                        System.Security.Principal.WindowsIdentity.GetCurrent().User,
+                        System.Security.AccessControl.FileSystemRights.Modify,
                         System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
                         System.Security.AccessControl.PropagationFlags.None,
                         System.Security.AccessControl.AccessControlType.Allow));
-                    Directory.SetAccessControl(dataFolder, sec);
+                    Directory.SetAccessControl(data, sec);
                 }
+                catch (UnauthorizedAccessException) {}
             }
-            catch {}
 
             this.Invoke(new Action(() =>
             {
@@ -680,107 +504,57 @@ namespace BitFPManager
                 lblStatus.Text = "正在配置系统环境与快捷方式...";
             }));
 
-            // 3. 自动配置用户 PATH 环境变量 (采用原生注册表安全写入与 Win32 消息广播，杜绝 setx 1024 截断与转义缺陷)
-            if (addPath)
-            {
-                try
-                {
-                    string normInstall = installDir.TrimEnd('\\');
-                    using (RegistryKey envKey = Registry.CurrentUser.OpenSubKey("Environment", true))
-                    {
-                        if (envKey != null)
-                        {
-                            object rawPathObj = envKey.GetValue("Path", "", RegistryValueOptions.DoNotExpandEnvironmentNames);
-                            string currentPath = (rawPathObj != null) ? rawPathObj.ToString() : "";
-                            string[] parts = currentPath.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-                            bool alreadyExists = false;
-                            foreach (string p in parts)
-                            {
-                                if (string.Equals(p.Trim().TrimEnd('\\'), normInstall, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    alreadyExists = true;
-                                    break;
-                                }
-                            }
-                            if (!alreadyExists)
-                            {
-                                string newPath = (currentPath.TrimEnd(';') + ";" + normInstall).Trim(';');
-                                envKey.SetValue("Path", newPath, RegistryValueKind.ExpandString);
-                            }
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            string programs = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+            string startMenu = Path.Combine(programs, "DT - 指纹浏览器");
+            string targetExe = Path.Combine(installDir, InstallMaintenance.Launcher);
+            string uninstaller = Path.Combine(installDir, "Uninstall.exe");
+            string iconPath = Path.Combine(installDir, "app.ico");
 
-                            envKey.SetValue("DT_BROWSER_DIR", installDir, RegistryValueKind.String);
-                            envKey.SetValue("DT_CLI_PATH", Path.Combine(installDir, "DT-CLI.exe"), RegistryValueKind.String);
-                        }
-                    }
-                    BroadcastEnvironmentChange();
-                }
-                catch {}
-            }
-
-            // 4. 创建桌面与开始菜单快捷方式
             if (createShortcut)
             {
-                try
-                {
-                    string targetExe = File.Exists(Path.Combine(installDir, "DT-Fingerprint-Browser.exe"))
-                        ? Path.Combine(installDir, "DT-Fingerprint-Browser.exe")
-                        : Path.Combine(installDir, "DT - 指纹浏览器.exe");
-                    string iconPath = Path.Combine(installDir, "app.ico");
-
-                    // 桌面快捷方式
-                    string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                    CreateShortcut(Path.Combine(desktop, "DT - 指纹浏览器.lnk"), targetExe, installDir, iconPath, "DT - 指纹浏览器");
-                    CreateShortcut(Path.Combine(desktop, "DT-Fingerprint-Browser.lnk"), targetExe, installDir, iconPath, "DT - 指纹浏览器");
-
-                    // 开始菜单快捷方式
-                    string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "DT - 指纹浏览器");
-                    if (!Directory.Exists(startMenu)) Directory.CreateDirectory(startMenu);
-                    CreateShortcut(Path.Combine(startMenu, "DT - 指纹浏览器.lnk"), targetExe, installDir, iconPath, "DT - 指纹浏览器");
-                    CreateShortcut(Path.Combine(startMenu, "卸载 DT - 指纹浏览器.lnk"), Path.Combine(installDir, "Uninstall.exe"), installDir, iconPath, "卸载 DT - 指纹浏览器");
-                }
-                catch {}
+                Directory.CreateDirectory(startMenu);
+                CreateShortcut(Path.Combine(desktop, "DT - 指纹浏览器.lnk"), targetExe, installDir, iconPath, "DT - 指纹浏览器");
+                CreateShortcut(Path.Combine(desktop, "DT-Fingerprint-Browser.lnk"), targetExe, installDir, iconPath, "DT - 指纹浏览器");
+                CreateShortcut(Path.Combine(startMenu, "DT - 指纹浏览器.lnk"), targetExe, installDir, iconPath, "DT - 指纹浏览器");
+                CreateShortcut(Path.Combine(startMenu, "卸载 DT - 指纹浏览器.lnk"), uninstaller, installDir, iconPath, "卸载 DT - 指纹浏览器");
             }
-
-            // 5. 开机自动启动设置
-            if (autoStart)
+            else
             {
-                try
-                {
-                    using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
-                    {
-                        if (key != null)
-                        {
-                            string targetExe = File.Exists(Path.Combine(installDir, "DT-Fingerprint-Browser.exe"))
-                                ? Path.Combine(installDir, "DT-Fingerprint-Browser.exe")
-                                : Path.Combine(installDir, "DT - 指纹浏览器.exe");
-                            key.SetValue("DTFingerprintBrowser", "\"" + targetExe + "\" --minimized");
-                        }
-                    }
-                }
-                catch {}
+                InstallMaintenance.ClearOwnedShortcuts(installDir, desktop, programs);
             }
 
-            // 6. 注册控制面板应用卸载信息
-            try
+            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(InstallMaintenance.RunKey))
             {
-                string uninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\DT-Fingerprint-Browser";
-                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(uninstallKey))
+                string oldCommand = key.GetValue("DTFingerprintBrowser") as string;
+                if (!InstallMaintenance.IsAppCommand(oldCommand, installDir))
+                    oldCommand = key.GetValue("electron.app.Electron") as string;
+                bool hadAutoStart = InstallMaintenance.IsAppCommand(oldCommand, installDir);
+                InstallMaintenance.ClearOwnedAutoStart(key, installDir);
+                if (autoStart)
                 {
-                    if (key != null)
-                    {
-                        key.SetValue("DisplayName", "DT - 指纹浏览器");
-                        key.SetValue("DisplayVersion", "3.0.0");
-                        key.SetValue("Publisher", "DT Studio");
-                        key.SetValue("DisplayIcon", Path.Combine(installDir, "app.ico"));
-                        key.SetValue("InstallLocation", installDir);
-                        key.SetValue("UninstallString", "\"" + Path.Combine(installDir, "Uninstall.exe") + "\"");
-                        key.SetValue("NoModify", 1);
-                        key.SetValue("NoRepair", 1);
-                    }
+                    bool minimized = !hadAutoStart ||
+                        oldCommand.IndexOf("--minimized", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        oldCommand.IndexOf("--hidden", StringComparison.OrdinalIgnoreCase) >= 0;
+                    key.SetValue("DTFingerprintBrowser", "\"" + targetExe + "\"" + (minimized ? " --minimized" : ""));
                 }
             }
-            catch {}
 
+            using (RegistryKey key = Registry.CurrentUser.CreateSubKey("Environment"))
+                InstallMaintenance.ConfigureEnvironment(key, installDir, addPath);
+            InstallMaintenance.BroadcastEnvironmentChange();
+
+            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(InstallMaintenance.UninstallKey))
+            {
+                key.SetValue("DisplayName", "DT - 指纹浏览器");
+                key.SetValue("DisplayVersion", "3.1.0");
+                key.SetValue("Publisher", "DT Studio");
+                key.SetValue("DisplayIcon", iconPath);
+                key.SetValue("InstallLocation", installDir);
+                key.SetValue("UninstallString", "\"" + uninstaller + "\"");
+                key.SetValue("NoModify", 1);
+                key.SetValue("NoRepair", 1);
+            }
             this.Invoke(new Action(() =>
             {
                 progressBar.Value = 100;
@@ -840,6 +614,7 @@ namespace BitFPManager
             // Electron loads an embedded app ahead of a root archive passed on the command line.
             try
             {
+                InstallMaintenance.EnsureNoLinks(resources);
                 if (File.Exists(bundledArchive)) File.Move(bundledArchive, bundledArchive + suffix);
                 if (Directory.Exists(bundledDirectory)) Directory.Move(bundledDirectory, bundledDirectory + suffix);
             }
@@ -849,24 +624,22 @@ namespace BitFPManager
 
         private void CreateShortcut(string shortcutPath, string targetPath, string workingDir, string iconPath, string desc)
         {
-            try
-            {
-                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
-                if (shellType == null) return;
-                dynamic shell = Activator.CreateInstance(shellType);
-                dynamic shortcut = shell.CreateShortcut(shortcutPath);
-                shortcut.TargetPath = targetPath;
-                shortcut.WorkingDirectory = workingDir;
-                if (File.Exists(iconPath)) shortcut.IconLocation = iconPath;
-                shortcut.Description = desc;
-                shortcut.Save();
-            }
-            catch {}
+            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType == null) throw new InvalidOperationException("无法创建快捷方式：" + shortcutPath);
+            dynamic shell = Activator.CreateInstance(shellType);
+            dynamic shortcut = shell.CreateShortcut(shortcutPath);
+            shortcut.TargetPath = targetPath;
+            shortcut.WorkingDirectory = workingDir;
+            if (File.Exists(iconPath)) shortcut.IconLocation = iconPath;
+            shortcut.Description = desc;
+            shortcut.Save();
         }
 
         [STAThread]
         static void Main()
         {
+            AppContext.SetSwitch("Switch.System.IO.UseLegacyPathHandling", false);
+            AppContext.SetSwitch("Switch.System.IO.BlockLongPaths", false);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new InstallerForm());

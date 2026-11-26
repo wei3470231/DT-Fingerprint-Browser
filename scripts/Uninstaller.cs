@@ -1,222 +1,198 @@
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: System.Reflection.AssemblyVersion("3.0.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("3.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("3.1.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("3.1.0.0")]
 
 namespace BitFPManager
 {
     static class UninstallerProgram
     {
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
-        private static extern IntPtr SendMessageTimeout(
-            IntPtr hWnd,
-            uint Msg,
-            UIntPtr wParam,
-            string lParam,
-            uint fuFlags,
-            uint uTimeout,
-            out UIntPtr lpdwResult);
-
-        private const int HWND_BROADCAST = 0xffff;
-        private const uint WM_SETTINGCHANGE = 0x001A;
-        private const uint SMTO_ABORTIFHUNG = 0x0002;
-
-        private static void BroadcastEnvironmentChange()
-        {
-            try
-            {
-                UIntPtr result;
-                SendMessageTimeout((IntPtr)HWND_BROADCAST, WM_SETTINGCHANGE, UIntPtr.Zero, "Environment", SMTO_ABORTIFHUNG, 3000, out result);
-            }
-            catch {}
-        }
-        private static void StopInstalledProcesses(string installDir)
-        {
-            string[] relativeExecutables = {
-                "DT - 指纹浏览器.exe",
-                "DT-Fingerprint-Browser.exe",
-                "DT-CLI.exe",
-                @"runtime\electron.exe",
-                @"runtime\cores\electron\electron.exe",
-                @"runtime\cores\chromium\chrome.exe"
-            };
-
-            foreach (string relativeExecutable in relativeExecutables)
-            {
-                string expectedPath = Path.GetFullPath(Path.Combine(installDir, relativeExecutable));
-                foreach (Process process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(expectedPath)))
-                {
-                    using (process)
-                    {
-                        try
-                        {
-                            string actualPath = Path.GetFullPath(process.MainModule.FileName);
-                            if (!string.Equals(actualPath, expectedPath, StringComparison.OrdinalIgnoreCase)) continue;
-
-                            process.Kill();
-                            process.WaitForExit(1000);
-                        }
-                        catch (InvalidOperationException) {}
-                        catch (System.ComponentModel.Win32Exception) {}
-                    }
-                }
-            }
-        }
+        private const string Uninstaller = "Uninstall.exe";
+        private const string HelperPrefix = "DT-Uninstall-";
 
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-
-            string installDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
-
-            DialogResult confirm = MessageBox.Show(
-                "您确定要从当前计算机中彻底卸载 DT - 指纹浏览器 吗？",
-                "DT - 指纹浏览器 卸载向导",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
-
-            if (confirm != DialogResult.Yes) return;
+            AppContext.SetSwitch("Switch.System.IO.UseLegacyPathHandling", false);
+            AppContext.SetSwitch("Switch.System.IO.BlockLongPaths", false);
 
             try
             {
-                // 1. 关闭当前安装目录的进程，避免卸载时文件被占用。
-                StopInstalledProcesses(installDir);
-
-                // 2. 移除快捷方式
-                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                string desktopLnk = Path.Combine(desktop, "DT - 指纹浏览器.lnk");
-                if (File.Exists(desktopLnk))
+                if (args.Length == 1 && args[0] == "--finish")
                 {
-                    try { File.Delete(desktopLnk); } catch {}
-                }
-                string desktopEnLnk = Path.Combine(desktop, "DT-Fingerprint-Browser.lnk");
-                if (File.Exists(desktopEnLnk))
-                {
-                    try { File.Delete(desktopEnLnk); } catch {}
+                    FinishUninstall();
+                    return;
                 }
 
-                string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "DT - 指纹浏览器");
-                if (Directory.Exists(startMenu))
-                {
-                    try { Directory.Delete(startMenu, true); } catch {}
-                }
+                string root = InstallMaintenance.SafeInstallRoot(AppDomain.CurrentDomain.BaseDirectory);
+                if (!InstallMaintenance.IsExistingInstall(root) &&
+                    !InstallMaintenance.SamePath(InstallMaintenance.RegisteredInstall(), root))
+                    throw new IOException("此目录中没有找到可卸载的 DT 指纹浏览器。");
 
-                // 3. 从系统用户 PATH 环境变量中移除 (采用原生注册表安全操作，杜绝命令行转义缺陷)
-                try
-                {
-                    string normInstall = (installDir ?? "").Trim().TrimEnd('\\');
-                    using (RegistryKey envKey = Registry.CurrentUser.OpenSubKey("Environment", true))
-                    {
-                        if (envKey != null)
-                        {
-                            object rawPathObj = envKey.GetValue("Path", "", RegistryValueOptions.DoNotExpandEnvironmentNames);
-                            string currentPath = (rawPathObj != null) ? rawPathObj.ToString() : "";
-                            string[] parts = currentPath.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-                            List<string> remaining = new List<string>();
-                            foreach (string part in parts)
-                            {
-                                if (!string.Equals(part.Trim().TrimEnd('\\'), normInstall, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    remaining.Add(part.Trim());
-                                }
-                            }
-                            string remainingPath = string.Join(";", remaining.ToArray());
-                            envKey.SetValue("Path", remainingPath, RegistryValueKind.ExpandString);
-
-                            if (envKey.GetValue("DT_BROWSER_DIR") != null) envKey.DeleteValue("DT_BROWSER_DIR", false);
-                            if (envKey.GetValue("DT_CLI_PATH") != null) envKey.DeleteValue("DT_CLI_PATH", false);
-                        }
-                    }
-                    BroadcastEnvironmentChange();
-                }
-                catch {}
-
-                // 4. 从注册表移除开机自启
-                try
-                {
-                    using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
-                    {
-                        if (key != null)
-                        {
-                            if (key.GetValue("DTFingerprintBrowser") != null)
-                                key.DeleteValue("DTFingerprintBrowser", false);
-                            if (key.GetValue("electron.app.Electron") != null)
-                                key.DeleteValue("electron.app.Electron", false);
-                        }
-                    }
-                }
-                catch {}
-
-                // 5. 移除控制面板卸载项
-                try
-                {
-                    Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\DT-Fingerprint-Browser", false);
-                }
-                catch {}
-
-                // 6. 询问是否删除用户数据目录 (data/)
-                bool deleteUserData = true;
-                string dataDir = Path.Combine(installDir, "data");
-                if (Directory.Exists(dataDir))
-                {
-                    DialogResult resData = MessageBox.Show(
-                        "是否同时删除保存的环境配置及 Cookie 缓存数据？\n\n- 点击【是】：彻底清除全部本地数据\n- 点击【否】：保留 data 目录数据，以便日后重新安装时恢复使用",
-                        "清理用户数据",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Question);
-                    deleteUserData = (resData == DialogResult.Yes);
-                }
-
-                // 7. 调度自删除命令并退出 (附带系统根目录与系统保护目录绝对防线熔断机制)
-                string fullNorm = Path.GetFullPath(installDir).TrimEnd('\\');
-                string rootNorm = Path.GetPathRoot(fullNorm).TrimEnd('\\');
-
-                // 绝对防线：严禁对盘符根目录、Windows、System32 等执行 rd /s /q
-                bool isRootOrSys = string.Equals(fullNorm, rootNorm, StringComparison.OrdinalIgnoreCase) ||
-                                   fullNorm.Length <= 3 ||
-                                   fullNorm.IndexOf("Windows", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                   fullNorm.IndexOf("System32", StringComparison.OrdinalIgnoreCase) >= 0;
-
-                if (!isRootOrSys && File.Exists(Path.Combine(installDir, "Uninstall.exe")))
-                {
-                    string cmdArgs;
-                    if (deleteUserData)
-                    {
-                        cmdArgs = string.Format("/c timeout /t 1 /nobreak >nul & rd /s /q \"{0}\"", installDir);
-                    }
-                    else
-                    {
-                        // 仅删除除 data 以外的文件
-                        cmdArgs = string.Format("/c timeout /t 1 /nobreak >nul & for /d %i in (\"{0}\\*\") do (if /i not \"%~nxi\"==\"data\" rd /s /q \"%i\") & for %i in (\"{0}\\*\") do (del /f /q \"%i\")", installDir);
-                    }
-
-                    ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", cmdArgs)
-                    {
-                        CreateNoWindow = true,
-                        UseShellExecute = false
-                    };
-                    Process.Start(psi);
-                }
-
-                MessageBox.Show(
-                    "DT - 指纹浏览器 已成功从您的计算机卸载！",
-                    "卸载完成",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                DialogResult choice = MessageBox.Show(
+                    "卸载 DT 指纹浏览器？\n\n安装目录：" + root +
+                    "\n\n【是】卸载并删除当前 Windows 账户的 DT 应用数据（含环境、Cookie 和书签）" +
+                    "\n【否】卸载程序并保留应用数据\n【取消】返回",
+                    "DT 指纹浏览器卸载", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question,
+                    MessageBoxDefaultButton.Button3);
+                if (choice == DialogResult.Cancel) return;
+                StartCleanup(root, choice == DialogResult.Yes);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("卸载过程中发生错误: " + ex.Message, "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("卸载未完成。\n\n" + ex.Message, "DT 指纹浏览器卸载",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Environment.ExitCode = 1;
             }
+        }
+
+        private static void StartCleanup(string root, bool deleteData)
+        {
+            string temp = Path.GetFullPath(Path.GetTempPath()).TrimEnd('\\');
+            if (InstallMaintenance.SamePath(root, temp) || InstallMaintenance.Below(root, temp))
+                throw new IOException("Windows 临时目录必须位于安装目录之外。");
+
+            string helper = Path.Combine(temp, HelperPrefix + Guid.NewGuid().ToString("N") + ".exe");
+            File.Copy(Path.Combine(root, Uninstaller), helper);
+            try
+            {
+                var info = new ProcessStartInfo(helper, "--finish")
+                {
+                    UseShellExecute = false,
+                    WorkingDirectory = temp
+                };
+                info.EnvironmentVariables["DT_UNINSTALL_ROOT"] = root;
+                info.EnvironmentVariables["DT_UNINSTALL_PARENT"] = Process.GetCurrentProcess().Id.ToString();
+                info.EnvironmentVariables["DT_UNINSTALL_DATA"] = deleteData ? "delete" : "keep";
+                using (Process process = Process.Start(info))
+                    if (process == null) throw new IOException("无法启动卸载清理程序。");
+            }
+            catch
+            {
+                File.Delete(helper);
+                throw;
+            }
+        }
+
+        private static void FinishUninstall()
+        {
+            string helper = Application.ExecutablePath;
+            string name = Path.GetFileNameWithoutExtension(helper);
+            Guid helperId;
+            if (!InstallMaintenance.SamePath(Path.GetDirectoryName(helper), Path.GetTempPath()) ||
+                !name.StartsWith(HelperPrefix, StringComparison.Ordinal) ||
+                !Guid.TryParseExact(name.Substring(HelperPrefix.Length), "N", out helperId))
+                throw new IOException("无效的卸载清理程序。");
+
+            try
+            {
+                string root = InstallMaintenance.SafeInstallRoot(Environment.GetEnvironmentVariable("DT_UNINSTALL_ROOT"));
+                string uninstall = Path.Combine(root, Uninstaller);
+                if (!File.Exists(uninstall)) throw new FileNotFoundException("找不到安装目录中的卸载程序。", uninstall);
+                string mode = Environment.GetEnvironmentVariable("DT_UNINSTALL_DATA");
+                int parentId;
+                if ((mode != "delete" && mode != "keep") ||
+                    !Int32.TryParse(Environment.GetEnvironmentVariable("DT_UNINSTALL_PARENT"), out parentId))
+                    throw new IOException("无效的卸载参数。");
+
+                try
+                {
+                    using (Process parent = Process.GetProcessById(parentId))
+                        if (!parent.WaitForExit(15000))
+                            throw new IOException("卸载向导尚未退出，请关闭后重试。");
+                }
+                catch (ArgumentException) { /* The original uninstaller has already exited. */ }
+
+                bool deleteData = mode == "delete";
+                string roaming = Path.GetDirectoryName(InstallMaintenance.RoamingData());
+                bool ownsRoaming = InstallMaintenance.SamePath(InstallMaintenance.RegisteredInstall(), root) ||
+                    File.Exists(Path.Combine(root, InstallMaintenance.RoamingMarker));
+                string cache = InstallMaintenance.RuntimeCache(root);
+                CompleteUninstall(root, deleteData, ownsRoaming ? roaming : null, cache, () => ClearIntegration(root));
+                MessageBox.Show(deleteData ? "程序及本地应用数据已删除。" : "程序已卸载，应用数据已保留。",
+                    "DT 指纹浏览器卸载完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            finally
+            {
+                ScheduleHelperDeletion(helperId);
+            }
+        }
+
+        internal static void CompleteUninstall(string root, bool deleteData, string roaming, string cache, Action clearIntegration)
+        {
+            InstallMaintenance.StopInstalledProcesses(root, cache, deleteData);
+            if (deleteData && roaming != null && Directory.Exists(roaming) &&
+                !InstallMaintenance.Below(roaming, root) && !InstallMaintenance.SamePath(roaming, root))
+            {
+                InstallMaintenance.EnsureNoLinks(roaming);
+                InstallMaintenance.RetryFileOperation(() => InstallMaintenance.DeleteTree(roaming));
+            }
+            if (Directory.Exists(cache))
+            {
+                InstallMaintenance.EnsureNoLinks(Path.GetDirectoryName(cache));
+                InstallMaintenance.RetryFileOperation(() => InstallMaintenance.DeleteTree(cache));
+                InstallMaintenance.DeleteEmptyDirectory(Path.GetDirectoryName(cache));
+                InstallMaintenance.DeleteEmptyDirectory(Path.GetDirectoryName(Path.GetDirectoryName(cache)));
+            }
+            InstallMaintenance.RetryFileOperation(() => DeleteAppFiles(root, deleteData));
+            clearIntegration();
+            InstallMaintenance.RetryFileOperation(() =>
+            {
+                File.Delete(Path.Combine(root, Uninstaller));
+                if (deleteData) Directory.Delete(root);
+                else InstallMaintenance.DeleteEmptyDirectory(root);
+            });
+        }
+
+        internal static void DeleteAppFiles(string root, bool deleteData)
+        {
+            InstallMaintenance.SafeInstallRoot(root);
+            foreach (string entry in Directory.GetFileSystemEntries(root))
+            {
+                string name = Path.GetFileName(entry);
+                if (String.Equals(name, Uninstaller, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!deleteData && (String.Equals(name, "data", StringComparison.OrdinalIgnoreCase) ||
+                    String.Equals(name, InstallMaintenance.RoamingMarker, StringComparison.OrdinalIgnoreCase))) continue;
+                InstallMaintenance.DeleteTree(entry);
+            }
+        }
+
+        private static void ClearIntegration(string root)
+        {
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey("Environment", true))
+                if (key != null) InstallMaintenance.ConfigureEnvironment(key, root, false);
+            InstallMaintenance.BroadcastEnvironmentChange();
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(InstallMaintenance.RunKey, true))
+                if (key != null) InstallMaintenance.ClearOwnedAutoStart(key, root);
+
+            InstallMaintenance.ClearOwnedShortcuts(root, Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                Environment.GetFolderPath(Environment.SpecialFolder.Programs));
+            bool owned;
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(InstallMaintenance.UninstallKey))
+                owned = key != null && InstallMaintenance.SamePath(key.GetValue("InstallLocation") as string, root);
+            if (owned) Registry.CurrentUser.DeleteSubKeyTree(InstallMaintenance.UninstallKey, false);
+        }
+
+        internal static void ScheduleHelperDeletion(Guid id)
+        {
+            // Only delete the generated executable in the worker's temp directory after it exits.
+            string name = HelperPrefix + id.ToString("N") + ".exe";
+            var info = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                "/d /v:off /c for /l %i in (1,1,15) do @if exist " + name +
+                " (del /f /q " + name + " >nul 2>&1 & if exist " + name + " ping.exe -n 2 127.0.0.1 >nul)")
+            {
+                WorkingDirectory = Path.GetTempPath(),
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            info.EnvironmentVariables["PATH"] = Environment.SystemDirectory;
+            using (Process process = Process.Start(info)) {}
         }
     }
 }

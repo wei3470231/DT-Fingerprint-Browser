@@ -4,19 +4,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { electron } = require('./cores.json');
+const coreAssets = require('./cores.json');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
-const APP_VERSION = '3.0.0';
+const APP_VERSION = '3.1.0';
 const VERSION = 'v' + APP_VERSION.replace(/\.0$/, '');
+const fullInstaller = process.argv.includes('--full');
 const LOCAL_PAYLOAD = path.join(DIST, 'payload-' + VERSION);
 fs.mkdirSync(DIST, { recursive: true });
 const BUILD = fs.mkdtempSync(path.join(DIST, '.build-' + VERSION + '-'));
 const STAGING = path.join(BUILD, 'staging');
 const PAYLOAD = path.join(BUILD, 'payload');
 const ZIP_FILE = path.join(BUILD, 'payload.zip');
-const SETUP_EXE = path.join(DIST, `DT-Fingerprint-Browser-${VERSION}-Setup.exe`);
+const SETUP_EXE = path.join(DIST, `DT-Fingerprint-Browser-${VERSION}${fullInstaller ? '-Full' : ''}-Setup.exe`);
 const PORTABLE_ZIP = path.join(DIST, `DT-Fingerprint-Browser-${VERSION}-Portable.zip`);
 
 const CSC = fs.existsSync('C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe')
@@ -104,30 +105,33 @@ function compileCs(srcFile, outFile, isGui, extraFlags = []) {
   }
 }
 
-async function bundleElectron() {
-  const archive = path.resolve(process.env.DT_ELECTRON_ARCHIVE || path.join(ROOT, electron.archive));
+async function bundleCore(core) {
+  const asset = coreAssets[core];
+  const archive = path.resolve(process.env[`DT_${core.toUpperCase()}_ARCHIVE`] || path.join(ROOT, asset.archive));
   if (!fs.existsSync(archive)) {
-    throw new Error('请先从 GitHub 的 core 发布页下载 ' + electron.archive + ' 并放入项目根目录。');
+    throw new Error('请先从 GitHub 的 core 发布页下载 ' + asset.archive + ' 并放入项目根目录。');
   }
   const hash = createHash('sha256');
   for await (const chunk of fs.createReadStream(archive)) hash.update(chunk);
-  if (fs.statSync(archive).size !== electron.size || hash.digest('hex') !== electron.sha256) {
-    throw new Error('Electron 压缩包校验失败：' + archive);
+  if (fs.statSync(archive).size !== asset.size || hash.digest('hex') !== asset.sha256) {
+    throw new Error(asset.archive + ' 校验失败：' + archive);
   }
 
-  const extracted = fs.mkdtempSync(path.join(BUILD, 'electron-'));
+  const extracted = fs.mkdtempSync(path.join(BUILD, core + '-'));
   cp.execFileSync('tar.exe', ['-xf', archive, '-C', extracted], { stdio: 'inherit' });
   const candidates = [extracted, ...fs.readdirSync(extracted, { withFileTypes: true })
     .filter(entry => entry.isDirectory()).map(entry => path.join(extracted, entry.name))];
   const layouts = candidates.filter(candidate =>
-    fs.existsSync(path.join(candidate, electron.executable)) &&
-    fs.existsSync(path.join(candidate, 'resources', 'default_app.asar')) &&
-    !fs.existsSync(path.join(candidate, 'resources', 'app.asar')) &&
-    !fs.existsSync(path.join(candidate, 'resources', 'app')));
-  if (layouts.length !== 1) throw new Error('Electron 压缩包缺少可启动 v3.0 的运行时。');
+    fs.existsSync(path.join(candidate, asset.executable)) &&
+    (core !== 'electron' || (
+      fs.existsSync(path.join(candidate, 'resources', 'default_app.asar')) &&
+      !fs.existsSync(path.join(candidate, 'resources', 'app.asar')) &&
+      !fs.existsSync(path.join(candidate, 'resources', 'app'))
+    )));
+  if (layouts.length !== 1) throw new Error(asset.archive + ' 中未找到唯一可用的内核目录。');
   const cores = path.join(PAYLOAD, 'runtime', 'cores');
   fs.mkdirSync(cores, { recursive: true });
-  fs.renameSync(layouts[0], path.join(cores, 'electron'));
+  fs.renameSync(layouts[0], path.join(cores, core));
 }
 
 async function main() {
@@ -185,14 +189,15 @@ async function main() {
   // 清理 staging 目录，确保不留任何源码
   fs.rmSync(STAGING, { recursive: true, force: true });
 
-  // 5. 将 Electron 内核及 Chromium 按需安装脚本打入发布包。
-  logStep('5/8', '集成 Electron 内核、内核下载与窗口启动工具...');
+  // 5. 集成内核及原生运行工具。
+  logStep('5/8', fullInstaller ? '集成 Electron、Chromium 和原生运行工具...' : '集成 Electron 内核和原生运行工具...');
   const runtimeScripts = path.join(PAYLOAD, 'scripts');
   fs.mkdirSync(runtimeScripts, { recursive: true });
   for (const file of ['cores.json', 'RuntimeTools.exe.config']) {
     fs.copyFileSync(path.join(ROOT, 'scripts', file), path.join(runtimeScripts, file));
   }
-  await bundleElectron();
+  await bundleCore('electron');
+  if (fullInstaller) await bundleCore('chromium');
   compileCs(path.join(ROOT, 'scripts', 'ChromiumWindowIcon.cs'), path.join(runtimeScripts, 'ChromiumWindowIcon.exe'), true);
   compileCs(['RuntimeTools.cs', 'RuntimeCoreInstaller.cs'].map(file => path.join(ROOT, 'scripts', file)),
     path.join(runtimeScripts, 'RuntimeTools.exe'), false, [
@@ -214,6 +219,7 @@ async function main() {
   const CS_LAUNCHER = path.join(ROOT, 'scripts', 'Launcher.cs');
   const CS_UNINSTALLER = path.join(ROOT, 'scripts', 'Uninstaller.cs');
   const CS_INSTALLER = path.join(ROOT, 'scripts', 'Installer.cs');
+  const CS_INSTALL_MAINTENANCE = path.join(ROOT, 'scripts', 'InstallMaintenance.cs');
 
   // 编译 GUI (纯英文标准名称与中文兼容名称同时支持)
   compileCs(CS_LAUNCHER, path.join(PAYLOAD, 'DT-Fingerprint-Browser.exe'), true, ['/r:System.Windows.Forms.dll']);
@@ -228,7 +234,7 @@ async function main() {
   console.log('      -> 已编译: "DT-CLI.exe"');
 
   // 编译 Uninstaller.exe
-  compileCs(CS_UNINSTALLER, path.join(PAYLOAD, 'Uninstall.exe'), true, [
+  compileCs([CS_UNINSTALLER, CS_INSTALL_MAINTENANCE], path.join(PAYLOAD, 'Uninstall.exe'), true, [
     '/r:System.Windows.Forms.dll',
     '/r:System.Drawing.dll'
   ]);
@@ -272,13 +278,19 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
   // 8. 编译最终独立 GUI 安装程序 (含版本号，无中文字符)
   logStep('8/8', `正在编译嵌入式单文件 Windows GUI 标准安装程序 (${path.basename(SETUP_EXE)})...`);
-  compileCs(CS_INSTALLER, SETUP_EXE, true, [
+  compileCs([CS_INSTALLER, CS_INSTALL_MAINTENANCE], SETUP_EXE, true, [
     '/r:System.Windows.Forms.dll',
     '/r:System.Drawing.dll',
     '/r:System.IO.Compression.dll',
     '/r:System.IO.Compression.FileSystem.dll',
     `/resource:${ZIP_FILE},payload.zip`
   ]);
+
+  if (fullInstaller) {
+    const size = (fs.statSync(SETUP_EXE).size / (1024 * 1024)).toFixed(1);
+    console.log(`\n双内核完整版安装包：${SETUP_EXE}（${size} MiB）`);
+    return;
+  }
 
   fs.copyFileSync(ZIP_FILE, PORTABLE_ZIP);
   copyDirRecursive(PAYLOAD, LOCAL_PAYLOAD, source => path.relative(PAYLOAD, source).split(path.sep)[0] !== 'data');
