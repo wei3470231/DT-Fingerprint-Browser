@@ -10,8 +10,8 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-[assembly: AssemblyVersion("3.1.0.0")]
-[assembly: AssemblyFileVersion("3.1.0.0")]
+[assembly: AssemblyVersion("3.1.1.0")]
+[assembly: AssemblyFileVersion("3.1.1.0")]
 
 namespace BitFPManager
 {
@@ -547,7 +547,7 @@ namespace BitFPManager
             using (RegistryKey key = Registry.CurrentUser.CreateSubKey(InstallMaintenance.UninstallKey))
             {
                 key.SetValue("DisplayName", "DT - 指纹浏览器");
-                key.SetValue("DisplayVersion", "3.1.0");
+                key.SetValue("DisplayVersion", "3.1.1");
                 key.SetValue("Publisher", "DT Studio");
                 key.SetValue("DisplayIcon", iconPath);
                 key.SetValue("InstallLocation", installDir);

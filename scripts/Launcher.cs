@@ -4,8 +4,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-[assembly: System.Reflection.AssemblyVersion("3.1.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("3.1.0.0")]
+[assembly: System.Reflection.AssemblyVersion("3.1.1.0")]
+[assembly: System.Reflection.AssemblyFileVersion("3.1.1.0")]
 
 namespace BitFPManager
 {
@@ -125,25 +125,17 @@ namespace BitFPManager
             bool isCliExe = !string.IsNullOrEmpty(exeName) && 
                 exeName.IndexOf("CLI", StringComparison.OrdinalIgnoreCase) >= 0;
 
-            // 2. 检查是否传入显式 GUI 管理器开关 (如开机自启传入的 --minimized, --silent, --hidden, --autostart, --gui)
-            bool isExplicitGuiFlag = false;
-            foreach (string a in args)
-            {
-                string lower = a.ToLowerInvariant();
-                if (lower == "--minimized" || lower == "--silent" || lower == "--hidden" || 
-                    lower == "--autostart" || lower == "--gui" || lower == "gui" || lower == "manager")
-                {
-                    isExplicitGuiFlag = true;
-                    break;
-                }
-            }
+            string firstArg = args.Length > 0 ? args[0].ToLowerInvariant() : "";
+            // 2. 根据首个参数识别 GUI 模式，保留 autostart --silent 等 CLI 命令的选项。
+            bool isExplicitGuiFlag = firstArg == "--minimized" || firstArg == "--silent" || firstArg == "--hidden" ||
+                firstArg == "--autostart" || firstArg == "--gui" || firstArg == "gui" || firstArg == "start-gui" || firstArg == "manager";
 
             // 3. 检查首个参数是否明确为已知 CLI 命令
-            string firstArg = args.Length > 0 ? args[0].ToLowerInvariant() : "";
             bool isKnownCliCommand = firstArg == "list" || firstArg == "start" || firstArg == "open" ||
                 firstArg == "stop" || firstArg == "close" || firstArg == "status" ||
                 firstArg == "cdp-url" || firstArg == "random-fp" || firstArg == "batch-random-fp" ||
                 firstArg == "set-proxy" || firstArg == "test-proxy" || firstArg == "set-ext" ||
+                firstArg == "set-rotating" || firstArg == "set-rotating-proxy" || firstArg == "set-dialogs" ||
                 firstArg == "create" || firstArg == "update" || firstArg == "edit" ||
                 firstArg == "get" || firstArg == "info" || firstArg == "clone" || firstArg == "delete" ||
                 firstArg == "clear-cache" || firstArg == "clean-cache" ||
@@ -156,12 +148,9 @@ namespace BitFPManager
                 firstArg == "env" || firstArg == "autostart" || firstArg == "compile" || firstArg == "build-exe" ||
                 firstArg.StartsWith("--remote-debugging-port") ||
                 firstArg == "help" || firstArg == "--help" || firstArg == "-h" ||
-                firstArg == "--version" || firstArg == "-v";
+                firstArg == "--version" || firstArg == "--product-version" || firstArg == "-v";
 
-            // 判断模式：
-            // - 凡携带 --minimized 等 GUI 开关，绝不可进入 CLI，强制执行 GUI 管理器；
-            // - 否则若是 CLI 程序或者首参数为明确的 CLI 命令，进入 CLI 模式；
-            // - 其余情况 (无参数、或常规双击运行) 均启动 GUI 管理器。
+            // 显式 GUI 入口、CLI 入口、常规双击依次判定。
             bool isCli = !isExplicitGuiFlag && (isCliExe || isKnownCliCommand);
             string electronExe;
             try

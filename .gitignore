@@ -28,6 +28,8 @@ key.pem
 # Private user data and profiles (私用环境配置与登录Cookie隔离)
 data/
 /data/
+/sync-data/
+/sync-server/sync-data/
 
 # Private extensions and plugins (私用扩展插件隔离)
 插件/

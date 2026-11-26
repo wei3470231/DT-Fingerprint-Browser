@@ -7,6 +7,7 @@ const net = require('node:net');
 const { generateFingerprint, buildWindowsChromeUa } = require('../../fp-sdk');
 const { parseProxyString } = require('./proxy-parser');
 const { withProcessLock } = require('./process-lock');
+const { recoverInterruptedApply } = require('./cloud-files');
 
 function parseAndBuildProxyConfig(proxyInput) {
   const result = {
@@ -278,6 +279,7 @@ let writingStore = false;
 function withStoreWrite(operation) {
   ensureDirs();
   return withProcessLock(DATA_DIR, 'configuration', async () => {
+    recoverInterruptedApply(DATA_DIR);
     writingStore = true;
     try {
       return await operation();

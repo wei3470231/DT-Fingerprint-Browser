@@ -95,7 +95,7 @@ function printUsage() {
     dt-cli env [--add] [--remove] [--status] [--json]               配置当前目录至系统用户 PATH 环境变量
     dt-cli autostart [--enable] [--disable] [--silent] [--json]     设置 Windows 开机自动启动与静默托盘
     dt-cli gui [--minimized]                                        启动可视化桌面管理器 (可选静默托盘模式)
-    dt-cli compile [--json]                                         一键编译原生可执行文件 (无需安装开发工具)
+    node cli.js compile [--json]                                    在源码目录编译原生启动器 (需要 .NET Framework csc.exe)
 
   [旧版直通模式 (Electron)]
     dt-cli --version                                                输出兼容版本字符串
@@ -172,6 +172,12 @@ function parseArgs() {
   return { rawArgs, command, options, positional };
 }
 
+function settingsForCli(settings) {
+  const { cloudSync, ...rest } = settings;
+  if (!cloudSync) return rest;
+  return { ...rest, cloudSync: { address: cloudSync.address || '', hasKey: Boolean(cloudSync.key) } };
+}
+
 async function main() {
   const { rawArgs, command, options, positional } = parseArgs();
 
@@ -192,7 +198,8 @@ async function main() {
   }
 
   // 2.5 管理器 GUI 启动分支 (显式请求启动图形界面)
-  if (command === 'gui' || command === 'start-gui' || command === 'manager' || rawArgs.includes('--gui') || rawArgs.includes('--minimized') || rawArgs.includes('--silent')) {
+  if (['gui', 'start-gui', 'manager'].includes(command) ||
+      (!KNOWN_COMMANDS.has(command) && ['--gui', '--minimized', '--silent'].includes(command))) {
     const cp = require('node:child_process');
     const isAsar = __filename.match(/^(.+?[/\\]app\.asar)(?:[/\\]|$)/i);
     const envVars = { ...process.env };
@@ -1733,13 +1740,13 @@ async function main() {
         }
         if (options.url) updates.defaultUrl = options.url;
         const updated = await store.withStoreWrite(() => store.updateSettings(updates));
-        if (isJson) console.log(JSON.stringify({ code: 0, success: true, message: '已更新系统设置', data: updated }, null, 2));
+        if (isJson) console.log(JSON.stringify({ code: 0, success: true, message: '已更新系统设置', data: settingsForCli(updated) }, null, 2));
         else console.log('⚙️ 已成功更新系统全局设置！');
         break;
       }
       const curSettings = store.getSettings();
       if (isJson) {
-        console.log(JSON.stringify({ code: 0, success: true, data: curSettings }, null, 2));
+        console.log(JSON.stringify({ code: 0, success: true, data: settingsForCli(curSettings) }, null, 2));
       } else {
         console.log(`\n==== DT - 系统全局配置 ====`);
         console.log(`  浏览器皮肤: ${curSettings.browserTheme || 'dark'}`);
@@ -1839,6 +1846,9 @@ async function main() {
     case 'compile':
     case 'build-exe': {
       try {
+        if (/[/\\]app\.asar[/\\]/i.test(__filename)) {
+          throw new Error('请在项目源码目录运行 node cli.js compile。');
+        }
         const buildExe = require('./scripts/build-exe');
         const results = buildExe.compileAll({ silent: isJson });
         if (isJson) {

@@ -8,7 +8,7 @@ const coreAssets = require('./cores.json');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.1.1';
 const VERSION = 'v' + APP_VERSION.replace(/\.0$/, '');
 const fullInstaller = process.argv.includes('--full');
 const LOCAL_PAYLOAD = path.join(DIST, 'payload-' + VERSION);

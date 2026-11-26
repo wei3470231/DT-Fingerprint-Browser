@@ -9,10 +9,11 @@
 > 💬 **官方技术交流 & BUG 提交反馈 QQ 群**：`328399769`  
 > 欢迎进群交流指纹对抗技术、提交 BUG 与功能建议、获取最新编译发布的便携包与安装包！
 >
-> 📥 **Release 官方最新版本下载（纯英文标准命名，含版本号）**：
-> - 📦 **独立安装向导包**：在最新发布中下载 `*-Setup.exe`（支持配置用户 PATH 环境变量与开机自启）
-> - 🗜️ **绿色便携压缩包**：在最新发布中下载 `*-Portable.zip`（解压即用）
-> - 🌐 [GitHub Releases 发布页面](https://github.com/wei3470231/DT-Fingerprint-Browser/releases) · [v3.1 更新记录](RELEASE_NOTES_v3.1.md)
+> 📥 **v3.1.1 下载**
+> - **双内核完整版** `*-Full-Setup.exe`，内置 Electron 和 Chromium，可离线安装。
+> - **标准安装包** `*-Setup.exe`，内置 Electron，Chromium 按需准备。
+> - **便携包** `*-Portable.zip`，解压即用，内置 Electron，Chromium 按需准备。
+> - [GitHub Release v3.1.1](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/tag/v3.1.1) · [v3.1.1 更新记录](RELEASE_NOTES_v3.1.1.md)
 
 ---
 
@@ -29,6 +30,9 @@
 ---
 
 ## 目录
+
+- [自建云同步](#自建云同步)
+
 0. [界面预览与纯免费宣言](#-软件界面实测与功能展示)
 1. [系统要求与跨设备便携移植指南](#1-系统要求与跨设备便携移植指南)
 2. [便携包极速测试与构建指南](#2-便携包极速测试与构建指南)
@@ -64,11 +68,29 @@
 
 ---
 
+## 自建云同步
+
+DT v3.1.1 支持将浏览器环境备份到自建服务。备份包含环境配置、指纹、UA、Cookie、浏览历史和 Chromium 标签页。网页缓存和站点存储留在本机。
+
+1. 在 Windows 或 Linux 服务端准备 Python 3.10+。在仓库根目录运行下列命令。Linux 上的命令通常为 `python3`。
+
+   ```sh
+   python sync-server/server.py --host 0.0.0.0 --port 55550 --data-dir ./sync-data
+   ```
+
+2. 在服务端打开 `http://127.0.0.1:55550/admin` 创建团队密钥。点击密钥旁的 **查看备份** 可查看环境、分组、内核和版本，也可直接下载 `.dt-sync.gz`。
+3. 在 Windows 客户端打开 **系统设置 → 云同步**，保存服务端 IP 和同步密钥。上传时可单选、多选、全选或按分组。每次打开云端下拉框都会刷新列表。同步时同名环境经确认覆盖，新环境直接添加。
+4. 在客户端通过 **本地备份** 可以手动导出，或从管理页下载的备份文件中选择一个环境恢复。升级服务时沿用原 `sync-data` 目录。
+
+管理页的远程维护方式、备份保留规则和恢复流程见 [Python 服务端说明](sync-server/README.md)。
+
+---
+
 ## 1. 系统要求与跨设备便携移植指南
 
-### v3.1 双内核
+### v3.1.1 双内核与云同步
 
-安装包和便携包内置 **Electron**，管理器首次启动即可打开。管理器会自动准备默认的 **Chromium** 内核，并在顶部显示下载和解压进度。顶部选择决定新建环境的内核。环境会保存该内核并在列表显示，之后启动按各自的配置打开。已有环境配置与自定义 UA 通用，浏览器的登录状态和站点数据按内核隔离。Chromium 使用 DT 的窗口和任务栏图标。详情见 [v3.1 更新记录](RELEASE_NOTES_v3.1.md)。
+安装包和便携包内置 **Electron**，完整版还内置 **Chromium**。管理器会准备默认的 Chromium 内核，需要下载时会在顶部显示进度。顶部选择决定新建环境的内核，创建后的环境按各自保存的内核启动。浏览器的登录状态和站点数据按内核隔离。Chromium 使用 DT 的窗口和任务栏图标。详情见 [v3.1.1 更新记录](RELEASE_NOTES_v3.1.1.md)。
 
 ### 1.1 目标设备环境要求
 本项目已经过**全链路便携化加固**，没有任何硬编码绝对路径。当您把软件目录复制到其他任意 Windows 计算机、更换盘符（如从 E 盘复制到 C 盘或 D 盘、U盘）运行时，无需修改任何代码配置，开箱即用：
@@ -76,16 +98,16 @@
 | 组件 / 运行环境 | 要求说明 | 必备程度 |
 | :--- | :--- | :--- |
 | **操作系统** | Windows 10 / 11 / Windows Server 2016+ (64 位) | 必须 |
-| **浏览器内核** | 安装包内置 Electron，Chromium 按需下载。 | 无网络时可在软件目录放入 Chromium ZIP |
+| **浏览器内核** | 三个包均内置 Electron，完整版也内置 Chromium。 | 标准安装包和便携包可从软件目录中的 Chromium ZIP 或 GitHub 准备内核 |
 | **.NET Framework** | .NET Framework 4.5+（Win 10/11 系统自带，用于原生运行 `DT-Fingerprint-Browser.exe` 和 `DT-CLI.exe`） | 必须（系统自带） |
 | **Node.js** | 推荐安装 **Node.js 22 或更新版本**。<br>*注：即使目标设备完全没有安装 Node.js，`DT-CLI.exe` 与管理器也会使用内置的 Electron 内核运行。* | 推荐（开发时需要，便携运行非必须） |
 | **Visual C++ 运行库** | Microsoft Visual C++ 2015–2022 Redistributable (x64) | 推荐（若纯净系统提示缺失 VC 运行时安装） |
 
-### 1.2 便携包结构规范 (dist/payload-v3.1)
+### 1.2 便携包结构规范 (dist/payload-v3.1.1)
 为了保障源码清洁与商业分发安全，项目根目录保持纯源码形态，所有独立可执行文件集中生成并运行于便携包目录中：
 
 ```text
-dist/payload-v3.1/ (独立免安装便携版)
+dist/payload-v3.1.1/ (独立免安装便携版)
 ├── DT-Fingerprint-Browser.exe # 桌面端 GUI 管理器主程序（双击运行，纯英文文件名，内置原生图标）
 ├── DT - 指纹浏览器.exe        # 中文兼容副本（双击直接拉起桌面端管理器）
 ├── DT-CLI.exe                 # 原生命令行控制工具（支持外部脚本无缝调用）
@@ -107,20 +129,20 @@ dist/payload-v3.1/ (独立免安装便携版)
 
 ## 2. 便携包极速测试与构建指南
 
-便携包验收会把 v3.1 压缩包解压到临时目录，验证首次下载和两个内核的切换。
+便携包验收会把 v3.1.1 压缩包解压到临时目录，验证首次下载和两个内核的切换。
 
 ### 2.1 一键运行便携包自动化测试套件
 在项目根目录下执行：
 ```powershell
 node scripts/test-portable.js
 ```
-该测试脚本会自动对便携包进行 19 项全链路验收测试：
+脚本在临时目录中验证以下内容：
 * 验证便携包核心可执行文件（`DT-Fingerprint-Browser.exe`、`DT - 指纹浏览器.exe`、`DT-CLI.exe`）；
 * 验证 `app.asar`、内置 Electron 启动和 Chromium 首次准备；
 * 验证精简系统兜底字体库 `Fonts/`；
 * 验证 CLI Chrome Drop-in 模式（`--version`、`--product-version`）；
 * 验证 CLI JSON 管理指令（`list`、`font status`、`theme status`、`settings get`）；
-* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v3.1-Portable.zip`。
+* 验证发布用便携压缩包 `dist/DT-Fingerprint-Browser-v3.1.1-Portable.zip`。
 
 ### 2.2 一键生成便携包与商业安装程序
 将内核发布页的 `runtime_electron.zip` 放入项目根目录，再运行构建脚本。也可通过 `DT_ELECTRON_ARCHIVE` 指定该 ZIP 的路径。构建脚本校验 SHA-256 后打包。 [内核发布页](https://github.com/wei3470231/DT-Fingerprint-Browser/releases/tag/core)
@@ -128,10 +150,10 @@ node scripts/test-portable.js
 node scripts/build-installer.js
 ```
 构建脚本将全自动完成：
-1. **源码脱敏加密**：使用 Terser 进行变量混淆并打包进虚拟归档 `app.asar`；
-2. **生成便携目录**：在 `dist/payload-v3.1/` 编译生成原生无黑框启动器与 CLI 工具；
-3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v3.1-Portable.zip`（内置 Electron，Chromium 按需准备）；
-4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v3.1-Setup.exe`（自动配置用户 PATH 与开机自启）。
+1. **应用代码打包**：使用 Terser 压缩 JavaScript，并将代码和界面资源封装进 `app.asar`；
+2. **生成便携目录**：在 `dist/payload-v3.1.1/` 编译生成原生无黑框启动器与 CLI 工具；
+3. **打包免安装包**：生成 Release 发布用便携压缩包 `dist/DT-Fingerprint-Browser-v3.1.1-Portable.zip`（内置 Electron，Chromium 按需准备）；
+4. **编译安装程序**：生成 Release 发布用独立单文件安装向导 `dist/DT-Fingerprint-Browser-v3.1.1-Setup.exe`（自动配置用户 PATH 与开机自启）。
 
 要构建可离线启动两种内核的完整版安装包，请同时准备 `runtime_electron.zip` 和 `runtime_chromium.zip`，然后执行下列命令。
 
@@ -139,11 +161,11 @@ node scripts/build-installer.js
 node scripts/build-installer.js --full
 ```
 
-构建程序会校验两份内核 ZIP，输出 `dist/DT-Fingerprint-Browser-v3.1-Full-Setup.exe`。可通过 `DT_CHROMIUM_ARCHIVE` 指定 Chromium ZIP 的路径。
+构建程序会校验两份内核 ZIP，输出 `dist/DT-Fingerprint-Browser-v3.1.1-Full-Setup.exe`。可通过 `DT_CHROMIUM_ARCHIVE` 指定 Chromium ZIP 的路径。
 
 ### 2.3 根目录快捷调用机制
 在根目录下提供了 `dt-cli.cmd` 与 `dt.cmd` 包装脚本：
-* 若 `dist/payload-v3.1/DT-CLI.exe` 存在，优先以编译后的原生便携程序执行；
+* 若 `dist/payload-v3.1.1/DT-CLI.exe` 存在，优先以编译后的原生便携程序执行；
 * 若未生成便携包，自动回退到 `node cli.js`，保证在开发调试阶段无感切换。
 
 ---
@@ -333,6 +355,7 @@ CLI 控制台升级为**覆盖全业务生命周期的企业级控制台**，所
 * 安装版和便携版的 `DT-CLI.exe` 使用内置 Electron 的 Node 模式执行命令，系统无需单独安装 Node.js。浏览器环境按配置启动对应内核。缺少 Chromium 时，程序先检查软件目录中的同名 ZIP，再按需从 GitHub 下载。正式包内置内核下载和浏览器启动工具，这些步骤无需系统 PATH 中的 PowerShell 或 `curl.exe`。
 * 已加入 PATH 时可用 `dt-cli`。在安装目录的 PowerShell 可用 `.\DT-CLI.exe`。Python 或 Node.js 脚本可用 `DT-CLI.exe` 的绝对路径，确保调用指定安装。
 * 单环境命令通常以退出码 `0` 表示成功，`1` 表示失败。批量 `start --json` 还需检查每个 `data[].success`，失败原因在 `data[].error`。
+* 云同步的连接设置、上传和恢复在桌面管理器中操作。服务器备份可从 Web 管理页下载。CLI 的 `settings get --json` 在已配置时返回服务器地址和 `cloudSync.hasKey`。
 
 ---
 
@@ -366,7 +389,7 @@ dt-cli --remote-debugging-port=9222 --user-data-dir="data\profiles\direct-test" 
 
 | 分类 | 命令 | 简要描述 | 常用核心参数 |
 | :--- | :--- | :--- | :--- |
-| **运行控制** | `dt-cli start` | 按保存的内核启动，开启 CDP 时等待调试端口就绪 | `--name`, `--id`, `--core`, `--url`, `--headless`, `--json` |
+| **运行控制** | `dt-cli start` | 启动单个环境或一组环境，开启 CDP 时等待端口就绪 | `--name`, `--id`, `--group`, `--names`, `--ids`, `--core`, `--url`, `--headless`, `--json` |
 | | `dt-cli stop` | 停止指定环境或批量停止 | `--name`, `--id`, `--group`, `--all`, `--json` |
 | | `dt-cli status` | 查询环境运行状态、PID 及端口 | `--name`, `--id`, `--json` |
 | | `dt-cli cdp-url` | **直接提取 CDP 地址 (免 JSON 解析)** | `--name`, `--id`, `--ws`, `--http`, `--port` |
@@ -402,17 +425,17 @@ dt-cli --remote-debugging-port=9222 --user-data-dir="data\profiles\direct-test" 
 | | `dt-cli theme status` | 查看当前管理器与浏览器默认皮肤 | `--json` |
 | | `dt-cli theme set` | 更改浏览器或管理器的配色外观 | `--browser "皮肤Key"`, `--manager "Key"`, `--json` |
 | **系统设置** | `dt-cli settings get` | 查看系统全局配置参数 | `--json` |
-| | `dt-cli settings set` | 修改系统全局配置 | `--browser-theme`, `--font`, `--json` |
+| | `dt-cli settings set` | 修改系统全局配置 | `--browser-theme`, `--manager-theme`, `--font`, `--url`, `--json` |
 | | `dt-cli env` | 添加/移除/查询用户 PATH 环境变量 | `--add`, `--remove`, `--status`, `--json` |
 | | `dt-cli autostart` | 配置 Windows 开机自启与静默托盘 | `--enable`, `--disable`, `--silent`, `--status`, `--json` |
 | | `dt-cli gui` | 命令行拉起桌面可视化管理器 | `--minimized` (静默托盘) |
-| | `dt-cli compile` | 编译生成便携包原生 EXE | `--json` |
+| | `node cli.js compile` | 在源码目录编译原生 GUI 和 CLI 启动器 | `--json` |
 
 ---
 
 ### 4.4 环境生命周期与运行控制指令
 
-#### Chromium 快速调用（v3.1）
+#### Chromium 快速调用
 
 示例在软件目录的 PowerShell 中运行。若端口 9230 已被占用，换成一个空闲端口。已配置环境可跳过 `create`，直接使用 `list --json` 查到的 ID。
 
@@ -435,6 +458,7 @@ $started.data | Select-Object core, pid, port, http, ws, alreadyRunning
 - `start --id $id --core chromium` 只对本次启动生效。已经运行的环境会返回 `alreadyRunning: true` 和现有进程的内核。切换内核前先停止环境。切换内核时，分别使用对应内核的浏览器数据目录。
 - 调试端口用 `create --port` 或 `update --port` 配置。使用 `--no-port` 关闭 CDP，届时 `start --json` 的 `port`、`http` 和 `ws` 为空。运行中修改端口后需重新启动。不要通过 `--args` 覆盖 Chromium 的 CDP 端口、用户数据目录、UA、代理或指纹参数。
 - 运行中执行 `random-fp` 会重启 Chromium，旧 CDP 连接会断开。命令成功后重新获取 CDP 地址。
+- 云同步恢复过的 Chromium 环境，在首次常规启动时打开已保存的标签页。临时指定 `--url` 时打开指定网址，待恢复标签页留到下一次常规启动。
 
 #### 1. 启动浏览器环境 (`start` / 别名 `open`)
 按名称或 ID 启动。若配置了 CDP 端口，CLI 会等待该端口就绪。脚本应检查退出码、`success` 和返回的 CDP 地址。
@@ -783,9 +807,12 @@ dt-cli gui
 dt-cli gui --minimized
 ```
 
-#### 5. 编译便携版 EXE (`compile`)
+#### 5. 从源码编译原生启动器 (`compile`)
+
+在仓库根目录运行，需具备 Node.js 和 .NET Framework 的 `csc.exe`。生成完整的安装包或便携包请使用第 2.2 节的构建命令。
+
 ```powershell
-dt-cli compile --json
+node cli.js compile --json
 ```
 
 ---
@@ -806,7 +833,7 @@ dt-cli compile --json
 @echo off
 chcp 65001 >nul
 echo 正在启动测试环境...
-dt-cli start --name "环境 1 · 纽约"
+call dt-cli start --name "环境 1 · 纽约"
 if %errorlevel% neq 0 (
     echo 启动失败！
     exit /b 1
@@ -843,19 +870,14 @@ async function main() {
   const list = store.loadAll();
   console.log(`当前共有 ${list.length} 个环境配置`);
 
-  // 2. 自动获取下一个空闲未占用的端口
-  const nextPort = await store.getNextAvailablePort();
-
-  // 3. 创建一个新环境
-  const newEnv = store.addEnvironment({
+  // 2. 在配置写入锁内选择端口并创建环境
+  const newEnv = await store.withStoreWrite(async () => store.addEnvironment({
     name: '自动化账号-01',
     remotePortEnabled: true,
-    remotePort: nextPort,
-    url: 'https://www.browserscan.net/',
-    language: 'en-US',
-    proxy: 'userId:password@us.udealproxy.com:6666',
-    extensions: 'chrome'
-  });
+    remotePort: await store.getNextAvailablePort(),
+    url: 'about:blank',
+    language: 'en-US'
+  }));
 
   // 4. 启动该环境
   const launchRes = await processManager.launch(newEnv.id);
@@ -881,24 +903,22 @@ main();
 ## 6. Python / 自动化脚本接入示例 (Playwright / Selenium / Puppeteer)
 
 ### 6.1 方式一：Playwright 极简直连模式 (利用 `cdp-url --ws`)
-先用 `start` 启动开启了 CDP 的环境，再用 `cdp-url` 获取地址。
+先用 `start` 启动开启了 CDP 的环境，再用 `cdp-url` 获取地址。将 `DT_CLI_PATH` 设为安装目录中 `DT-CLI.exe` 的绝对路径。
 
 ```python
+import os
 import subprocess
 from playwright.sync_api import sync_playwright
 
-subprocess.run('dt-cli start --name "环境 1 · 纽约"', shell=True, check=True)
+cli = os.environ["DT_CLI_PATH"]
+subprocess.run([cli, "start", "--name", "环境 1 · 纽约"], check=True)
 
-# 查询已启动环境的 CDP 地址
-ws_url = subprocess.check_output(
-    'dt-cli cdp-url --name "环境 1 · 纽约" --ws', 
-    shell=True, text=True
+cdp_url = subprocess.check_output(
+    [cli, "cdp-url", "--name", "环境 1 · 纽约", "--ws"], encoding="utf-8"
 ).strip()
-print(f"🔗 获取到 CDP WebSocket 地址: {ws_url}")
 
-# 2. 连接已启动的浏览器
 with sync_playwright() as p:
-    browser = p.chromium.connect_over_cdp(ws_url)
+    browser = p.chromium.connect_over_cdp(cdp_url)
     context = browser.contexts[0]
     page = context.pages[0] if context.pages else context.new_page()
 
@@ -923,72 +943,37 @@ with sync_playwright() as p:
 ### 6.2 方式二：Python 企业级自动化调度全链路
 
 ```python
-import subprocess
 import json
-import time
+import os
+import subprocess
+from uuid import uuid4
 from playwright.sync_api import sync_playwright
 
+cli = os.environ["DT_CLI_PATH"]
+
 def run_cli(cmd_args):
-    """通用 DT-CLI 调用函数，自动解析 JSON 并捕获异常"""
-    full_cmd = ["dt-cli"] + cmd_args + ["--json"]
-    proc = subprocess.run(full_cmd, capture_output=True, text=True, shell=True)
+    proc = subprocess.run([cli, *cmd_args, "--json"], capture_output=True, encoding="utf-8")
     if proc.returncode != 0:
-        raise RuntimeError(f"CLI 报错 (code {proc.returncode}): {proc.stderr or proc.stdout}")
-    return json.loads(proc.stdout)
+        raise RuntimeError(proc.stderr or proc.stdout)
+    response = json.loads(proc.stdout)
+    if not response["success"]:
+        raise RuntimeError(response["message"])
+    return response
 
-# 1. 前置步骤：测试代理连通性与网络延迟
-proxy_str = "user123:pass456@us.proxy.com:6666"
-print(">>> [1/6] 正在检测代理网络连通性...")
+env_name = f"自动化示例-{uuid4().hex[:8]}"
+env_id = run_cli(["create", "--name", env_name, "--core", "electron", "--url", "about:blank"])["data"]["id"]
+started = run_cli(["start", "--id", env_id])["data"]
 try:
-    proxy_res = run_cli(["test-proxy", "--proxy", proxy_str])
-    print(f"✅ 代理测试成功！延迟: {proxy_res.get('latency')}ms")
-except Exception as e:
-    print(f"❌ 代理不可用: {e}")
-
-# 2. 创建或更新运行环境
-env_name = "跨境电商-自动运营-01"
-print(f">>> [2/6] 正在初始化环境配置: {env_name}...")
-run_cli([
-    "create",
-    "--name", env_name,
-    "--core", "electron",
-    "--group", "自动化业务组",
-    "--proxy", proxy_str,
-    "--lang", "en-US",
-    "--timezone", "America/New_York",
-    "--url", "https://www.browserscan.net/"
-])
-
-# 3. 运行前深度清理历史垃圾缓存 (保留硬件指纹)
-print(">>> [3/6] 深度清理环境冗余缓存...")
-run_cli(["clear-cache", "--name", env_name])
-
-# 4. 启动浏览器环境
-print(">>> [4/6] 启动指纹浏览器环境并等待就绪...")
-start_res = run_cli(["start", "--name", env_name])
-cdp_http = start_res["data"]["http"]
-print(f"✅ 浏览器已就绪，CDP HTTP: {cdp_http}")
-
-# 5. Playwright 连接并执行业务逻辑
-with sync_playwright() as p:
-    browser = p.chromium.connect_over_cdp(cdp_http)
-    context = browser.contexts[0]
-    page = context.pages[0] if context.pages else context.new_page()
-
-    page.goto("https://www.browserscan.net/")
-    print("访问完成，当前标题:", page.title())
-
-    # 本例使用 Electron，运行中可热加载新指纹。
-    print(">>> [5/6] 运行中一键热重置硬件指纹...")
-    run_cli(["random-fp", "--name", env_name])
-    page.wait_for_timeout(2000)
-
-    browser.close()
-
-# 6. 任务完毕，安全退出环境释放端口与资源
-print(">>> [6/6] 停止浏览器环境...")
-run_cli(["stop", "--name", env_name])
-print("🎉 全流程自动化任务顺利完成！")
+    if not started["http"]:
+        raise RuntimeError("请启用环境的 CDP 端口")
+    with sync_playwright() as p:
+        browser = p.chromium.connect_over_cdp(started["http"])
+        context = browser.contexts[0]
+        page = context.pages[0] if context.pages else context.new_page()
+        page.goto("https://example.com")
+        print(page.title())
+finally:
+    run_cli(["stop", "--id", env_id])
 ```
 
 ---
@@ -1030,20 +1015,25 @@ Playwright 的 `connect_over_cdp` 接受 CLI 返回的 WebSocket 或 HTTP 地址
 
 ### 6.4 方式四：Python + Selenium CDP 直连与代理验证
 
+此示例使用已开启 CDP 的 Chromium 环境。ChromeDriver 需与实际运行的 Chromium 版本兼容。
+
 ```python
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+import os
 import subprocess
 import json
 
 res_output = subprocess.check_output(
-    ["dt-cli", "start", "--name", "环境 1 · 纽约", "--json"], 
-    text=True, shell=True
+    [os.environ["DT_CLI_PATH"], "start", "--name", "Chromium 示例", "--json"],
+    encoding="utf-8",
 )
-port = json.loads(res_output)["data"]["port"]
+data = json.loads(res_output)["data"]
+if data["core"] != "chromium" or not data["port"]:
+    raise RuntimeError("请使用开启 CDP 的 Chromium 环境")
 
 options = Options()
-options.add_experimental_option("debuggerAddress", f"127.0.0.1:{port}")
+options.add_experimental_option("debuggerAddress", f"127.0.0.1:{data['port']}")
 
 driver = webdriver.Chrome(options=options)
 print("当前页面标题:", driver.title)
@@ -1223,7 +1213,7 @@ dt-cli gui --minimized
   2. **内嵌原生高清图标**：编译时将根目录的 `app.ico` 原生嵌入 PE 资源头，任务栏、桌面、文件管理器均显示高清定制图标。
   3. **Win32 级别防多开互斥**：对于 GUI 管理器，通过 Win32 API `FindWindow` + `SetForegroundWindow` 实现进程级防多开，双击已运行的程序会自动将已有窗口激活并置顶。
   4. **全自动环境 Fallback**：若目标机安装了 Node.js 则使用系统 Node；若无 Node.js，自动以 `ELECTRON_RUN_AS_NODE=1` 调用已识别或按需安装的 Electron 内核，无需安装任何第三方运行库，保证 100% 独立可用。
-  5. **便携输出规范**：二进制可执行程序统一编译输出至 `dist/payload-v3.1/` 便携发布目录，绝不污染项目根源码目录。
+  5. **便携输出规范**：二进制可执行程序统一编译输出至 `dist/payload-v3.1.1/` 便携发布目录，绝不污染项目根源码目录。
 
 ---
 
@@ -1236,27 +1226,27 @@ dt-cli gui --minimized
 | 维度 | 设计规范 |
 | :--- | :--- |
 | **自用环境隔离** | 本地源码、`data/` 下的所有环境配置与 Cookies 保持原样，构建过程在独立 `dist/` 目录下完成，**绝不影响自用环境**。 |
-| **商业源码脱敏** | 所有业务 JS 代码均由 Terser 深度混淆（去除注释、变量重命名、压缩语法），并打包进二进制虚拟归档 `app.asar`，**安装包内没有任何明文源码**。 |
+| **应用代码打包** | JavaScript 经过 Terser 压缩，随界面资源封装进 `app.asar`。 |
 | **插件严格隔离** | 排除所有个人私有插件，防止商业资产与私有插件随包流出。 |
-| **全内置零依赖** | 完整内嵌定制的 Chromium/Electron 独立运行时，目标客户机**无需安装 Node.js、无需安装 Python 或任何运行库**，双击即用。 |
+| **内核与运行环境** | 三个桌面包均内置 Electron，双内核完整版也内置 Chromium。桌面使用系统提供的 Windows 运行库。自建同步服务需要服务端安装 Python。 |
 | **系统级自动化安装** | 执行安装向导时，**自动将安装目录加入用户 PATH 环境变量**（任意终端可直接敲 `dt-cli`），并提供**是否开机启动**明确勾选项。 |
 | **精简系统字体兜底** | 自动将 `Fonts/` 字体库完整打包进安装包（`payload/Fonts/`），使客户机在精简版 Ghost/Lite Windows 系统下也能拥有清晰美观的中文字体。 |
 | **干净卸载支持** | 自动生成 `Uninstall.exe` 并注册至 Windows 系统控制面板“应用与功能”，支持一键干净卸载并清理注册表与环境变量。 |
 
 ### 13.2 一键生成对外分发安装包与便携包
-在项目根目录下执行以下命令即可启动全自动构建：
+
+按照第 2.2 节准备内核压缩包，再在仓库根目录运行构建命令。
+
 ```powershell
 node scripts/build-installer.js
+node scripts/build-installer.js --full
 ```
 
-构建完成后将在 `dist/` 目录下生成两类产物（文件名均为标准纯英文并带版本号，兼容 GitHub Releases 上传与海外环境）：
-1. **独立单文件安装程序**：
-   * 路径：`dist\DT-Fingerprint-Browser-v3.1-Setup.exe`（内置 Electron）
-   * 适用场景：GitHub Release 发布、对外分享的标准安装包，带安装向导界面、开机自启复选框、PATH 自动注册与控制面板卸载项。
-2. **便携即用免安装包与目录**：
-   * 压缩包路径：`dist\DT-Fingerprint-Browser-v3.1-Portable.zip`（内置 Electron，Chromium 按需准备）
-   * 运行目录：`dist\payload-v3.1\`
-   * 适用场景：GitHub Release 发布、解压即用的免安装绿色便携版，直接双击 `DT-Fingerprint-Browser.exe` 或 `DT - 指纹浏览器.exe` 即可运行。
+`dist/` 生成以下发布文件。
+
+- `DT-Fingerprint-Browser-v3.1.1-Setup.exe` 为标准安装包，内置 Electron。
+- `DT-Fingerprint-Browser-v3.1.1-Full-Setup.exe` 为双内核完整版，内置 Electron 和 Chromium。
+- `DT-Fingerprint-Browser-v3.1.1-Portable.zip` 为便携包，内置 Electron。解压后运行 `DT-Fingerprint-Browser.exe`，也可直接使用构建生成的 `dist/payload-v3.1.1/`。
 
 ---
 
@@ -1265,5 +1255,5 @@ node scripts/build-installer.js
 本项目遵循 **MIT 开源协议**，秉持“技术无界、自由开源”的极客精神：
 * **100% 完全开源**：所有核心管理逻辑、多标签宿主、CDP 调度层、指纹注入内核及 CLI 控制台源码全量公开透明；
 * **永久纯免费**：无任何收费计划、不设 VIP 权限、不限制环境多开数量；
-* **透明安全**：绝不含任何后门、远程回传、暗扣或隐私采集行为，所有数据均本地物理加密隔离保存；
+* **资料存放**：浏览器资料按环境保存在本机。启用自建同步并主动上传后，所选环境的备份保存到配置的服务器；
 * **自由二次开发**：欢迎全球开发者基于本项目进行定制、优化与提交 PR！

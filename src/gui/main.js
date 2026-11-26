@@ -22,6 +22,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { isDeepStrictEqual } = require('node:util');
 const store = require('../manager/store');
+const cloudSync = require('../manager/cloud-sync');
 const processManager = require('../manager/process-manager');
 const { chromiumProfile } = require('../manager/chromium');
 const systemSettings = require('../manager/system-settings');
@@ -385,6 +386,25 @@ function broadcastState(force = false) {
   }
 }
 
+async function confirmCloudAction(message, detail, button) {
+  const dialogOptions = {
+    type: 'warning', title: 'DT 云同步', message, detail,
+    buttons: ['取消', button], defaultId: 0, cancelId: 0, noLink: true,
+  };
+  const result = mainWindow && !mainWindow.isDestroyed()
+    ? await dialog.showMessageBox(mainWindow, dialogOptions)
+    : await dialog.showMessageBox(dialogOptions);
+  return result.response === 1;
+}
+
+function confirmEnvironmentOverwrite(env) {
+  return confirmCloudAction('覆盖本机环境「' + env.name + '」？',
+    (env.group || '默认分组') + ' · ' + (env.browserCore === 'chromium' ? 'Chromium' : 'Electron'), '确认覆盖');
+}
+
+const backupFileFilters = [{ name: 'DT 同步备份', extensions: ['dt-sync.gz', 'gz'] }];
+let selectedBackupFile = null;
+
 app.whenReady().then(async () => {
   await store.withStoreWrite(store.loadAll);
   createWindow();
@@ -393,6 +413,62 @@ app.whenReady().then(async () => {
   // IPC 接口
   ipcMain.handle('get-state', () => getFullState());
   ipcMain.handle('get-settings', () => store.getSettings());
+  ipcMain.handle('cloud-save-connection', async (_event, input) => {
+    const cloudSyncConfig = cloudSync.normalizeConnection(input);
+    await store.withStoreWrite(() => store.updateSettings({ cloudSync: cloudSyncConfig }));
+    return cloudSyncConfig;
+  });
+  ipcMain.handle('cloud-local-environments', () => cloudSync.localEnvironments());
+  ipcMain.handle('cloud-list', (_event, input) => cloudSync.listEnvironments(cloudSync.normalizeConnection(input)));
+  ipcMain.handle('cloud-list-backups', () => cloudSync.listBackups());
+  ipcMain.handle('cloud-open-backups', () => {
+    fs.mkdirSync(cloudSync.backupDirectory, { recursive: true });
+    return shell.openPath(cloudSync.backupDirectory);
+  });
+  ipcMain.handle('cloud-upload', (_event, { connection, selection }) => {
+    return cloudSync.uploadSelection(cloudSync.normalizeConnection(connection), selection);
+  });
+  ipcMain.handle('cloud-download', async (_event, { connection, item }) => {
+    const result = await cloudSync.syncEnvironment(cloudSync.normalizeConnection(connection), item, confirmEnvironmentOverwrite);
+    if (result) broadcastState(true);
+    return result;
+  });
+  ipcMain.handle('cloud-export-file', async () => {
+    const date = new Date().toISOString().replace(/[:.]/g, '-');
+    const answer = await dialog.showSaveDialog(mainWindow, {
+      title: '导出本地备份', defaultPath: 'DT-' + date + '.dt-sync.gz', filters: backupFileFilters,
+    });
+    if (answer.canceled || !answer.filePath) return null;
+    const file = /\.dt-sync\.gz$/i.test(answer.filePath) ? answer.filePath : answer.filePath.replace(/\.gz$/i, '') + '.dt-sync.gz';
+    if (file !== answer.filePath && fs.existsSync(file) &&
+        !await confirmCloudAction('覆盖已有的本地备份文件？', path.basename(file), '确认覆盖')) return null;
+    return cloudSync.exportFile(file);
+  });
+  ipcMain.handle('cloud-open-file', async () => {
+    selectedBackupFile = null;
+    const answer = await dialog.showOpenDialog(mainWindow, {
+      title: '选择同步备份文件', filters: backupFileFilters, properties: ['openFile'],
+    });
+    if (answer.canceled || !answer.filePaths[0]) return null;
+    const file = answer.filePaths[0];
+    const environments = await cloudSync.inspectFile(file);
+    selectedBackupFile = file;
+    return { name: path.basename(file), environments };
+  });
+  ipcMain.handle('cloud-restore-file', async (_event, id) => {
+    if (!selectedBackupFile) throw new Error('请先选择本地备份文件。');
+    const result = await cloudSync.restoreFile(selectedBackupFile, id, confirmEnvironmentOverwrite);
+    if (result) broadcastState(true);
+    return result;
+  });
+  ipcMain.handle('cloud-restore-backup', async (_event, id) => {
+    if (!cloudSync.listBackups().includes(id)) throw new Error('没有找到选中的本地备份。');
+    if (!await confirmCloudAction('确认恢复本地备份？',
+      id + '\n恢复前会另存当前浏览器资料。', '备份并恢复')) return null;
+    const result = await cloudSync.restoreBackup(id);
+    broadcastState(true);
+    return result;
+  });
   const prepareCore = (sender, core) => ensureCore(core, store.ROOT_DIR, status => {
     if (!sender.isDestroyed()) sender.send('core-install-progress', status);
   });

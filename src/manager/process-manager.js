@@ -11,6 +11,8 @@ const { getEnvironment, getSettings, regenerateFp, isPortAvailable, withStoreWri
 const { ensureCore, runtimeTools, systemExecutable, windowsPowerShell } = require('../../scripts/runtime-path');
 const { prepareChromiumLaunch, chromiumProfile } = require('./chromium');
 const { startChromiumSocks5 } = require('./chromium-socks5');
+const { browserConnection, chromiumCookieParams, isCurrent } = require('./cloud-cookies');
+const { CHROMIUM_TAB_MARKER, copyChromiumTabs } = require('./cloud-files');
 const { prepareCanvasAssets } = require('./chromium-canvas');
 const { withProcessLock } = require('./process-lock');
 const run = promisify(execFile);
@@ -58,12 +60,10 @@ function updateActiveFile(update) {
 }
 
 function withEnvironment(idOrName, operation) {
-  const env = getEnvironment(idOrName);
-  if (!env) throw new Error('未找到环境: ' + idOrName);
-  return withProcessLock(DATA_DIR, 'environment:' + env.id, () => {
-    const current = getEnvironment(env.id);
-    if (!current) throw new Error('未找到环境: ' + env.id);
-    return operation(current);
+  return withProcessLock(DATA_DIR, 'workspace-browser', () => {
+    const env = getEnvironment(idOrName);
+    if (!env) throw new Error('未找到环境: ' + idOrName);
+    return operation(env);
   });
 }
 
@@ -114,12 +114,27 @@ async function launchEnvironment(env, options) {
     };
   }
 
+  const nativeProfile = core === 'chromium' ? chromiumProfile(DATA_DIR, env.id) : null;
+  const pendingTabs = nativeProfile && !options.url && path.join(nativeProfile, CHROMIUM_TAB_MARKER);
+  const pendingInfo = pendingTabs && fs.lstatSync(pendingTabs, { throwIfNoEntry: false });
+  if (pendingInfo && (!pendingInfo.isDirectory() || pendingInfo.isSymbolicLink())) {
+    throw new Error('待恢复的 Chromium 标签页目录无效。');
+  }
+  const launchOptions = pendingInfo ? { ...options, restoreSession: true } : options;
   const plan = core === 'chromium'
-    ? prepareChromiumLaunch(env, options, ROOT_DIR, DATA_DIR)
-    : { args: () => electronArgs(env, options, settings) };
+    ? prepareChromiumLaunch(env, launchOptions, ROOT_DIR, DATA_DIR)
+    : { args: () => electronArgs(env, launchOptions, settings) };
   const executable = await ensureCore(core, ROOT_DIR);
   const port = env.remotePortEnabled ? Number(env.remotePort) || null : null;
-  const start = () => startEnvironment(env, options, core, executable, plan, port);
+  const start = async () => {
+    if (pendingInfo) copyChromiumTabs(pendingTabs, nativeProfile, true);
+    const result = await startEnvironment(env, launchOptions, core, executable, plan, port);
+    if (pendingInfo) {
+      try { fs.rmSync(pendingTabs, { recursive: true, force: true }); }
+      catch (error) { console.warn('Chromium 标签页恢复标记清理失败：' + error.code); }
+    }
+    return result;
+  };
   return port ? withProcessLock(DATA_DIR, 'debug-port:' + port, start) : start();
 }
 
@@ -131,16 +146,30 @@ async function startEnvironment(env, options, core, executable, plan, port) {
   const envVars = { ...process.env, DT_APP_ROOT: ROOT_DIR };
   delete envVars.ELECTRON_RUN_AS_NODE;
 
-  if (core === 'chromium') prepareCanvasAssets(chromiumProfile(DATA_DIR, env.id), env.fp);
+  const profile = core === 'chromium' ? chromiumProfile(DATA_DIR, env.id) : null;
+  if (profile) prepareCanvasAssets(profile, env.fp);
+  const pending = profile && path.join(profile, 'cloud-session-cookies.json');
+  const hasPending = pending && fs.existsSync(pending);
+  const privatePort = hasPending && !port ? path.join(profile, 'DevToolsActivePort') : null;
+  if (privatePort) fs.rmSync(privatePort, { force: true });
   const bridge = plan.socksAuth && await startChromiumSocks5(plan.socksAuth);
   let pid;
   try {
     const args = plan.args(bridge?.port);
+    let destination;
+    if (hasPending) {
+      if (!options.restoreSession) {
+        destination = args.pop();
+        args.push('about:blank');
+      }
+      if (privatePort) args.unshift('--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1');
+    }
     const branding = core === 'chromium' && !args.some(arg => /^--headless(?:=|$)/.test(arg))
       ? chromiumBranding(env.id)
       : null;
     pid = await spawnBrowser(executable, args, envVars, branding);
     if (bridge) await bridge.follow(pid);
+    if (hasPending) await restoreChromiumSession(pending, privatePort, { port, pid }, destination);
   } catch (error) {
     bridge?.abort();
     if (pid) await terminateBrowser({ pid, core, port });
@@ -190,6 +219,39 @@ async function startEnvironment(env, options, core, executable, plan, port) {
     cdp: cdpInfo,
     env
   };
+}
+
+async function restoreChromiumSession(pending, privatePort, record, destination) {
+  if (privatePort) {
+    for (let attempt = 0; attempt < 150 && isPidAlive(record.pid); attempt++) {
+      if (fs.existsSync(privatePort)) {
+        const first = fs.readFileSync(privatePort, 'utf8').split(/\r?\n/)[0];
+        if (/^\d{1,5}$/.test(first)) { record.port = Number(first); break; }
+      }
+      await delay(100);
+    }
+  }
+  const info = record.port && await waitForCdpReady(record.port, 12000);
+  if (!info || !info.webSocketDebuggerUrl.startsWith('ws://127.0.0.1:' + record.port + '/devtools/browser/') ||
+      !await ownsDebugPort(record)) throw new Error('无法打开此 Chromium 环境的 Cookie 恢复通道。');
+  const connection = browserConnection(info.webSocketDebuggerUrl);
+  try {
+    await connection.opened;
+    const cookies = JSON.parse(fs.readFileSync(pending, 'utf8')).filter(isCurrent).map(chromiumCookieParams);
+    for (let offset = 0; offset < cookies.length; offset += 200) {
+      await connection.send('Storage.setCookies', { cookies: cookies.slice(offset, offset + 200) });
+    }
+    const { targetInfos } = await connection.send('Target.getTargets');
+    const target = targetInfos.find(item => item.type === 'page' && item.url === 'about:blank');
+    if (target && destination && destination !== 'dt://fingerprint-test') {
+      const { sessionId } = await connection.send('Target.attachToTarget', { targetId: target.targetId, flatten: true });
+      await connection.send('Page.navigate', { url: destination }, sessionId);
+    }
+    fs.unlinkSync(pending);
+  } finally {
+    connection.close();
+    if (privatePort) fs.rmSync(privatePort, { force: true });
+  }
 }
 
 function chromiumBranding(id) {

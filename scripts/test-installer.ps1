@@ -1,5 +1,5 @@
 param(
-    [string]$Setup = (Join-Path $PSScriptRoot '..\dist\DT-Fingerprint-Browser-v3.1-Full-Setup.exe'),
+    [string]$Setup = (Join-Path $PSScriptRoot '..\dist\DT-Fingerprint-Browser-v3.1.1-Full-Setup.exe'),
     [string]$Previous = (Join-Path $PSScriptRoot '..\dist\DT-Fingerprint-Browser-v2.7-Setup.exe')
 )
 

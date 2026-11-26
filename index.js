@@ -13,7 +13,9 @@ const isBrowser = process.argv.some(a =>
   a.startsWith('--remote-debugging-port=')
 );
 
-if (isBrowser) {
+if (process.argv.some(arg => arg.startsWith('--dt-cloud-cookie-job='))) {
+  require('./src/manager/cloud-cookie-worker');
+} else if (isBrowser) {
   require('./src/browser/main.js');
 } else {
   require('./src/gui/main.js');

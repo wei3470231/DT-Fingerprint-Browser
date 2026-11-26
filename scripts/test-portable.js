@@ -13,8 +13,8 @@ const { generateFingerprint } = require('../fp-sdk');
 
 const fullInstaller = process.argv.includes('--full');
 const packageFile = path.resolve(__dirname, '../dist', fullInstaller
-  ? 'DT-Fingerprint-Browser-v3.1-Full-Setup.exe'
-  : 'DT-Fingerprint-Browser-v3.1-Portable.zip');
+  ? 'DT-Fingerprint-Browser-v3.1.1-Full-Setup.exe'
+  : 'DT-Fingerprint-Browser-v3.1.1-Portable.zip');
 const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'dt-portable-v30-'));
 const app = path.join(sandbox, 'Portable app');
 const data = path.join(app, 'data');
@@ -177,6 +177,15 @@ async function main() {
   assert.ok(json('font', 'status').name);
   assert.ok(json('theme', 'status').managerTheme);
   assert.equal(json('settings', 'get').browserCore, 'chromium');
+  assert.equal(typeof json('autostart', '--status', '--silent').enabled, 'boolean');
+  assert.throws(() => cli('compile', '--json'), /node cli\.js compile/);
+  fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({
+    browserCore: 'chromium', cloudSync: { address: 'http://127.0.0.1:55550', key: 'fixture-secret' },
+  }));
+  for (const args of [['settings', 'get'], ['settings', 'set', '--browser-theme', 'dark']]) {
+    assert.deepEqual(json(...args).cloudSync, { address: 'http://127.0.0.1:55550', hasKey: true });
+    assert.equal(JSON.parse(fs.readFileSync(path.join(data, 'settings.json'), 'utf8')).cloudSync.key, 'fixture-secret');
+  }
   const created = json('create', '--name', 'CLI Chromium test', '--core', 'chromium', '--port', String(port));
   const id = created.id;
   assert.equal(created.browserCore, 'chromium');

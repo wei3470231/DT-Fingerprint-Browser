@@ -25,6 +25,7 @@ const { getEnvironment, getSettings, getActiveFontInfo, ROOT_DIR, DATA_DIR, PROF
 const { applyProxy, closeCurrentBridge, stopRotatingProxy } = require('./proxy-helper');
 const { PIPE_PATH } = require('../manager/ipc-hub');
 const { buildCookieUrl } = require('../shared/cookie-helper');
+const { setElectronCookies } = require('../manager/cloud-cookies');
 const { effectiveUserAgent } = require('../shared/user-agent');
 
 const LOCAL_TEST_PAGE_PATH = path.join(__dirname, 'testing', 'index.html');
@@ -188,6 +189,16 @@ if (cmdUserData) {
 }
 fs.mkdirSync(absUserData, { recursive: true });
 app.setPath('userData', absUserData);
+
+function recordCloudHistory(targetUrl) {
+  if (!envId || !/^https?:\/\//i.test(targetUrl)) return;
+  try {
+    fs.appendFileSync(path.join(absUserData, 'cloud-history.jsonl'),
+      JSON.stringify({ url: targetUrl, visitedAt: new Date().toISOString() }) + '\n', 'utf8');
+  } catch (error) {
+    console.warn('[History] 无法保存访问记录：' + error.code);
+  }
+}
 
 const cmdPort = getArg('remote-debugging-port');
 const effectivePort = cmdPort ? Number(cmdPort) : (env.remotePortEnabled && env.remotePort ? Number(env.remotePort) : null);
@@ -878,6 +889,7 @@ function setupTabListeners(tabItem) {
     }
   });
   view.webContents.on('did-navigate', (_event, navUrl) => {
+    recordCloudHistory(navUrl);
     if (tabItem.pendingNavUrl && urlsMatch(navUrl, tabItem.pendingNavUrl)) {
       tabItem.pendingNavUrl = null;
     }
@@ -887,7 +899,8 @@ function setupTabListeners(tabItem) {
     notifyShell();
     scheduleTabLoadingCheck(tabItem);
   });
-  view.webContents.on('did-navigate-in-page', (_event, navUrl) => {
+  view.webContents.on('did-navigate-in-page', (_event, navUrl, isMainFrame) => {
+    if (isMainFrame) recordCloudHistory(navUrl);
     if (tabItem.pendingNavUrl && urlsMatch(navUrl, tabItem.pendingNavUrl)) {
       tabItem.pendingNavUrl = null;
     }
@@ -1350,6 +1363,15 @@ app.whenReady().then(async () => {
   await updateSessionProxy(userWantsProxy);
   await configureSession(session.defaultSession, currentEnv);
   await configureSession(getEnvSession(), currentEnv);
+  const cloudSessionFile = path.join(absUserData, 'cloud-session-cookies.json');
+  if (envId && fs.existsSync(cloudSessionFile)) {
+    try {
+      await setElectronCookies(getEnvSession(), JSON.parse(fs.readFileSync(cloudSessionFile, 'utf8')));
+      fs.unlinkSync(cloudSessionFile);
+    } catch {
+      console.warn('[Cloud Sync] 会话 Cookie 恢复失败，已保留待恢复文件。');
+    }
+  }
 
   // 代理用户名密码认证
   app.on('login', (event, webContents, request, authInfo, callback) => {

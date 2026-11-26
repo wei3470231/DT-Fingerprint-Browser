@@ -7,7 +7,7 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const ICON = path.join(ROOT, 'app.ico');
 const CS = path.join(ROOT, 'scripts', 'Launcher.cs');
-const PAYLOAD_DIR = path.join(ROOT, 'dist', 'payload-v3.1');
+const PAYLOAD_DIR = path.join(ROOT, 'dist', 'payload-v3.1.1');
 const OUT_GUI = path.join(PAYLOAD_DIR, 'DT - 指纹浏览器.exe');
 const OUT_CLI = path.join(PAYLOAD_DIR, 'DT-CLI.exe');
 
@@ -87,13 +87,13 @@ function compileAll(options = {}) {
   // 1. 编译 GUI
   compileExecutable(csc, OUT_GUI, true, silent);
   results.gui.success = true;
-  if (!silent) console.log('      -> 编译成功: "dist/payload-v3.1/DT - 指纹浏览器.exe"\n');
+  if (!silent) console.log('      -> 编译成功: "dist/payload-v3.1.1/DT - 指纹浏览器.exe"\n');
 
   // 2. 编译 CLI
   if (!silent) console.log(`[2/2] 正在编译便携版命令行控制台程序: "${OUT_CLI}" ...`);
   compileExecutable(csc, OUT_CLI, false, silent);
   results.cli.success = true;
-  if (!silent) console.log('      -> 编译成功: "dist/payload-v3.1/DT-CLI.exe"\n');
+  if (!silent) console.log('      -> 编译成功: "dist/payload-v3.1.1/DT-CLI.exe"\n');
 
   if (!silent) {
     console.log('==================================================');

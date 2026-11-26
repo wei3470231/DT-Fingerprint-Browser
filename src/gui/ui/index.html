@@ -698,6 +698,7 @@
       outline: none;
       cursor: pointer;
     }
+    summary.select-box { line-height: 32px; }
 
     /* 表格容器 */
     .table-card {
@@ -1317,7 +1318,7 @@
     </div>
     <div class="footer-right">
       <div id="btnVersionCheck" class="footer-tag" title="点击检查更新或前往 GitHub Releases 页面">
-        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v3.1</b></span>
+        <span>当前版本: <b id="currentVersionText" style="color: var(--text-main);">v3.1.1</b></span>
         <span class="footer-version-badge" id="versionBadge">
           <span class="status-dot green" id="versionDot"></span>
           <span id="versionStatusText">检测更新中...</span>
@@ -1425,6 +1426,59 @@
             </button>
           </div>
         </div>
+
+        <section aria-labelledby="cloudSyncHeading" style="display:grid; gap:10px; margin: 4px 0 16px;">
+          <h3 id="cloudSyncHeading" style="font-size:14px; margin:0;">云同步</h3>
+          <label for="cloudServerAddress">服务端 IP 或地址</label>
+          <input class="select-box" id="cloudServerAddress" type="text" placeholder="192.168.1.10:55550" autocomplete="off">
+          <label for="cloudSyncKey">同步密钥</label>
+          <input class="select-box" id="cloudSyncKey" type="text" maxlength="64" autocomplete="off" spellcheck="false">
+          <details id="cloudUploadPanel">
+            <summary class="select-box" style="cursor:pointer;">上传备份</summary>
+            <div style="display:grid; gap:8px; padding:8px 0;">
+              <label for="cloudUploadMode">上传范围</label>
+              <select id="cloudUploadMode" class="select-box">
+                <option value="individual">选择环境</option>
+                <option value="group">按分组上传</option>
+              </select>
+              <select id="cloudUploadGroup" class="select-box" aria-label="选择分组" hidden></select>
+              <div id="cloudUploadSelection">
+                <label><input id="cloudSelectAll" type="checkbox"> 全选</label>
+                <div id="cloudLocalEnvironments" style="max-height:150px; overflow:auto;"></div>
+              </div>
+              <button class="btn btn-primary" id="btnCloudUpload" type="button" disabled>上传备份</button>
+            </div>
+          </details>
+          <div style="display:grid; gap:8px;">
+            <div id="cloudSyncEnvironmentLabel">从云端同步</div>
+            <details id="cloudSnapshots" aria-labelledby="cloudSyncEnvironmentLabel">
+              <summary id="cloudSnapshotSelection" class="select-box" style="cursor:pointer; overflow-wrap:anywhere;">选择云端环境</summary>
+              <div id="cloudSnapshotList" style="display:grid; gap:4px; max-height:178px; overflow:auto; padding:4px 0;" aria-live="polite"></div>
+            </details>
+            <div id="cloudSyncPreview" style="font-size:12px; color:var(--text-muted);" aria-live="polite"></div>
+            <button class="btn btn-secondary" id="btnCloudDownload" type="button" disabled>同步所选环境</button>
+          </div>
+          <details>
+            <summary class="select-box" style="cursor:pointer;">本地备份</summary>
+            <div style="display:grid; gap:8px; padding:8px 0;">
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button class="btn btn-secondary" id="btnCloudExportFile" type="button">导出本地备份</button>
+                <button class="btn btn-secondary" id="btnCloudOpenFile" type="button">选择备份文件</button>
+              </div>
+              <div id="cloudFileSelection" hidden>
+                <label id="cloudFileLabel" for="cloudFileEnvironments"></label>
+                <select class="select-box" id="cloudFileEnvironments" aria-label="选择文件中的环境"></select>
+                <button class="btn btn-secondary" id="btnCloudRestoreFile" type="button" disabled>恢复所选环境</button>
+              </div>
+              <div id="cloudLegacyBackups" style="flex-wrap:wrap; gap:6px;" hidden>
+                <select class="select-box" id="cloudBackups" aria-label="旧版全量备份"></select>
+                <button class="btn btn-secondary" id="btnCloudRestore" type="button" disabled>恢复旧版全量备份</button>
+                <button class="btn btn-secondary" id="btnCloudOpenBackups" type="button">打开备份目录</button>
+              </div>
+            </div>
+          </details>
+          <div id="cloudSyncStatus" role="status" style="font-size:12px; color:var(--text-muted); overflow-wrap:anywhere;"></div>
+        </section>
 
         <div style="background: var(--bg-sub); border: 1px solid var(--border-sub); border-radius: 6px; padding: 10px 14px; font-size: 12px; color: var(--text-muted); line-height: 1.6;">
           <b>设置生效说明：</b>开机自启将在下次系统启动时生效；环境变量添加后，新打开的终端或自动化程序可直接以 <code>dt-cli</code> 命令操作所有环境；默认配色与字体选择即刻全局保存并跨窗口生效。
@@ -3371,6 +3425,9 @@
     async function openThemeModal() {
       try {
         const settings = await ipcRenderer.invoke('get-settings');
+        cloudAddress.value = settings.cloudSync?.address || '';
+        cloudKey.value = settings.cloudSync?.key || '';
+        resetCloudSelection();
         pendingManagerTheme = normalizeThemeName(settings.managerTheme || currentManagerTheme);
         pendingBrowserTheme = normalizeThemeName(settings.browserTheme || 'blue');
       } catch {
@@ -3380,6 +3437,11 @@
       renderThemePalettes();
       await refreshSystemStatus();
       await loadFontsList();
+      cloudStatus.textContent = '';
+      try {
+        await refreshCloudLocalEnvironments();
+        await refreshCloudBackups();
+      } catch (error) { cloudStatus.textContent = error.message; }
       themeModal.classList.add('show');
     }
 
@@ -3394,10 +3456,241 @@
     themeModalClose.addEventListener('click', closeThemeModal);
     btnThemeModalCancel.addEventListener('click', closeThemeModal);
 
+    const cloudAddress = document.getElementById('cloudServerAddress');
+    const cloudKey = document.getElementById('cloudSyncKey');
+    const cloudSnapshots = document.getElementById('cloudSnapshots');
+    const cloudSummary = document.getElementById('cloudSnapshotSelection');
+    const cloudSnapshotList = document.getElementById('cloudSnapshotList');
+    const cloudSyncPreview = document.getElementById('cloudSyncPreview');
+    const cloudBackups = document.getElementById('cloudBackups');
+    const cloudStatus = document.getElementById('cloudSyncStatus');
+    const cloudUploadMode = document.getElementById('cloudUploadMode');
+    const cloudGroup = document.getElementById('cloudUploadGroup');
+    const cloudSelectAll = document.getElementById('cloudSelectAll');
+    const cloudLocalList = document.getElementById('cloudLocalEnvironments');
+    const cloudUpload = document.getElementById('btnCloudUpload');
+    const cloudDownload = document.getElementById('btnCloudDownload');
+    const cloudRestore = document.getElementById('btnCloudRestore');
+    const cloudOpenBackups = document.getElementById('btnCloudOpenBackups');
+    const cloudExportFile = document.getElementById('btnCloudExportFile');
+    const cloudOpenFile = document.getElementById('btnCloudOpenFile');
+    const cloudRestoreFile = document.getElementById('btnCloudRestoreFile');
+    const cloudFileEnvironments = document.getElementById('cloudFileEnvironments');
+    let cloudWorking = false;
+    let cloudListing = false;
+    let cloudListGeneration = 0;
+    let cloudLocal = [];
+    let cloudSelected = null;
+
+    function cloudSelectedIds() {
+      return Array.from(cloudLocalList.querySelectorAll('input:checked'), input => input.value);
+    }
+
+    function cloudEnvironmentLabel(env) {
+      return env.name + ' · ' + (env.group || '默认分组') + ' · ' +
+        (env.browserCore === 'chromium' ? 'Chromium' : 'Electron');
+    }
+
+    function syncCloudButtons() {
+      const count = cloudSelectedIds().length;
+      const grouped = cloudUploadMode.value === 'group';
+      cloudGroup.hidden = !grouped;
+      document.getElementById('cloudUploadSelection').hidden = grouped;
+      cloudSelectAll.checked = count > 0 && count === cloudLocal.length;
+      cloudSelectAll.indeterminate = count > 0 && count < cloudLocal.length;
+      cloudSelectAll.disabled = cloudWorking || !cloudLocal.length;
+      cloudUpload.disabled = cloudWorking || (grouped ? cloudGroup.selectedIndex < 0 : !count);
+      cloudOpenBackups.disabled = cloudExportFile.disabled = cloudOpenFile.disabled = cloudWorking;
+      cloudDownload.disabled = cloudWorking || cloudListing || !cloudSelected;
+      cloudRestore.disabled = cloudWorking || !cloudBackups.value;
+      cloudRestoreFile.disabled = cloudWorking || !cloudFileEnvironments.value;
+      cloudAddress.disabled = cloudKey.disabled = cloudWorking;
+      btnThemeModalSave.disabled = cloudWorking;
+    }
+
+    function cloudConnection() {
+      return { address: cloudAddress.value, key: cloudKey.value };
+    }
+
+    function saveCloudConnection() {
+      return ipcRenderer.invoke('cloud-save-connection', cloudConnection());
+    }
+
+    function showCloudSelection(item) {
+      cloudSelected = item;
+      cloudSummary.textContent = item ? cloudEnvironmentLabel(item) : '选择云端环境';
+      cloudSyncPreview.textContent = item ? new Date(item.snapshot.createdAt).toLocaleString() + ' · ' +
+        (cloudLocal.some(env => env.name === item.name) ? '将覆盖本机同名环境' : '将新增环境') : '';
+      syncCloudButtons();
+    }
+
+    async function refreshCloudLocalEnvironments() {
+      const old = new Set(cloudSelectedIds());
+      const previousGroup = cloudGroup.value;
+      cloudLocal = await ipcRenderer.invoke('cloud-local-environments');
+      cloudLocalList.replaceChildren(...cloudLocal.map(env => {
+        const label = document.createElement('label');
+        label.style.cssText = 'display:flex; align-items:center; gap:6px; min-height:26px;';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.value = env.id;
+        input.checked = old.has(env.id);
+        label.append(input, cloudEnvironmentLabel(env));
+        return label;
+      }));
+      cloudGroup.replaceChildren(...Array.from(new Set(cloudLocal.map(env => env.group)), group =>
+        new Option(group || '默认分组', group)));
+      if (Array.from(cloudGroup.options).some(option => option.value === previousGroup)) cloudGroup.value = previousGroup;
+      showCloudSelection(cloudSelected);
+    }
+
+    async function refreshCloudSnapshots() {
+      const generation = ++cloudListGeneration;
+      cloudListing = true;
+      cloudSnapshotList.textContent = '正在刷新云端列表…';
+      syncCloudButtons();
+      try {
+        const { environments, unreadableBackups } = await ipcRenderer.invoke('cloud-list', cloudConnection());
+        if (generation !== cloudListGeneration) return;
+        const selected = cloudSelected && environments.find(item =>
+          item.id === cloudSelected.id && item.snapshot.revision === cloudSelected.snapshot.revision);
+        showCloudSelection(selected || null);
+        cloudSnapshotList.replaceChildren(...environments.map(item => {
+          const button = document.createElement('button');
+          button.className = 'btn btn-secondary';
+          button.type = 'button';
+          button.style.cssText = 'white-space:normal; text-align:left; justify-content:flex-start;';
+          button.textContent = cloudEnvironmentLabel(item) + ' · ' + new Date(item.snapshot.createdAt).toLocaleString();
+          button.addEventListener('click', () => {
+            showCloudSelection(item);
+            cloudSnapshots.open = false;
+            cloudSummary.focus();
+          });
+          return button;
+        }));
+        if (!environments.length) cloudSnapshotList.textContent = '云端暂无环境备份。';
+        if (unreadableBackups) {
+          const status = document.createElement('div');
+          status.textContent = '有 ' + unreadableBackups + ' 份旧备份无法读取。';
+          cloudSnapshotList.append(status);
+        }
+      } catch (error) {
+        if (generation !== cloudListGeneration) return;
+        showCloudSelection(null);
+        cloudSnapshotList.textContent = error.message;
+      } finally {
+        if (generation === cloudListGeneration) {
+          cloudListing = false;
+          syncCloudButtons();
+        }
+      }
+    }
+
+    async function refreshCloudBackups() {
+      try {
+        const ids = await ipcRenderer.invoke('cloud-list-backups');
+        cloudBackups.replaceChildren(...ids.map(id => new Option(id, id)));
+        const panel = document.getElementById('cloudLegacyBackups');
+        panel.hidden = !ids.length;
+        panel.style.display = ids.length ? 'flex' : 'none';
+      } catch (error) { cloudStatus.textContent = '读取备份列表失败：' + error.message; }
+      syncCloudButtons();
+    }
+
+    async function runCloudAction(progress, operation) {
+      if (cloudWorking) return;
+      cloudWorking = true;
+      syncCloudButtons();
+      cloudStatus.textContent = progress;
+      try { cloudStatus.textContent = await operation(); }
+      catch (error) { cloudStatus.textContent = error.message; }
+      finally {
+        cloudWorking = false;
+        await refreshCloudBackups();
+      }
+    }
+
+    function resetCloudSelection() {
+      cloudListGeneration++;
+      cloudListing = false;
+      cloudSnapshots.open = false;
+      cloudSnapshotList.replaceChildren();
+      showCloudSelection(null);
+    }
+    cloudAddress.addEventListener('input', resetCloudSelection);
+    cloudKey.addEventListener('input', resetCloudSelection);
+    cloudSnapshots.addEventListener('toggle', () => {
+      if (cloudSnapshots.open) void refreshCloudSnapshots();
+    });
+    cloudUploadMode.addEventListener('change', syncCloudButtons);
+    cloudLocalList.addEventListener('change', syncCloudButtons);
+    cloudGroup.addEventListener('change', syncCloudButtons);
+    cloudSelectAll.addEventListener('change', () => {
+      for (const checkbox of cloudLocalList.querySelectorAll('input')) checkbox.checked = cloudSelectAll.checked;
+      syncCloudButtons();
+    });
+    cloudBackups.addEventListener('change', syncCloudButtons);
+    cloudFileEnvironments.addEventListener('change', syncCloudButtons);
+    cloudUpload.addEventListener('click', () => runCloudAction('正在准备同步包，资料较多时请稍候…', async () => {
+      const selection = cloudUploadMode.value === 'group' ? { group: cloudGroup.value } : { ids: cloudSelectedIds() };
+      const result = await ipcRenderer.invoke('cloud-upload', { connection: cloudConnection(), selection });
+      if (cloudSnapshots.open) void refreshCloudSnapshots();
+      return '已上传 ' + result.uploaded.length + ' 个环境。';
+    }));
+    function cloudMergeMessage(result) {
+      if (!result) return '已取消。';
+      return (result.replaced ? '已覆盖' : '已新增') + '环境「' + result.name + '」。' +
+        (result.adjustedPort ? '调试端口已调整为 ' + result.adjustedPort + '。' : '') +
+        (result.missingPaths ? '有 ' + result.missingPaths + ' 个扩展或代理文件路径需要在本机重新选择。' : '');
+    }
+    cloudDownload.addEventListener('click', () => runCloudAction('正在下载所选环境…', async () => {
+      const item = { id: cloudSelected.id, revision: cloudSelected.snapshot.revision };
+      const result = await ipcRenderer.invoke('cloud-download', { connection: cloudConnection(), item });
+      if (result) await refreshCloudLocalEnvironments();
+      return cloudMergeMessage(result);
+    }));
+    cloudExportFile.addEventListener('click', () => runCloudAction('正在导出本地备份…', async () => {
+      const result = await ipcRenderer.invoke('cloud-export-file');
+      return result ? '已导出 ' + result.count + ' 个环境。' : '已取消导出。';
+    }));
+    cloudOpenFile.addEventListener('click', () => runCloudAction('请选择本地备份包…', async () => {
+      const panel = document.getElementById('cloudFileSelection');
+      panel.hidden = true;
+      cloudFileEnvironments.replaceChildren();
+      const result = await ipcRenderer.invoke('cloud-open-file');
+      if (!result) return '已取消选择。';
+      document.getElementById('cloudFileLabel').textContent = result.name;
+      cloudFileEnvironments.replaceChildren(...result.environments.map(env => new Option(cloudEnvironmentLabel(env), env.id)));
+      panel.hidden = false;
+      return result.environments.length ? '请选择要恢复的环境。' : '此备份包内没有环境。';
+    }));
+    cloudRestoreFile.addEventListener('click', () => runCloudAction('正在读取并恢复所选环境…', async () => {
+      const result = await ipcRenderer.invoke('cloud-restore-file', cloudFileEnvironments.value);
+      if (result) await refreshCloudLocalEnvironments();
+      return cloudMergeMessage(result);
+    }));
+    cloudRestore.addEventListener('click', () => runCloudAction('正在确认并恢复备份…', async () => {
+      const result = await ipcRenderer.invoke('cloud-restore-backup', cloudBackups.value);
+      if (result) {
+        const settings = await ipcRenderer.invoke('get-settings');
+        cloudAddress.value = settings.cloudSync?.address || '';
+        cloudKey.value = settings.cloudSync?.key || '';
+        resetCloudSelection();
+        await refreshCloudLocalEnvironments();
+      }
+      return result ? '本地备份已恢复。恢复前的资料：' + result.backup : '已取消恢复。';
+    }));
+    cloudOpenBackups.addEventListener('click', () => runCloudAction('正在打开本地备份目录…', async () => {
+      const error = await ipcRenderer.invoke('cloud-open-backups');
+      if (error) throw new Error(error);
+      return '你可以在此目录中手动删除旧备份。';
+    }));
+
     btnThemeModalSave.addEventListener('click', async () => {
       try {
         btnThemeModalSave.disabled = true;
         btnThemeModalSave.textContent = '保存中…';
+        await saveCloudConnection();
         currentManagerTheme = pendingManagerTheme;
         document.documentElement.setAttribute('data-theme', currentManagerTheme);
         themeSelect.value = currentManagerTheme;
@@ -3759,7 +4052,7 @@
     const QQ_GROUP_NUMBER = '328399769';
     const GITHUB_REPO_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser';
     const GITHUB_RELEASES_URL = 'https://github.com/wei3470231/DT-Fingerprint-Browser/releases';
-    const APP_CURRENT_VERSION = '3.1';
+    const APP_CURRENT_VERSION = '3.1.1';
 
     const btnCopyQQ = document.getElementById('btnCopyQQ');
     const badgeCopyQQ = document.getElementById('badgeCopyQQ');
